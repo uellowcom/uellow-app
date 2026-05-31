@@ -290,6 +290,26 @@ class _Image extends StatelessWidget {
                   )),
             ),
           ),
+          if (product.hasVideo) Positioned(
+            top: 8, right: 8,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+              decoration: BoxDecoration(
+                color: Colors.black.withValues(alpha: 0.72),
+                borderRadius: BorderRadius.circular(6),
+                boxShadow: const [BoxShadow(
+                  color: Color(0x40000000), blurRadius: 4, offset: Offset(0, 2),
+                )],
+              ),
+              child: Row(mainAxisSize: MainAxisSize.min, children: const [
+                Icon(Icons.play_arrow_rounded, color: Colors.white, size: 12),
+                SizedBox(width: 2),
+                Text('VIDEO',
+                    style: TextStyle(color: Colors.white, fontSize: 9,
+                        fontWeight: FontWeight.w900, letterSpacing: 0.4)),
+              ]),
+            ),
+          ),
           Positioned(bottom: 8, right: 8,
             child: _HeartBtn(filled: faved, onTap: onFav)),
         ],

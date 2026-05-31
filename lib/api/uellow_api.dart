@@ -712,8 +712,9 @@ class _OrdersApi {
         .toList();
   }
 
-  Future<List<UellowPaymentMethod>> paymentMethods() async {
-    final res = await _c._get(EP.paymentMethods);
+  Future<List<UellowPaymentMethod>> paymentMethods({String? country}) async {
+    final res = await _c._get(EP.paymentMethods,
+        query: country != null && country.isNotEmpty ? {'country': country} : null);
     return (res['data'] as List)
         .map((e) => UellowPaymentMethod.fromJson(e))
         .toList();

@@ -11,6 +11,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:webview_flutter/webview_flutter.dart';
 
 import '../../api/uellow_api.dart';
 import '../../api/uellow_models.dart';
@@ -101,7 +102,7 @@ class _ProductScreenState extends State<ProductScreen> {
 
     return CustomScrollView(slivers: [
       SliverToBoxAdapter(child: _Gallery(
-        images: gallery, page: _galleryPage,
+        images: gallery, videos: p.videos, page: _galleryPage,
         onChanged: (i) => setState(() => _galleryPage = i),
         onShare: () => Share.share(
           'Check out ${p.name.current(UellowApi.instance.lang)} on Uellow\n'
@@ -181,29 +182,67 @@ class _ProductScreenState extends State<ProductScreen> {
 
 class _Gallery extends StatelessWidget {
   const _Gallery({
-    required this.images, required this.page, required this.onChanged,
+    required this.images, required this.videos,
+    required this.page, required this.onChanged,
     required this.onShare, required this.onWishlist, required this.inWishlist,
   });
   final List<String> images;
+  final List<UellowProductVideo> videos;
   final int page;
   final ValueChanged<int> onChanged;
   final VoidCallback onShare, onWishlist;   // onShare currently unused
   final bool inWishlist;
+  // Unified gallery: videos first, then images. Each entry is
+  // {type: 'video'|'image', video: UellowProductVideo?, url: String?}
+  List<Map<String, dynamic>> get _items {
+    final out = <Map<String, dynamic>>[];
+    for (final v in videos) {
+      out.add({'type': 'video', 'video': v});
+    }
+    for (final url in images) {
+      out.add({'type': 'image', 'url': url});
+    }
+    return out;
+  }
   @override
   Widget build(BuildContext context) {
+    final items = _items;
+    final hasItems = items.isNotEmpty;
     return SizedBox(
       height: 380,
       child: Stack(children: [
         ColoredBox(color: Colors.white, child: PageView.builder(
-          itemCount: images.isEmpty ? 1 : images.length, onPageChanged: onChanged,
-          itemBuilder: (_, i) => images.isEmpty
-              ? const Icon(Icons.image_outlined, size: 80, color: UellowColors.muted)
-              : CachedNetworkImage(imageUrl: images[i], fit: BoxFit.contain),
+          itemCount: hasItems ? items.length : 1, onPageChanged: onChanged,
+          itemBuilder: (_, i) {
+            if (!hasItems) {
+              return const Icon(Icons.image_outlined, size: 80, color: UellowColors.muted);
+            }
+            final it = items[i];
+            if (it['type'] == 'video') {
+              return _VideoTile(video: it['video'] as UellowProductVideo);
+            }
+            return CachedNetworkImage(imageUrl: it['url'] as String, fit: BoxFit.contain);
+          },
         )),
+        // Video pill in top-center to flag the gallery has a clip
+        if (videos.isNotEmpty) Positioned(top: 14, left: 0, right: 0,
+          child: Center(child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            decoration: BoxDecoration(
+              color: Colors.black.withValues(alpha: 0.7),
+              borderRadius: BorderRadius.circular(999),
+            ),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              const Icon(Icons.play_circle_fill, color: Colors.white, size: 14),
+              const SizedBox(width: 5),
+              Text(videos.length == 1
+                  ? '${UellowApi.instance.lang == "ar" ? "فيديو" : "Video"}'
+                  : '${videos.length} ${UellowApi.instance.lang == "ar" ? "فيديوهات" : "videos"}',
+                  style: const TextStyle(color: Colors.white, fontSize: 10.5,
+                      fontWeight: FontWeight.w900, letterSpacing: 0.3)),
+            ]),
+          ))),
         Positioned(top: 14, left: 14, child: _btn(
-            // arrow_back_ios_new has NO matchTextDirection, so it stays
-            // ← in both LTR and RTL — matching Uellow's product page
-            // convention where "back" always points visually left.
             icon: Icons.arrow_back_ios_new, color: UellowColors.darkBrown,
             onTap: () => Navigator.maybePop(context))),
         Positioned(top: 14, right: 14, child: Row(children: [
@@ -215,7 +254,7 @@ class _Gallery extends StatelessWidget {
           _CartBadgeBtn(onTap: () => Navigator.pushNamed(context, '/cart')),
         ])),
         Positioned(bottom: 14, left: 0, right: 0, child: _Dots(
-          count: images.isEmpty ? 1 : images.length, active: page)),
+          count: hasItems ? items.length : 1, active: page)),
       ]),
     );
   }
@@ -228,6 +267,154 @@ class _Gallery extends StatelessWidget {
       ),
       child: Icon(icon, size: 18, color: color),
     ));
+  }
+}
+
+/// Single video tile in the product gallery — shows the thumbnail with
+/// a big play button overlay; tap opens the full-screen player.
+class _VideoTile extends StatelessWidget {
+  const _VideoTile({required this.video});
+  final UellowProductVideo video;
+  String get _thumb {
+    if (video.thumbnail.isNotEmpty) {
+      return '${UellowApi.instance.baseUrl}${video.thumbnail}';
+    }
+    // YouTube auto-thumbnail from the embed URL.
+    final m = RegExp(r'embed/([a-zA-Z0-9_-]{11})').firstMatch(video.embedUrl);
+    if (m != null) return 'https://i.ytimg.com/vi/${m.group(1)}/hqdefault.jpg';
+    return '';
+  }
+  @override
+  Widget build(BuildContext context) {
+    final ar = UellowApi.instance.lang == 'ar';
+    return GestureDetector(
+      onTap: () => _openPlayer(context),
+      child: Stack(fit: StackFit.expand, children: [
+        if (_thumb.isNotEmpty)
+          CachedNetworkImage(imageUrl: _thumb, fit: BoxFit.cover,
+              errorWidget: (_,__,___) => Container(color: const Color(0xFF1A1A1A)))
+        else
+          Container(color: const Color(0xFF1A1A1A)),
+        Container(color: Colors.black.withValues(alpha: 0.35)),
+        Center(child: Container(
+          width: 72, height: 72,
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.95),
+            shape: BoxShape.circle,
+            boxShadow: const [BoxShadow(color: Color(0x66000000),
+                blurRadius: 12, offset: Offset(0, 4))],
+          ),
+          child: const Icon(Icons.play_arrow_rounded,
+              color: UellowColors.darkBrown, size: 44),
+        )),
+        Positioned(bottom: 14, left: 14, right: 14, child: Row(children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: Colors.black.withValues(alpha: 0.55),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Text(_typeLabel(video.type, ar),
+                style: const TextStyle(color: Colors.white, fontSize: 10,
+                    fontWeight: FontWeight.w900, letterSpacing: 0.4)),
+          ),
+          if (video.title.isNotEmpty) ...[
+            const SizedBox(width: 8),
+            Expanded(child: Text(video.title,
+                maxLines: 1, overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: Colors.white, fontSize: 11.5,
+                    fontWeight: FontWeight.w700,
+                    shadows: [Shadow(color: Color(0xAA000000), blurRadius: 4)]))),
+          ],
+        ])),
+      ]),
+    );
+  }
+
+  String _typeLabel(String t, bool ar) {
+    switch (t) {
+      case 'tiktok_url':    return ar ? 'تيك توك' : 'TIKTOK';
+      case 'youtube':       return 'YOUTUBE';
+      case 'vimeo':         return 'VIMEO';
+      case 'direct_upload': return ar ? 'فيديو' : 'VIDEO';
+    }
+    return ar ? 'فيديو' : 'VIDEO';
+  }
+
+  void _openPlayer(BuildContext context) {
+    Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => _VideoPlayerScreen(video: video),
+      fullscreenDialog: true,
+    ));
+  }
+}
+
+/// Full-screen video player — uses webview_flutter so a single
+/// implementation handles YouTube / TikTok / Vimeo embeds AND direct
+/// MP4 uploads (wrapped in a small <video> HTML).
+class _VideoPlayerScreen extends StatefulWidget {
+  const _VideoPlayerScreen({required this.video});
+  final UellowProductVideo video;
+  @override
+  State<_VideoPlayerScreen> createState() => _VideoPlayerScreenState();
+}
+
+class _VideoPlayerScreenState extends State<_VideoPlayerScreen> {
+  WebViewController? _wv;
+  @override
+  void initState() { super.initState(); _load(); }
+  void _load() {
+    try {
+      final wv = WebViewController()
+        ..setJavaScriptMode(JavaScriptMode.unrestricted)
+        ..setBackgroundColor(Colors.black);
+      final v = widget.video;
+      if (v.type == 'direct_upload' && v.fileUrl.isNotEmpty) {
+        final url = '${UellowApi.instance.baseUrl}${v.fileUrl}';
+        wv.loadHtmlString('''
+<!doctype html><html><head><meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
+<style>html,body{margin:0;padding:0;background:#000;height:100%;width:100%}
+video{width:100%;height:100%;object-fit:contain}</style>
+</head><body>
+<video src="$url" controls autoplay playsinline></video>
+</body></html>''');
+      } else if (v.embedUrl.isNotEmpty) {
+        wv.loadRequest(Uri.parse(v.embedUrl));
+      } else if (v.tiktokVideoId.isNotEmpty && !v.tiktokVideoId.startsWith('short:')) {
+        wv.loadHtmlString('''
+<!doctype html><html><head><meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
+<style>html,body{margin:0;padding:0;background:#000;height:100%;width:100%;display:flex;align-items:center;justify-content:center}</style>
+</head><body>
+<blockquote class="tiktok-embed" cite="${v.embedUrl}" data-video-id="${v.tiktokVideoId}" style="max-width:605px;min-width:325px;"></blockquote>
+<script async src="https://www.tiktok.com/embed.js"></script>
+</body></html>''');
+      } else if (v.videoUrl.isNotEmpty) {
+        wv.loadRequest(Uri.parse(v.videoUrl));
+      }
+      setState(() => _wv = wv);
+    } catch (_) {
+      setState(() => _wv = null);
+    }
+  }
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: SafeArea(child: Stack(children: [
+        if (_wv != null) Positioned.fill(child: WebViewWidget(controller: _wv!))
+        else const Center(child: CircularProgressIndicator(color: Colors.white)),
+        Positioned(top: 8, right: 8, child: IconButton(
+          onPressed: () => Navigator.pop(context),
+          icon: const Icon(Icons.close, color: Colors.white, size: 28),
+          style: IconButton.styleFrom(
+            backgroundColor: Colors.black.withValues(alpha: 0.4),
+            shape: const CircleBorder(),
+          ),
+        )),
+      ])),
+    );
   }
 }
 

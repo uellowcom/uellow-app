@@ -13,6 +13,7 @@ import 'dart:convert';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../api/uellow_api.dart';
 import '../../api/uellow_models.dart';
@@ -51,13 +52,23 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       if (cartToken != null) 'X-Cart-Token': cartToken,
     };
 
+    // Resolve the country so the payment-methods endpoint returns the
+    // right list (KNET for KW, Mada for SA, Fawry for EG, etc.).
+    String? country;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      country = prefs.getString('uellow_country_code_v1');
+    } catch (_) {}
+    final pmUrl = country != null && country.isNotEmpty
+        ? '$base/api/mobile/v2/orders/payment-methods?country=$country'
+        : '$base/api/mobile/v2/orders/payment-methods';
+
     final results = await Future.wait([
       http.get(Uri.parse('$base/api/mobile/v2/orders/checkout/summary'),
           headers: hdrs(true)),
       http.get(Uri.parse('$base/api/mobile/v2/orders/shipping-methods'),
           headers: hdrs(false)),
-      http.get(Uri.parse('$base/api/mobile/v2/orders/payment-methods'),
-          headers: hdrs(false)),
+      http.get(Uri.parse(pmUrl), headers: hdrs(false)),
       http.get(Uri.parse('$base/api/mobile/v2/orders/checkout/geoip'),
           headers: hdrs(true)),
     ]);
@@ -489,21 +500,50 @@ class _PaymentMethodGrid extends StatelessWidget {
   final ValueChanged<int> onSelect;
   IconData _iconFor(String code) {
     switch (code) {
-      case 'knet':     return Icons.account_balance_outlined;
-      case 'apple_pay':return Icons.phone_iphone_outlined;
-      case 'cod':      return Icons.payments_outlined;
-      case 'wallet':   return Icons.account_balance_wallet_outlined;
-      default:         return Icons.credit_card;
+      case 'knet':         return Icons.account_balance_outlined;
+      case 'mada':         return Icons.credit_card;
+      case 'naps':         return Icons.account_balance_outlined;
+      case 'omannet':      return Icons.account_balance_outlined;
+      case 'benefit':      return Icons.account_balance_outlined;
+      case 'fawry':        return Icons.payments_outlined;
+      case 'vodafone_cash':return Icons.phone_android_outlined;
+      case 'stc_pay':      return Icons.smartphone_outlined;
+      case 'apple_pay':    return Icons.phone_iphone_outlined;
+      case 'cod':          return Icons.local_shipping_outlined;
+      case 'tabby':        return Icons.event_note;
+      case 'tamara':       return Icons.calendar_month;
+      case 'taly':         return Icons.access_time;
+      case 'card':         return Icons.credit_card;
+      case 'upayments':    return Icons.account_balance_outlined;
+      case 'wallet':       return Icons.account_balance_wallet_outlined;
+      default:             return Icons.credit_card;
     }
   }
-  // Special pseudo-methods we always surface: COD + Tabby installments
+  Color _accentFor(String code) {
+    switch (code) {
+      case 'knet':         return const Color(0xFFD32F2F);  // KNET red
+      case 'mada':         return const Color(0xFF84BD00);  // Mada green
+      case 'tabby':        return const Color(0xFF42E0A0);  // Tabby green
+      case 'tamara':       return const Color(0xFF4B0082);  // Tamara purple
+      case 'apple_pay':    return Colors.black;
+      case 'stc_pay':      return const Color(0xFF4F008C);  // STC purple
+      case 'fawry':        return const Color(0xFFE89316);  // Fawry orange
+      case 'vodafone_cash':return const Color(0xFFE60000);  // Vodafone red
+      case 'naps':         return const Color(0xFFAF0028);  // NaPS maroon
+      case 'omannet':      return const Color(0xFF006B3F);  // Oman green
+      case 'benefit':      return const Color(0xFF0066B3);  // Bahrain blue
+      case 'taly':         return const Color(0xFFEDA300);  // Taly yellow
+      case 'cod':          return UellowColors.successDk;
+      default:             return UellowColors.darkBrown;
+    }
+  }
+  // Always-on COD fallback — surface it even if backend didn't return any.
   static const _extras = [
     {'id': -1, 'code': 'cod', 'name': 'Cash on delivery'},
-    {'id': -2, 'code': 'tabby', 'name': 'Tabby — 4 installments'},
   ];
   @override
   Widget build(BuildContext context) {
-    // Merge: server methods first, then COD / Tabby (deduped by code)
+    // Merge: server methods first, then COD (deduped by code)
     final codes = methods.map((m) => (m['code'] as String?) ?? '').toSet();
     final list = [
       ...methods,

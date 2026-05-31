@@ -411,6 +411,7 @@ class UellowProductCard {
   final List<String> badges;
   final UellowVendorRef? vendor;
   final bool allowOutOfStockOrder;
+  final bool hasVideo;
 
   const UellowProductCard({
     required this.id, required this.name, required this.slug,
@@ -419,6 +420,7 @@ class UellowProductCard {
     required this.rating, required this.isPublished, required this.badges,
     this.vendor,
     this.allowOutOfStockOrder = true,
+    this.hasVideo = false,
   });
 
   factory UellowProductCard.fromJson(Map<String, dynamic> j) => UellowProductCard(
@@ -440,6 +442,7 @@ class UellowProductCard {
         vendor: j['vendor'] == null ? null
             : UellowVendorRef.fromJson(j['vendor'] as Map<String, dynamic>),
         allowOutOfStockOrder: (j['allow_out_of_stock_order'] ?? true) as bool,
+        hasVideo: (j['has_video'] ?? false) as bool,
       );
 }
 
@@ -447,6 +450,7 @@ class UellowProductFull extends UellowProductCard {
   final UellowText descriptionShort;
   final UellowText descriptionHtml;
   final List<String> images;
+  final List<UellowProductVideo> videos;
   final List<UellowAttributeLine> attributes;
   final List<UellowCategoryRef> categories;
   final String sku;
@@ -469,19 +473,22 @@ class UellowProductFull extends UellowProductCard {
     required bool isPublished, required List<String> badges,
     UellowVendorRef? vendor,
     required this.descriptionShort, required this.descriptionHtml,
-    required this.images, required this.attributes,
+    required this.images, this.videos = const [],
+    required this.attributes,
     required this.categories, required this.sku, required this.barcode,
     required this.warrantyMonths, required this.shippingInfoLabel,
     this.soldCount = 0, this.viewCount = 0, this.brand,
     this.bulkPricing = const [],
     bool allowOutOfStockOrder = true,
+    bool hasVideo = false,
     this.flashEndsAt, this.flashTitle,
   }) : super(
             id: id, name: name, slug: slug, image: image, price: price,
             comparePrice: comparePrice, discountPct: discountPct,
             inStock: inStock, qtyAvailable: qtyAvailable, rating: rating,
             isPublished: isPublished, badges: badges, vendor: vendor,
-            allowOutOfStockOrder: allowOutOfStockOrder);
+            allowOutOfStockOrder: allowOutOfStockOrder,
+            hasVideo: hasVideo);
 
   factory UellowProductFull.fromJson(Map<String, dynamic> j) => UellowProductFull(
         id: (j['id'] ?? 0) as int,
@@ -504,6 +511,10 @@ class UellowProductFull extends UellowProductCard {
         descriptionShort: UellowText.fromJson(j['description_short']),
         descriptionHtml:  UellowText.fromJson(j['description_html']),
         images: List<String>.from((j['images'] as List?) ?? const []),
+        videos: ((j['videos'] as List?) ?? const [])
+            .map((e) => UellowProductVideo.fromJson(e as Map<String, dynamic>))
+            .toList(),
+        hasVideo: (j['has_video'] ?? false) as bool,
         attributes: ((j['attributes'] as List?) ?? const [])
             .map((e) => UellowAttributeLine.fromJson(e))
             .toList(),
@@ -528,6 +539,40 @@ class UellowProductFull extends UellowProductCard {
         flashTitle: (j['flash_sale'] as Map?)?['title'] != null
             ? UellowText.fromJson((j['flash_sale'] as Map)['title'])
             : null,
+      );
+}
+
+/// One product video — either a hosted-platform embed (TikTok/YouTube/Vimeo)
+/// or a direct MP4 upload served from Odoo. The Flutter side renders both
+/// via a WebView (a small HTML wrapper for direct uploads, embed_url for
+/// hosted ones), so the player works without adding a heavy native dep.
+class UellowProductVideo {
+  final int id;
+  final String title;
+  final String type;          // tiktok_url / direct_upload / youtube / vimeo
+  final String embedUrl;
+  final String fileUrl;
+  final String mime;
+  final String thumbnail;
+  final String videoUrl;
+  final String tiktokVideoId;
+  const UellowProductVideo({
+    required this.id, required this.title, required this.type,
+    required this.embedUrl, required this.fileUrl, required this.mime,
+    required this.thumbnail, required this.videoUrl,
+    required this.tiktokVideoId,
+  });
+  factory UellowProductVideo.fromJson(Map<String, dynamic> j) =>
+      UellowProductVideo(
+        id:        (j['id'] ?? 0) as int,
+        title:     (j['title'] ?? '').toString(),
+        type:      (j['type'] ?? 'youtube').toString(),
+        embedUrl:  (j['embed_url'] ?? '').toString(),
+        fileUrl:   (j['file_url'] ?? '').toString(),
+        mime:      (j['mime'] ?? 'video/mp4').toString(),
+        thumbnail: (j['thumbnail'] ?? '').toString(),
+        videoUrl:  (j['video_url'] ?? '').toString(),
+        tiktokVideoId: (j['tiktok_video_id'] ?? '').toString(),
       );
 }
 
