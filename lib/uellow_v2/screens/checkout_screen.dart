@@ -355,13 +355,21 @@ class _AddressList extends StatelessWidget {
             child: SizedBox(width: double.infinity, child: ElevatedButton.icon(
               onPressed: () async {
                 Navigator.pop(sheet);
-                await Navigator.push(context, MaterialPageRoute(
-                  builder: (_) => AddressPickerScreen(onSaved: () {
-                    // Force a checkout reload so the new address shows up.
-                    final state = context.findAncestorStateOfType<_CheckoutScreenState>();
-                    state?.setState(() { state._data = state._bootstrap(); });
-                  }),
+                final newId = await Navigator.push<int>(context, MaterialPageRoute(
+                  builder: (_) => const AddressPickerScreen(),
                 ));
+                // Reload checkout + select the new address if one was created.
+                final state = context.findAncestorStateOfType<_CheckoutScreenState>();
+                if (state != null) {
+                  state.setState(() { state._data = state._bootstrap(); });
+                  if (newId != null) {
+                    await state._data;
+                    if (state.mounted) {
+                      state.setState(() => state._selectedAddressId = newId);
+                      UellowApi.instance.tokenStore.writeAddressId(newId);
+                    }
+                  }
+                }
               },
               icon: const Icon(Icons.add_location_alt_outlined, size: 18),
               label: Text(ar ? 'إضافة عنوان جديد' : 'Add new address',

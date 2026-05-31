@@ -9,6 +9,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../api/uellow_api.dart';
@@ -241,13 +242,31 @@ class _ProfileHeaderState extends State<_ProfileHeader> {
   Uint8List? _avatarBytes;     // raw bytes — instant render after upload
   bool _busy = false;
 
+  String? _guestCountry;
+  @override
+  void initState() {
+    super.initState();
+    // Pull the saved country code for guests so the flag chip still
+    // shows — they may not have a profile country yet.
+    if (widget.isGuest) {
+      SharedPreferences.getInstance().then((p) {
+        final c = p.getString('uellow_country_code_v1');
+        if (c != null && c.isNotEmpty && mounted) {
+          setState(() => _guestCountry = c.toUpperCase());
+        }
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final ar = UellowApi.instance.lang == 'ar';
     final name = widget.isGuest
         ? (ar ? 'ضيف' : 'Guest')
         : ((widget.user['name'] as String?) ?? 'Customer');
-    final country = (widget.user['country'] as String?) ?? '';
+    final country = (widget.user['country'] as String?)
+        ?? _guestCountry
+        ?? 'KW';
     // Live avatar — listens to the global notifier so any upload (here or
     // on the profile screen) immediately re-paints this header.
     return ValueListenableBuilder<String>(
@@ -660,44 +679,148 @@ Widget _tierBadge(String tier, String label) {
   );
 }
 
+/// Latest-order tracking card — redesigned: stage progress dots + status
+/// label + total + "Track" pill. Tap anywhere → order screen.
 class _RecentOrderCard extends StatelessWidget {
   const _RecentOrderCard({required this.order});
   final Map order;
+  static const _stages = ['draft', 'confirmed', 'preparing', 'shipping', 'delivered'];
+  static const _stageLabelsEn = {
+    'draft': 'Placed', 'confirmed': 'Confirmed', 'preparing': 'Preparing',
+    'shipping': 'Shipping', 'delivered': 'Delivered',
+    'cancelled': 'Cancelled', 'returned': 'Returned',
+  };
+  static const _stageLabelsAr = {
+    'draft': 'تم الطلب', 'confirmed': 'مؤكد', 'preparing': 'قيد التجهيز',
+    'shipping': 'قيد الشحن', 'delivered': 'تم التسليم',
+    'cancelled': 'ملغي', 'returned': 'مرتجع',
+  };
+  static const _stageIcons = {
+    'draft': Icons.edit_outlined,
+    'confirmed': Icons.task_alt_outlined,
+    'preparing': Icons.inventory_2_outlined,
+    'shipping': Icons.local_shipping_outlined,
+    'delivered': Icons.home_outlined,
+  };
   @override
   Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.fromLTRB(14, 0, 14, 8),
-      padding: const EdgeInsets.all(14),
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.all(Radius.circular(14)),
-        border: Border(left: BorderSide(color: UellowColors.yellow, width: 4)),
-      ),
-      child: Row(children: [
-        const Icon(Icons.local_shipping_outlined, size: 22, color: UellowColors.warn),
-        const SizedBox(width: 12),
-        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('${order['name']} · ${order['state']}',
-              style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13, color: UellowColors.ink)),
-          Text((order['total'] as Map?)?['amount']?.toString() ?? '',
-              style: const TextStyle(fontSize: 11, color: UellowColors.muted)),
-        ])),
-        GestureDetector(
-          onTap: () => Navigator.pushNamed(context, Routes.order,
-              arguments: {'id': order['id']}),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-            decoration: const BoxDecoration(
-              color: UellowColors.darkBrown,
-              borderRadius: BorderRadius.all(Radius.circular(10)),
-            ),
-            child: const Text('Track', style: TextStyle(
-                color: UellowColors.yellowLight, fontSize: 11, fontWeight: FontWeight.w800)),
-          ),
+    final ar = UellowApi.instance.lang == 'ar';
+    final status = (order['uellow_status'] as String?)
+        ?? (order['state'] as String?)
+        ?? 'confirmed';
+    final stageIdx = _stages.indexOf(status);
+    final activeIdx = stageIdx < 0 ? 1 : stageIdx;
+    final label = (ar ? _stageLabelsAr : _stageLabelsEn)[status] ?? status;
+    final totalAmount = ((order['total'] as Map?)?['amount'])?.toString() ?? '';
+    final currency = ((order['total'] as Map?)?['currency'] as String?) ?? '';
+    return InkWell(
+      onTap: () => Navigator.pushNamed(context, Routes.order,
+          arguments: {'id': order['id']}),
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        margin: const EdgeInsets.fromLTRB(14, 0, 14, 8),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: const [BoxShadow(
+              color: Color(0x14000000), blurRadius: 12, offset: Offset(0, 4))],
         ),
-      ]),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          // ── Header row
+          Padding(padding: const EdgeInsets.fromLTRB(14, 14, 14, 8),
+              child: Row(children: [
+                Container(
+                  width: 38, height: 38, alignment: Alignment.center,
+                  decoration: const BoxDecoration(
+                    color: UellowColors.yellowSoft, shape: BoxShape.circle),
+                  child: Icon(_stageIcons[status] ?? Icons.local_shipping_outlined,
+                      size: 18, color: UellowColors.darkBrown),
+                ),
+                const SizedBox(width: 10),
+                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Row(children: [
+                    Text((order['name'] ?? '').toString(),
+                        style: const TextStyle(fontFamily: 'monospace',
+                            fontWeight: FontWeight.w900, fontSize: 12.5,
+                            color: UellowColors.ink)),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: _statusColor(status).withValues(alpha: 0.14),
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: Text(label.toUpperCase(),
+                          style: TextStyle(color: _statusColor(status),
+                              fontSize: 9.5, fontWeight: FontWeight.w900,
+                              letterSpacing: 0.4)),
+                    ),
+                  ]),
+                  const SizedBox(height: 2),
+                  Text(ar
+                      ? 'آخر طلب • $currency $totalAmount'
+                      : 'Latest order • $currency $totalAmount',
+                      style: const TextStyle(fontSize: 11.5,
+                          color: UellowColors.muted, fontWeight: FontWeight.w600)),
+                ])),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                  decoration: BoxDecoration(
+                    color: UellowColors.darkBrown,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    Text(ar ? 'تتبع' : 'Track',
+                        style: const TextStyle(color: UellowColors.yellowLight,
+                            fontSize: 11, fontWeight: FontWeight.w900)),
+                    const SizedBox(width: 4),
+                    const Icon(Icons.arrow_forward, size: 12,
+                        color: UellowColors.yellowLight),
+                  ]),
+                ),
+              ])),
+          // ── Progress dots
+          Padding(padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
+              child: Row(children: List.generate(_stages.length * 2 - 1, (i) {
+                if (i.isOdd) {
+                  final segIdx = i ~/ 2;
+                  return Expanded(child: Container(
+                    height: 2, margin: const EdgeInsets.symmetric(horizontal: 2),
+                    color: segIdx < activeIdx
+                        ? _statusColor(status)
+                        : UellowColors.border,
+                  ));
+                }
+                final dotIdx = i ~/ 2;
+                final isDone = dotIdx < activeIdx;
+                final isNow = dotIdx == activeIdx;
+                return Container(
+                  width: isNow ? 10 : 8, height: isNow ? 10 : 8,
+                  decoration: BoxDecoration(
+                    color: (isDone || isNow)
+                        ? _statusColor(status)
+                        : UellowColors.border,
+                    shape: BoxShape.circle,
+                    border: isNow
+                        ? Border.all(color: _statusColor(status).withValues(alpha: 0.25), width: 3)
+                        : null,
+                  ),
+                );
+              }))),
+        ]),
+      ),
     );
   }
+  Color _statusColor(String s) => switch (s) {
+    'draft'     => UellowColors.muted,
+    'confirmed' => const Color(0xFF0EA5E9),
+    'preparing' => const Color(0xFF8B5CF6),
+    'shipping'  => const Color(0xFFF59E0B),
+    'delivered' => UellowColors.successDk,
+    'cancelled' => UellowColors.muted,
+    'returned'  => UellowColors.danger,
+    _ => const Color(0xFF0EA5E9),
+  };
 }
 
 class _SectionCard extends StatelessWidget {
@@ -749,9 +872,10 @@ class _OrdersGrid extends StatelessWidget {
   // (see api_v2/orders.py:_UELLOW_STATUS_DICT).
   static const _en = ['Draft', 'Confirmed', 'Preparing', 'Shipping', 'Delivered'];
   static const _ar = ['مسودة', 'مؤكد', 'قيد التجهيز', 'قيد الشحن', 'تم التوصيل'];
+  // All outlined (thin) variants — no solid icons for a lighter look.
   static const _icons = [
-    Icons.edit_note,
-    Icons.check_circle_outline,
+    Icons.edit_outlined,
+    Icons.task_alt_outlined,
     Icons.inventory_2_outlined,
     Icons.local_shipping_outlined,
     Icons.home_outlined,
@@ -775,17 +899,18 @@ class _OrdersGrid extends StatelessWidget {
               arguments: isGuest ? null : {'filter': _filters[i]}),
           child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
             Container(
-              width: 44, height: 44,
+              width: 38, height: 38,
               decoration: BoxDecoration(
-                color: UellowColors.yellowSoft,
-                borderRadius: BorderRadius.circular(12),
+                color: Colors.white,
+                border: Border.all(color: UellowColors.border, width: 1),
+                borderRadius: BorderRadius.circular(11),
               ),
-              child: Icon(_icons[i], size: 20, color: UellowColors.darkBrown),
+              child: Icon(_icons[i], size: 15, color: UellowColors.darkBrown),
             ),
             const SizedBox(height: 6),
             Text(labels[i], textAlign: TextAlign.center,
                 style: const TextStyle(
-                  fontSize: 10.5, fontWeight: FontWeight.w800,
+                  fontSize: 10.5, fontWeight: FontWeight.w700,
                   color: UellowColors.darkBrown,
                 )),
           ]),
@@ -835,12 +960,13 @@ class _ActionTiles extends StatelessWidget {
           borderRadius: BorderRadius.circular(12),
           child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
             Container(
-              width: 42, height: 42,
+              width: 38, height: 38,
               decoration: BoxDecoration(
-                color: UellowColors.yellowSoft,
-                borderRadius: BorderRadius.circular(12),
+                color: Colors.white,
+                border: Border.all(color: UellowColors.border, width: 1),
+                borderRadius: BorderRadius.circular(11),
               ),
-              child: Icon(icon, size: 20, color: UellowColors.darkBrown),
+              child: Icon(icon, size: 15, color: UellowColors.darkBrown),
             ),
             const SizedBox(height: 6),
             Text(label, textAlign: TextAlign.center,

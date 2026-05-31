@@ -12,10 +12,13 @@
 // Rate Items (inline dialog), Reorder, Return, Share.
 // =============================================================================
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -757,40 +760,7 @@ class _Actions extends StatelessWidget {
   }
 
   Future<void> _contactSeller(BuildContext context) async {
-    final subjectC = TextEditingController(
-        text: ar ? 'استفسار حول الطلب ${order.name}'
-                  : 'Question about order ${order.name}');
-    final bodyC = TextEditingController();
-    final ok = await showDialog<bool>(context: context, builder: (_) => AlertDialog(
-      title: Text(ar ? 'تواصل مع البائع' : 'Contact seller'),
-      content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
-        TextField(controller: subjectC,
-          decoration: InputDecoration(labelText: ar ? 'الموضوع' : 'Subject',
-            border: const OutlineInputBorder())),
-        const SizedBox(height: 12),
-        TextField(controller: bodyC, minLines: 3, maxLines: 6,
-          decoration: InputDecoration(labelText: ar ? 'الرسالة' : 'Message',
-            border: const OutlineInputBorder())),
-      ])),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(context, false),
-            child: Text(ar ? 'إلغاء' : 'Cancel')),
-        ElevatedButton(onPressed: () => Navigator.pop(context, true),
-            child: Text(ar ? 'إرسال' : 'Send')),
-      ],
-    ));
-    if (ok != true) return;
-    if (bodyC.text.trim().isEmpty) return;
-    try {
-      await UellowApi.instance.orders.contactSeller(
-        orderId: order.id, subject: subjectC.text.trim(), body: bodyC.text.trim());
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(
-          ar ? 'تم إرسال رسالتك للبائع' : 'Message sent to seller')));
-    } catch (e) {
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
-    }
+    await showDialog(context: context, builder: (_) => _ContactSellerDialog(order: order));
   }
 
   void _requestReturn(BuildContext context) {
@@ -813,6 +783,140 @@ class _Action {
   final bool primary, danger;
   _Action({required this.icon, required this.label, required this.onTap,
       this.primary = false, this.danger = false});
+}
+
+// ─── Contact seller dialog (with up to 5 photo attachments) ──────────
+
+class _ContactSellerDialog extends StatefulWidget {
+  const _ContactSellerDialog({required this.order});
+  final UellowOrderDetail order;
+  @override
+  State<_ContactSellerDialog> createState() => _ContactSellerDialogState();
+}
+
+class _ContactSellerDialogState extends State<_ContactSellerDialog> {
+  late final TextEditingController _subjectC;
+  final _bodyC = TextEditingController();
+  final List<Uint8List> _photos = [];
+  bool _busy = false;
+  static const int _maxPhotos = 5;
+
+  @override
+  void initState() {
+    super.initState();
+    final ar = UellowApi.instance.lang == 'ar';
+    _subjectC = TextEditingController(
+        text: ar ? 'استفسار حول الطلب ${widget.order.name}'
+                  : 'Question about order ${widget.order.name}');
+  }
+
+  Future<void> _addPhoto() async {
+    if (_photos.length >= _maxPhotos) return;
+    final src = await showModalBottomSheet<ImageSource>(
+      context: context, builder: (_) => SafeArea(child: Column(mainAxisSize: MainAxisSize.min, children: [
+        ListTile(leading: const Icon(Icons.photo_camera_outlined),
+            title: const Text('Take photo'),
+            onTap: () => Navigator.pop(context, ImageSource.camera)),
+        ListTile(leading: const Icon(Icons.photo_library_outlined),
+            title: const Text('Choose from gallery'),
+            onTap: () => Navigator.pop(context, ImageSource.gallery)),
+      ])));
+    if (src == null) return;
+    final picked = await ImagePicker().pickImage(source: src,
+        maxWidth: 1400, maxHeight: 1400, imageQuality: 82);
+    if (picked == null) return;
+    final bytes = await File(picked.path).readAsBytes();
+    if (mounted) setState(() => _photos.add(bytes));
+  }
+
+  Future<void> _send() async {
+    if (_bodyC.text.trim().isEmpty) return;
+    final ar = UellowApi.instance.lang == 'ar';
+    setState(() => _busy = true);
+    try {
+      final photosB64 = _photos.map((b) => base64Encode(b)).toList();
+      await UellowApi.instance.orders.contactSeller(
+        orderId: widget.order.id,
+        subject: _subjectC.text.trim(),
+        body: _bodyC.text.trim(),
+        photosBase64: photosB64.isEmpty ? null : photosB64);
+      if (!mounted) return;
+      Navigator.pop(context);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(
+          ar ? 'تم إرسال رسالتك للبائع' : 'Message sent to seller')));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ar = UellowApi.instance.lang == 'ar';
+    return AlertDialog(
+      title: Text(ar ? 'تواصل مع البائع' : 'Contact seller'),
+      content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
+        TextField(controller: _subjectC,
+          decoration: InputDecoration(labelText: ar ? 'الموضوع' : 'Subject',
+            border: const OutlineInputBorder(), isDense: true)),
+        const SizedBox(height: 10),
+        TextField(controller: _bodyC, minLines: 3, maxLines: 6,
+          decoration: InputDecoration(labelText: ar ? 'الرسالة' : 'Message',
+            border: const OutlineInputBorder(), isDense: true)),
+        const SizedBox(height: 10),
+        SizedBox(height: 72, child: ListView.separated(
+          scrollDirection: Axis.horizontal,
+          itemCount: _photos.length + (_photos.length < _maxPhotos ? 1 : 0),
+          separatorBuilder: (_, __) => const SizedBox(width: 8),
+          itemBuilder: (_, i) {
+            if (i == _photos.length) {
+              return GestureDetector(onTap: _addPhoto, child: Container(
+                width: 64, height: 64,
+                decoration: BoxDecoration(
+                  color: UellowColors.yellowSoft,
+                  border: Border.all(color: UellowColors.yellow, width: 1.5),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                  Icon(Icons.add_a_photo_outlined, color: UellowColors.darkBrown, size: 22),
+                  SizedBox(height: 2),
+                  Text('Add', style: TextStyle(fontSize: 9.5,
+                      color: UellowColors.darkBrown, fontWeight: FontWeight.w800)),
+                ]),
+              ));
+            }
+            return Stack(clipBehavior: Clip.none, children: [
+              ClipRRect(borderRadius: BorderRadius.circular(10),
+                  child: Image.memory(_photos[i], width: 64, height: 64, fit: BoxFit.cover)),
+              Positioned(top: -6, right: -6, child: GestureDetector(
+                onTap: () => setState(() => _photos.removeAt(i)),
+                child: Container(
+                  width: 22, height: 22, alignment: Alignment.center,
+                  decoration: const BoxDecoration(
+                    color: UellowColors.danger, shape: BoxShape.circle),
+                  child: const Icon(Icons.close, color: Colors.white, size: 14),
+                ),
+              )),
+            ]);
+          },
+        )),
+        if (_photos.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 4),
+            child: Text('${_photos.length}/$_maxPhotos ${ar ? "صور" : "photos"}',
+                style: const TextStyle(fontSize: 11, color: UellowColors.muted))),
+      ])),
+      actions: [
+        TextButton(onPressed: _busy ? null : () => Navigator.pop(context),
+            child: Text(ar ? 'إلغاء' : 'Cancel')),
+        ElevatedButton(onPressed: _busy ? null : _send,
+            child: _busy
+              ? const SizedBox(width: 14, height: 14,
+                  child: CircularProgressIndicator(strokeWidth: 2))
+              : Text(ar ? 'إرسال' : 'Send')),
+      ],
+    );
+  }
 }
 
 // ─── Rate dialog (inline, instead of pushing the product page) ───────
@@ -873,14 +977,37 @@ class _RateDialog extends StatefulWidget {
 class _RateDialogState extends State<_RateDialog> {
   double _rating = 5;
   final _comment = TextEditingController();
+  final List<Uint8List> _photos = [];
   bool _busy = false;
+  static const int _maxPhotos = 5;
+
+  Future<void> _addPhoto() async {
+    if (_photos.length >= _maxPhotos) return;
+    final src = await showModalBottomSheet<ImageSource>(
+      context: context, builder: (_) => SafeArea(child: Column(mainAxisSize: MainAxisSize.min, children: [
+        ListTile(leading: const Icon(Icons.photo_camera_outlined),
+            title: const Text('Take photo'),
+            onTap: () => Navigator.pop(context, ImageSource.camera)),
+        ListTile(leading: const Icon(Icons.photo_library_outlined),
+            title: const Text('Choose from gallery'),
+            onTap: () => Navigator.pop(context, ImageSource.gallery)),
+      ])));
+    if (src == null) return;
+    final picked = await ImagePicker().pickImage(source: src,
+        maxWidth: 1400, maxHeight: 1400, imageQuality: 82);
+    if (picked == null) return;
+    final bytes = await File(picked.path).readAsBytes();
+    if (mounted) setState(() => _photos.add(bytes));
+  }
 
   Future<void> _submit() async {
     setState(() => _busy = true);
     try {
+      final photosB64 = _photos.map((b) => base64Encode(b)).toList();
       await UellowApi.instance.reviews.create(
         productId: widget.line.productId, rating: _rating,
-        body: _comment.text.trim().isEmpty ? null : _comment.text.trim());
+        body: _comment.text.trim().isEmpty ? null : _comment.text.trim(),
+        photosBase64: photosB64.isEmpty ? null : photosB64);
       if (!mounted) return;
       Navigator.pop(context);
       final ar = UellowApi.instance.lang == 'ar';
@@ -901,7 +1028,7 @@ class _RateDialogState extends State<_RateDialog> {
       title: Text(widget.line.name.current(ar ? 'ar' : 'en'),
         maxLines: 2, overflow: TextOverflow.ellipsis,
         style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w900)),
-      content: Column(mainAxisSize: MainAxisSize.min, children: [
+      content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
         Row(mainAxisAlignment: MainAxisAlignment.center, children: List.generate(5, (i) {
           final v = i + 1;
           return IconButton(onPressed: () => setState(() => _rating = v.toDouble()),
@@ -913,7 +1040,52 @@ class _RateDialogState extends State<_RateDialog> {
           decoration: InputDecoration(
             hintText: ar ? 'تعليقك (اختياري)' : 'Your comment (optional)',
             border: const OutlineInputBorder())),
-      ]),
+        const SizedBox(height: 10),
+        // ── Photo strip (max 5)
+        SizedBox(height: 72, child: ListView.separated(
+          scrollDirection: Axis.horizontal,
+          itemCount: _photos.length + (_photos.length < _maxPhotos ? 1 : 0),
+          separatorBuilder: (_, __) => const SizedBox(width: 8),
+          itemBuilder: (_, i) {
+            if (i == _photos.length) {
+              return GestureDetector(
+                onTap: _addPhoto,
+                child: Container(
+                  width: 64, height: 64,
+                  decoration: BoxDecoration(
+                    color: UellowColors.yellowSoft,
+                    border: Border.all(color: UellowColors.yellow, width: 1.5),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                    Icon(Icons.add_a_photo_outlined, color: UellowColors.darkBrown, size: 22),
+                    SizedBox(height: 2),
+                    Text('Add', style: TextStyle(fontSize: 9.5,
+                        color: UellowColors.darkBrown, fontWeight: FontWeight.w800)),
+                  ]),
+                ),
+              );
+            }
+            return Stack(clipBehavior: Clip.none, children: [
+              ClipRRect(borderRadius: BorderRadius.circular(10),
+                  child: Image.memory(_photos[i], width: 64, height: 64, fit: BoxFit.cover)),
+              Positioned(top: -6, right: -6, child: GestureDetector(
+                onTap: () => setState(() => _photos.removeAt(i)),
+                child: Container(
+                  width: 22, height: 22, alignment: Alignment.center,
+                  decoration: const BoxDecoration(
+                    color: UellowColors.danger, shape: BoxShape.circle,
+                    boxShadow: [BoxShadow(color: Color(0x33000000), blurRadius: 4)]),
+                  child: const Icon(Icons.close, color: Colors.white, size: 14),
+                ),
+              )),
+            ]);
+          },
+        )),
+        if (_photos.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 6),
+            child: Text('${_photos.length}/$_maxPhotos ${ar ? "صور" : "photos"}',
+                style: const TextStyle(fontSize: 11, color: UellowColors.muted))),
+      ])),
       actions: [
         TextButton(onPressed: _busy ? null : () => Navigator.pop(context),
           child: Text(ar ? 'إلغاء' : 'Cancel')),

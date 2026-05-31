@@ -28,6 +28,9 @@ import '../theme/uellow_theme.dart';
 
 class AddressPickerScreen extends StatefulWidget {
   const AddressPickerScreen({super.key, this.onSaved});
+  /// Legacy callback (kept for compatibility with checkout). Modern
+  /// callers should `await Navigator.push` and read the returned address
+  /// id (or null on cancel).
   final VoidCallback? onSaved;
   @override
   State<AddressPickerScreen> createState() => _AddressPickerScreenState();
@@ -170,7 +173,12 @@ map.on('move',function(){
       backgroundColor: Colors.transparent,
       builder: (_) => _AddressForm(
         lat: _lat, lng: _lng, reverseAddress: _reverseAddress,
-        onSaved: () { widget.onSaved?.call(); Navigator.pop(context); },
+        onSaved: (newId) {
+          widget.onSaved?.call();
+          // Pop the address picker AND pass the new id back to the caller
+          // so checkout / cart can auto-select it.
+          Navigator.pop(context, newId);
+        },
       ),
     );
   }
@@ -253,7 +261,7 @@ class _AddressForm extends StatefulWidget {
   final double lat;
   final double lng;
   final String reverseAddress;
-  final VoidCallback onSaved;
+  final void Function(int? newAddressId) onSaved;
   @override
   State<_AddressForm> createState() => _AddressFormState();
 }
@@ -337,9 +345,16 @@ class _AddressFormState extends State<_AddressForm> {
         'notes': _notes.text.trim(),
         if (_photoBytes != null) 'landmark_photo': base64Encode(_photoBytes!),
       };
-      await UellowApi.instance.addresses.create(body);
+      final created = await UellowApi.instance.addresses.create(body);
       if (!mounted) return;
-      widget.onSaved();
+      // Persist as the default-selected address so the calling screen
+      // pre-selects it on its next refresh.
+      try {
+        await UellowApi.instance.tokenStore.writeAddressId(created.id);
+      } catch (_) {}
+      // Close the bottom sheet first, then let the picker pop with the id.
+      Navigator.pop(context);
+      widget.onSaved(created.id);
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(e.toString())));
@@ -359,59 +374,103 @@ class _AddressFormState extends State<_AddressForm> {
     return '';
   }
 
+  static const _labelChips = [
+    ('Home', 'المنزل', Icons.home_outlined),
+    ('Office', 'العمل', Icons.work_outline),
+    ('Family', 'العائلة', Icons.favorite_border),
+    ('Other', 'أخرى', Icons.location_on_outlined),
+  ];
+
   @override
   Widget build(BuildContext context) {
     final ar = UellowApi.instance.lang == 'ar';
     return Padding(
       padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
       child: Container(
-        constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.92),
+        constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.94),
         decoration: const BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
         ),
         child: Column(mainAxisSize: MainAxisSize.min, children: [
+          // ── Drag handle + header ──────────────────────────────
           Container(width: 40, height: 4, margin: const EdgeInsets.symmetric(vertical: 10),
               decoration: BoxDecoration(color: UellowColors.border,
                   borderRadius: BorderRadius.circular(2))),
-          Padding(padding: const EdgeInsets.fromLTRB(20, 0, 20, 4),
-              child: Text(ar ? 'تفاصيل العنوان' : 'Address details',
-                  style: UT.h2)),
-          Padding(padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
-              child: Text(widget.reverseAddress,
-                  maxLines: 2, overflow: TextOverflow.ellipsis,
-                  style: UT.small)),
-          Flexible(child: ListView(padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+          Container(
+            padding: const EdgeInsets.fromLTRB(20, 4, 16, 14),
+            decoration: const BoxDecoration(
+              border: Border(bottom: BorderSide(color: UellowColors.border)),
+            ),
+            child: Row(children: [
+              Container(
+                width: 36, height: 36, alignment: Alignment.center,
+                decoration: const BoxDecoration(
+                  color: UellowColors.yellowSoft, shape: BoxShape.circle),
+                child: const Icon(Icons.location_on,
+                    color: UellowColors.darkBrown, size: 18),
+              ),
+              const SizedBox(width: 10),
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(ar ? 'تفاصيل العنوان' : 'Address details', style: UT.h2),
+                Text(widget.reverseAddress,
+                    maxLines: 1, overflow: TextOverflow.ellipsis,
+                    style: UT.small),
+              ])),
+              IconButton(icon: const Icon(Icons.close, size: 20),
+                  onPressed: () => Navigator.pop(context)),
+            ]),
+          ),
+          Flexible(child: ListView(padding: const EdgeInsets.fromLTRB(20, 14, 20, 12),
               children: [
-            _section(ar ? 'تسمية' : 'Label'),
-            _f(ar ? 'مثال: المنزل / العمل' : 'e.g. Home / Office', _label),
-            _section(ar ? 'بيانات المستلم' : 'Recipient details'),
-            _f(ar ? 'الاسم الكامل' : 'Full name', _name),
-            _f(ar ? 'رقم الهاتف' : 'Phone number', _phone, type: TextInputType.phone),
+            // ── Address label as chips
+            _section(ar ? 'تسمية العنوان' : 'Address label', Icons.bookmark_border),
+            Wrap(spacing: 8, runSpacing: 8, children: [
+              for (final chip in _labelChips) _labelChip(chip.$1, chip.$2, chip.$3, ar),
+            ]),
+            const SizedBox(height: 4),
+            // ── Recipient
+            _section(ar ? 'بيانات المستلم' : 'Recipient', Icons.person_outline),
+            _f(ar ? 'الاسم الكامل' : 'Full name', _name,
+                icon: Icons.person_outline,
+                hint: ar ? 'مثال: علي محمد' : 'e.g. John Smith'),
+            _f(ar ? 'رقم الهاتف' : 'Phone number', _phone,
+                type: TextInputType.phone,
+                icon: Icons.phone_outlined,
+                hint: '+965 9999 9999'),
             _f(ar ? 'البريد الإلكتروني (اختياري)' : 'Email (optional)', _email,
-                type: TextInputType.emailAddress),
-            _section(ar ? 'موقع التوصيل' : 'Delivery location'),
-            _f(ar ? 'الدولة' : 'Country', _country),
-            _f(ar ? 'المحافظة / المدينة' : 'Governorate / City', _city),
-            _f(ar ? 'المنطقة' : 'Area', _area),
+                type: TextInputType.emailAddress,
+                icon: Icons.alternate_email),
+            // ── Delivery location
+            _section(ar ? 'موقع التوصيل' : 'Delivery location', Icons.map_outlined),
+            _f(ar ? 'الدولة' : 'Country', _country, icon: Icons.public),
+            _f(ar ? 'المحافظة / المدينة' : 'Governorate / City', _city,
+                icon: Icons.location_city_outlined),
+            _f(ar ? 'المنطقة' : 'Area', _area,
+                icon: Icons.place_outlined),
             Row(children: [
               Expanded(child: _f(ar ? 'القطعة' : 'Block', _block, padded: false)),
-              const SizedBox(width: 8),
-              Expanded(child: _f(ar ? 'الشارع' : 'Street', _street, padded: false)),
+              const SizedBox(width: 10),
+              Expanded(flex: 2,
+                  child: _f(ar ? 'الشارع' : 'Street', _street, padded: false)),
             ]),
             const SizedBox(height: 10),
             Row(children: [
-              Expanded(child: _f(ar ? 'المنزل / المبنى' : 'Building / House', _building, padded: false)),
-              const SizedBox(width: 8),
+              Expanded(flex: 2,
+                  child: _f(ar ? 'المنزل / المبنى' : 'Building', _building, padded: false)),
+              const SizedBox(width: 10),
               Expanded(child: _f(ar ? 'الدور' : 'Floor', _floor, padded: false)),
-              const SizedBox(width: 8),
-              Expanded(child: _f(ar ? 'الشقة' : 'Apt #', _apt, padded: false)),
+              const SizedBox(width: 10),
+              Expanded(child: _f(ar ? 'الشقة' : 'Apt', _apt, padded: false)),
             ]),
-            const SizedBox(height: 10),
-            _f(ar ? 'ملاحظات للتوصيل (مثل علامة مميزة قرب العنوان)'
-                : 'Delivery notes (e.g. landmark near you)', _notes, lines: 2),
+            const SizedBox(height: 12),
+            _f(ar ? 'ملاحظات للسائق' : 'Notes for the driver',
+                _notes, lines: 2, icon: Icons.sticky_note_2_outlined,
+                hint: ar ? 'علامة مميزة قرب العنوان...'
+                          : 'A landmark or instructions...'),
             const SizedBox(height: 14),
-            _section(ar ? 'صورة دلالية (اختياري)' : 'Landmark photo (optional)'),
+            _section(ar ? 'صورة دلالية (اختياري)' : 'Landmark photo (optional)',
+                Icons.add_photo_alternate_outlined),
             InkWell(
               onTap: _pickPhoto,
               child: Container(
@@ -468,23 +527,69 @@ class _AddressFormState extends State<_AddressForm> {
     );
   }
 
-  Widget _section(String t) => Padding(
-    padding: const EdgeInsets.only(top: 14, bottom: 6),
-    child: Text(t.toUpperCase(), style: const TextStyle(
-        fontSize: 11, fontWeight: FontWeight.w900, color: UellowColors.muted,
-        letterSpacing: 0.5)),
+  Widget _section(String t, [IconData? icon]) => Padding(
+    padding: const EdgeInsets.only(top: 16, bottom: 8),
+    child: Row(children: [
+      if (icon != null) ...[
+        Icon(icon, size: 14, color: UellowColors.darkBrown),
+        const SizedBox(width: 6),
+      ],
+      Text(t.toUpperCase(), style: const TextStyle(
+          fontSize: 11.5, fontWeight: FontWeight.w900,
+          color: UellowColors.darkBrown, letterSpacing: 0.6)),
+      const SizedBox(width: 10),
+      Expanded(child: Container(height: 1, color: UellowColors.border)),
+    ]),
   );
 
+  Widget _labelChip(String en, String ar, IconData icon, bool isAr) {
+    final on = _label.text.trim().toLowerCase() == en.toLowerCase();
+    final text = isAr ? ar : en;
+    return GestureDetector(
+      onTap: () => setState(() => _label.text = en),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 120),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: on ? UellowColors.yellow : Colors.white,
+          border: Border.all(
+            color: on ? UellowColors.yellow : UellowColors.border,
+            width: on ? 2 : 1),
+          borderRadius: BorderRadius.circular(999),
+        ),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(icon, size: 14,
+              color: on ? UellowColors.darkBrown : UellowColors.muted),
+          const SizedBox(width: 6),
+          Text(text, style: TextStyle(
+              fontSize: 12, fontWeight: FontWeight.w900,
+              color: on ? UellowColors.darkBrown : UellowColors.text)),
+        ]),
+      ),
+    );
+  }
+
   Widget _f(String label, TextEditingController c,
-      {TextInputType? type, int lines = 1, bool padded = true}) {
+      {TextInputType? type, int lines = 1, bool padded = true,
+      IconData? icon, String? hint}) {
     final field = TextField(
       controller: c,
       keyboardType: type,
       minLines: lines, maxLines: lines,
+      style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600),
       decoration: InputDecoration(
         labelText: label,
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+        hintText: hint,
+        hintStyle: const TextStyle(fontSize: 12, color: UellowColors.muted),
+        prefixIcon: icon != null ? Icon(icon, size: 18,
+            color: UellowColors.muted) : null,
+        prefixIconConstraints: const BoxConstraints(minWidth: 38),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(11)),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(11),
+          borderSide: const BorderSide(color: UellowColors.darkBrown, width: 1.5)),
         isDense: true,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
       ),
     );
     return padded ? Padding(padding: const EdgeInsets.only(bottom: 10), child: field) : field;

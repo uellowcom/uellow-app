@@ -750,11 +750,15 @@ class _OrdersApi {
 
   Future<Map<String, dynamic>> contactSeller({
     required int orderId, required String subject, required String body,
+    List<String>? photosBase64,
   }) async {
     final res = await _c._post(
       '${EP.orders}/$orderId/contact-seller',
       auth: true,
-      body: {'subject': subject, 'body': body},
+      body: {
+        'subject': subject, 'body': body,
+        if (photosBase64 != null && photosBase64.isNotEmpty) 'photos': photosBase64,
+      },
     );
     return Map<String, dynamic>.from(res['data'] as Map);
   }

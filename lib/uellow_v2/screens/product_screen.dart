@@ -148,7 +148,9 @@ class _ProductScreenState extends State<ProductScreen> {
           onTap: () => _showDeliverySheet(context))),
       // Brand block sits below shipping info per latest spec
       if (p.brand != null) SliverToBoxAdapter(child: _BrandBlock(brand: p.brand!)),
-      if (p.bulkPricing.length > 1)
+      // Show whenever there's at least one bulk tier — even a single
+      // "buy 5+ → save 5%" hint is useful.
+      if (p.bulkPricing.isNotEmpty)
         SliverToBoxAdapter(child: _BulkPricing(tiers: p.bulkPricing)),
       SliverToBoxAdapter(child: _DescriptionBlock(product: p)),
       SliverToBoxAdapter(child: _SpecsBlock(product: p,
@@ -701,53 +703,113 @@ class _BrandBlock extends StatelessWidget {
 
 // ─── Vendor card ───────────────────────────────────────────────────
 
+/// Sold-By vendor card — taps through to the vendor's storefront.
 class _VendorCard extends StatelessWidget {
   const _VendorCard({required this.vendor});
   final UellowVendorRef vendor;
   @override
   Widget build(BuildContext context) {
+    final ar = UellowApi.instance.lang == 'ar';
     final lang = UellowApi.instance.lang;
     final name = vendor.name.current(lang);
+    final tier = vendor.tier.toLowerCase();
+    final tierColors = {
+      'platinum': const Color(0xFFA7C7E7),
+      'gold':     const Color(0xFFE6C04A),
+      'silver':   const Color(0xFFBCBCBC),
+      'bronze':   const Color(0xFFCD7F32),
+    };
+    final tierColor = tierColors[tier] ?? UellowColors.muted;
     return Container(
       color: Colors.white,
       padding: const EdgeInsets.fromLTRB(18, 0, 18, 12),
       child: InkWell(
         borderRadius: const BorderRadius.all(Radius.circular(12)),
-        onTap: () {},
+        onTap: () => UellowRouter.goVendor(context, vendor.id),
         child: Container(
           padding: const EdgeInsets.all(12),
-          decoration: const BoxDecoration(
-            color: Color(0xFFFAFAFA),
-            borderRadius: BorderRadius.all(Radius.circular(12)),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            border: Border.all(color: UellowColors.border, width: 1),
+            borderRadius: BorderRadius.circular(12),
           ),
           child: Row(children: [
+            // ── Vendor logo / initial
             Container(
-              width: 38, height: 38,
-              decoration: const BoxDecoration(
-                color: UellowColors.yellow,
-                borderRadius: BorderRadius.all(Radius.circular(10)),
+              width: 44, height: 44,
+              decoration: BoxDecoration(
+                color: UellowColors.yellowSoft,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: UellowColors.yellow, width: 1.5),
               ),
-              alignment: Alignment.center,
-              child: Text(name.isNotEmpty ? name[0] : 'U',
-                  style: const TextStyle(color: UellowColors.darkBrown,
-                      fontWeight: FontWeight.w900, fontSize: 16)),
+              clipBehavior: Clip.antiAlias,
+              child: vendor.logo != null && vendor.logo!.isNotEmpty
+                  ? CachedNetworkImage(imageUrl: vendor.logo!, fit: BoxFit.cover,
+                      errorWidget: (_,__,___) => _initial(name))
+                  : _initial(name),
             ),
-            const SizedBox(width: 10),
+            const SizedBox(width: 12),
             Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(name, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13.5)),
+              // "Sold by" caption
+              Row(children: [
+                const Icon(Icons.verified_outlined, size: 11,
+                    color: UellowColors.muted),
+                const SizedBox(width: 3),
+                Text(ar ? 'البائع' : 'SOLD BY',
+                    style: const TextStyle(fontSize: 9.5,
+                        fontWeight: FontWeight.w900, color: UellowColors.muted,
+                        letterSpacing: 0.6)),
+              ]),
               const SizedBox(height: 2),
-              const Row(children: [
-                Text('★★★★★', style: TextStyle(color: UellowColors.yellow, fontSize: 11, letterSpacing: -1)),
-                SizedBox(width: 4),
-                Text('4.8 (1,200)', style: TextStyle(fontSize: 11, color: UellowColors.muted)),
+              Row(children: [
+                Flexible(child: Text(name, maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontWeight: FontWeight.w900,
+                        fontSize: 14.5, color: UellowColors.ink))),
+                if (tier.isNotEmpty && tier != 'standard') ...[
+                  const SizedBox(width: 6),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [tierColor.withValues(alpha: 0.85), tierColor]),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(tier.toUpperCase(),
+                        style: const TextStyle(color: Colors.white,
+                            fontSize: 8.5, fontWeight: FontWeight.w900,
+                            letterSpacing: 0.5)),
+                  ),
+                ],
               ]),
             ])),
-            const Icon(Icons.chevron_right, color: Color(0xFFCBB78A)),
+            // ── Visit button
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+              decoration: BoxDecoration(
+                color: UellowColors.yellow,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                Text(ar ? 'زيارة' : 'Visit',
+                    style: const TextStyle(color: UellowColors.darkBrown,
+                        fontSize: 11.5, fontWeight: FontWeight.w900)),
+                const SizedBox(width: 4),
+                const Icon(Icons.arrow_forward, size: 11,
+                    color: UellowColors.darkBrown),
+              ]),
+            ),
           ]),
         ),
       ),
     );
   }
+  Widget _initial(String name) => Container(
+    alignment: Alignment.center,
+    child: Text(name.isNotEmpty ? name[0].toUpperCase() : 'U',
+        style: const TextStyle(color: UellowColors.darkBrown,
+            fontWeight: FontWeight.w900, fontSize: 18)),
+  );
 }
 
 // ─── Attributes ────────────────────────────────────────────────────
@@ -915,13 +977,36 @@ class _Attributes extends StatelessWidget {
 
 // ─── Compact delivery (clickable) ─────────────────────────────────
 
-class _CompactDelivery extends StatelessWidget {
+class _CompactDelivery extends StatefulWidget {
   const _CompactDelivery({required this.onTap});
   final VoidCallback onTap;
   @override
+  State<_CompactDelivery> createState() => _CompactDeliveryState();
+}
+
+class _CompactDeliveryState extends State<_CompactDelivery> {
+  String _summary = '';
+  @override
+  void initState() { super.initState(); _loadAddress(); }
+  Future<void> _loadAddress() async {
+    try {
+      final addrs = await UellowApi.instance.addresses.list();
+      if (addrs.isEmpty) return;
+      // Prefer the saved-default; else first (newest)
+      final savedId = await UellowApi.instance.tokenStore.readAddressId();
+      final pick = addrs.firstWhere((a) => a.id == savedId,
+          orElse: () => addrs.first);
+      final parts = [
+        pick.country, pick.state, pick.city,
+      ].where((s) => s.isNotEmpty).toList();
+      if (mounted) setState(() => _summary = parts.join(' · '));
+    } catch (_) {}
+  }
+  @override
   Widget build(BuildContext context) {
     final ar = UellowApi.instance.lang == 'ar';
-    return InkWell(onTap: onTap, child: Container(
+    final has = _summary.isNotEmpty;
+    return InkWell(onTap: widget.onTap, child: Container(
       color: Colors.white,
       padding: const EdgeInsets.fromLTRB(18, 12, 18, 12),
       child: Row(children: [
@@ -940,9 +1025,13 @@ class _CompactDelivery extends StatelessWidget {
                 style: const TextStyle(fontSize: 11,
                     color: UellowColors.muted, fontWeight: FontWeight.w700)),
             const SizedBox(height: 2),
-            Text(ar ? 'اختر عنوانك' : 'Choose your address',
-                style: const TextStyle(fontSize: 13,
-                    fontWeight: FontWeight.w800, color: UellowColors.ink)),
+            Text(has
+                ? _summary
+                : (ar ? 'اختر عنوانك' : 'Choose your address'),
+                maxLines: 1, overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                    color: has ? UellowColors.darkBrown : UellowColors.ink)),
           ],
         )),
         const Icon(Icons.chevron_right, color: Color(0xFFCBB78A)),
@@ -1089,65 +1178,132 @@ class _BulkPricing extends StatelessWidget {
   final List<UellowBulkTier> tiers;
   @override
   Widget build(BuildContext context) {
-    final bestIdx = tiers.length - 1;
+    final ar = UellowApi.instance.lang == 'ar';
+    final bestIdx = tiers.indexWhere((t) => t.savePct >= tiers.map((x) => x.savePct).reduce((a,b)=>a>b?a:b));
     return Container(
-      color: Colors.white, margin: const EdgeInsets.only(top: 8),
-      padding: const EdgeInsets.all(16),
+      margin: const EdgeInsets.fromLTRB(14, 8, 14, 0),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft, end: Alignment.bottomRight,
+          colors: [Color(0xFFFFFAEC), Color(0xFFFFF4D2)]),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: UellowColors.yellow.withValues(alpha: 0.5), width: 1.5),
+      ),
+      padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: const [
-          Icon(Icons.local_offer_outlined, size: 16, color: UellowColors.darkBrown),
-          SizedBox(width: 6),
-          Text('Bulk pricing', style: UT.h3),
-          SizedBox(width: 6),
-          Text('save more, buy more', style: UT.small),
+        Row(children: [
+          Container(
+            width: 32, height: 32, alignment: Alignment.center,
+            decoration: const BoxDecoration(
+              color: UellowColors.darkBrown, shape: BoxShape.circle),
+            child: const Icon(Icons.local_offer_outlined, size: 16,
+                color: UellowColors.yellowLight),
+          ),
+          const SizedBox(width: 10),
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(ar ? 'سعر الجملة' : 'Bulk pricing',
+                style: const TextStyle(fontWeight: FontWeight.w900,
+                    fontSize: 14, color: UellowColors.darkBrown)),
+            Text(ar ? 'اشترِ أكثر · ادفع أقل' : 'Buy more · save more',
+                style: const TextStyle(fontSize: 11.5,
+                    color: UellowColors.muted, fontWeight: FontWeight.w600)),
+          ])),
+          if (tiers.isNotEmpty && tiers.last.savePct > 0)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: UellowColors.success,
+                borderRadius: BorderRadius.circular(999),
+              ),
+              child: Text(ar
+                  ? 'وفّر حتى ${tiers.last.savePct}%'
+                  : 'Save up to ${tiers.last.savePct}%',
+                  style: const TextStyle(color: Colors.white,
+                      fontSize: 10.5, fontWeight: FontWeight.w900)),
+            ),
         ]),
-        const SizedBox(height: 12),
+        const SizedBox(height: 14),
         Row(children: List.generate(tiers.length, (i) {
           final t = tiers[i];
           final nextMin = i < tiers.length - 1 ? tiers[i + 1].minQty - 1 : null;
           final qtyLabel = nextMin != null
-              ? '${t.minQty} — $nextMin pcs' : '${t.minQty}+ pcs';
+              ? '${t.minQty}–$nextMin'
+              : '${t.minQty}+';
           return Expanded(child: Padding(
             padding: EdgeInsets.only(right: i < tiers.length - 1 ? 8 : 0),
             child: _tier(qtyLabel: qtyLabel, price: t.price, sym: t.currency,
-                save: t.savePct, best: i == bestIdx && tiers.length > 1),
+                save: t.savePct, best: i == bestIdx && tiers.length > 1, ar: ar),
           ));
         })),
       ]),
     );
   }
   Widget _tier({required String qtyLabel, required double price, required String sym,
-      required int save, bool best = false}) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(8, 14, 8, 12),
-      decoration: BoxDecoration(
-        gradient: best ? const LinearGradient(
-          begin: Alignment.topCenter, end: Alignment.bottomCenter,
-          colors: [UellowColors.yellowFaint, UellowColors.yellowSoft],
-        ) : null,
-        color: best ? null : UellowColors.yellowFaint,
-        border: Border.all(color: best ? UellowColors.yellow : UellowColors.border, width: 2),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(children: [
-        Text(qtyLabel, style: const TextStyle(
-            fontSize: 11, fontWeight: FontWeight.w700, color: UellowColors.muted)),
-        const SizedBox(height: 4),
-        Text(price.toStringAsFixed(3), style: const TextStyle(
-            fontSize: 16, fontWeight: FontWeight.w900, color: UellowColors.darkBrown)),
-        Text('$sym / pc', style: const TextStyle(fontSize: 10, color: UellowColors.muted)),
-        if (save > 0) ...[
-          const SizedBox(height: 6),
+      required int save, bool best = false, required bool ar}) {
+    return Stack(clipBehavior: Clip.none, children: [
+      Container(
+        padding: EdgeInsets.fromLTRB(8, best ? 18 : 12, 8, 12),
+        decoration: BoxDecoration(
+          color: best ? UellowColors.darkBrown : Colors.white,
+          border: Border.all(
+              color: best ? UellowColors.darkBrown : UellowColors.border,
+              width: best ? 2 : 1),
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: best ? [BoxShadow(
+              color: UellowColors.darkBrown.withValues(alpha: 0.18),
+              blurRadius: 10, offset: const Offset(0, 4))] : null,
+        ),
+        child: Column(children: [
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-            decoration: BoxDecoration(color: UellowColors.successBg,
-                borderRadius: BorderRadius.circular(4)),
-            child: Text('Save $save%', style: const TextStyle(
-                fontSize: 10, color: UellowColors.successDk, fontWeight: FontWeight.w800)),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+            decoration: BoxDecoration(
+              color: best ? UellowColors.yellow : UellowColors.yellowSoft,
+              borderRadius: BorderRadius.circular(999),
+            ),
+            child: Text('$qtyLabel ${ar ? "قطعة" : "pcs"}',
+                style: const TextStyle(fontSize: 10,
+                    fontWeight: FontWeight.w900, color: UellowColors.darkBrown)),
           ),
-        ],
-      ]),
-    );
+          const SizedBox(height: 8),
+          Text(price.toStringAsFixed(3), style: TextStyle(
+              fontSize: 17, fontWeight: FontWeight.w900,
+              color: best ? UellowColors.yellowLight : UellowColors.darkBrown)),
+          Text('$sym ${ar ? "/ قطعة" : "/ pc"}',
+              style: TextStyle(fontSize: 10,
+                  color: best ? UellowColors.yellowLight.withValues(alpha: 0.7) : UellowColors.muted)),
+          if (save > 0) ...[
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: UellowColors.success,
+                borderRadius: BorderRadius.circular(4)),
+              child: Text(ar ? 'وفّر $save%' : 'Save $save%',
+                  style: const TextStyle(fontSize: 9.5,
+                      color: Colors.white, fontWeight: FontWeight.w900)),
+            ),
+          ],
+        ]),
+      ),
+      if (best) Positioned(top: -8, left: 0, right: 0, child: Center(
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+          decoration: BoxDecoration(
+            color: UellowColors.yellow,
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(color: Colors.white, width: 1.5),
+          ),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            const Icon(Icons.star, color: UellowColors.darkBrown, size: 10),
+            const SizedBox(width: 3),
+            Text(ar ? 'الأفضل' : 'BEST',
+                style: const TextStyle(fontSize: 9,
+                    fontWeight: FontWeight.w900, color: UellowColors.darkBrown,
+                    letterSpacing: 0.4)),
+          ]),
+        ),
+      )),
+    ]);
   }
 }
 
