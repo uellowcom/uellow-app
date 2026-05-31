@@ -19,6 +19,7 @@ import '../../api/uellow_models.dart';
 import '../router/uellow_router.dart';
 import '../theme/uellow_l10n.dart';
 import '../theme/uellow_theme.dart';
+import 'address_picker_screen.dart';
 import 'order_confirmation_screen.dart';
 
 class CheckoutScreen extends StatefulWidget {
@@ -300,6 +301,7 @@ class _AddressList extends StatelessWidget {
   }
 
   void _openPicker(BuildContext context) {
+    final ar = UellowApi.instance.lang == 'ar';
     showModalBottomSheet(
       context: context, isScrollControlled: true,
       backgroundColor: Colors.transparent,
@@ -317,24 +319,7 @@ class _AddressList extends StatelessWidget {
               icon: const Icon(Icons.close, color: UellowColors.darkBrown),
               onPressed: () => Navigator.pop(sheet),
             ),
-            title: Text(UellowApi.instance.lang == 'ar'
-                ? 'اختر عنواناً' : 'Select address',
-                style: UT.h2),
-            actions: [
-              TextButton.icon(
-                onPressed: () {
-                  Navigator.pop(sheet);
-                  Navigator.pushNamed(context, '/addresses');
-                },
-                icon: const Icon(Icons.add, size: 16,
-                    color: UellowColors.darkBrown),
-                label: Text(UellowApi.instance.lang == 'ar'
-                    ? 'عنوان جديد' : 'Add new',
-                    style: const TextStyle(color: UellowColors.darkBrown,
-                        fontWeight: FontWeight.w800)),
-              ),
-              const SizedBox(width: 6),
-            ],
+            title: Text(ar ? 'اختر عنواناً' : 'Select address', style: UT.h2),
           ),
           Flexible(child: ListView.separated(
             padding: const EdgeInsets.all(16),
@@ -348,6 +333,36 @@ class _AddressList extends StatelessWidget {
                 child: _addrCard(a, selected: on),
               );
             },
+          )),
+          // ── Sticky "+ Add new address" button at the bottom
+          SafeArea(top: false, child: Container(
+            padding: const EdgeInsets.all(14),
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              border: Border(top: BorderSide(color: UellowColors.border)),
+            ),
+            child: SizedBox(width: double.infinity, child: ElevatedButton.icon(
+              onPressed: () async {
+                Navigator.pop(sheet);
+                await Navigator.push(context, MaterialPageRoute(
+                  builder: (_) => AddressPickerScreen(onSaved: () {
+                    // Force a checkout reload so the new address shows up.
+                    final state = context.findAncestorStateOfType<_CheckoutScreenState>();
+                    state?.setState(() { state._data = state._bootstrap(); });
+                  }),
+                ));
+              },
+              icon: const Icon(Icons.add_location_alt_outlined, size: 18),
+              label: Text(ar ? 'إضافة عنوان جديد' : 'Add new address',
+                  style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 14)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: UellowColors.darkBrown,
+                foregroundColor: UellowColors.yellowLight,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: const RoundedRectangleBorder(
+                    borderRadius: BorderRadius.all(Radius.circular(12))),
+              ),
+            )),
           )),
         ]),
       ),

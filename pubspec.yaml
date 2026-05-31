@@ -1,7 +1,7 @@
 name: uellow
 description: Uellow Marketplace — v2 mobile app
 publish_to: 'none'
-version: 2.0.22+23
+version: 2.0.23+24
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
@@ -23,6 +23,8 @@ dependencies:
   app_links: ^6.3.2
   flutter_local_notifications: ^17.2.4
   path_provider: ^2.1.4
+  geolocator: ^13.0.2
+  permission_handler: ^11.3.1
 
 dev_dependencies:
   flutter_test:

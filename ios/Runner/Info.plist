@@ -69,5 +69,13 @@
 	<array>
 		<string>NSUserActivityTypeBrowsingWeb</string>
 	</array>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Uellow uses your location to set delivery addresses on the map and to track orders to your door.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>Uellow uses your location to set delivery addresses on the map and to track orders to your door.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Uellow uses the camera so you can upload a landmark photo for your delivery address, your profile photo, and try-on photos.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Uellow needs access to your photo library so you can upload images for your address, profile, and try-on.</string>
 </dict>
 </plist>

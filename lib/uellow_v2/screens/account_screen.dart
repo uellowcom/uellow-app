@@ -248,7 +248,20 @@ class _ProfileHeaderState extends State<_ProfileHeader> {
         ? (ar ? 'ضيف' : 'Guest')
         : ((widget.user['name'] as String?) ?? 'Customer');
     final country = (widget.user['country'] as String?) ?? '';
-    final avatar = _avatarOverride ?? (widget.user['avatar'] as String?) ?? '';
+    // Live avatar — listens to the global notifier so any upload (here or
+    // on the profile screen) immediately re-paints this header.
+    return ValueListenableBuilder<String>(
+      valueListenable: UellowApi.instance.avatarNotifier,
+      builder: (ctx, globalAvatar, _) {
+        final avatar = _avatarOverride
+            ?? (globalAvatar.isNotEmpty ? globalAvatar : null)
+            ?? (widget.user['avatar'] as String?) ?? '';
+        return _buildHeader(ar, name, country, avatar);
+      },
+    );
+  }
+
+  Widget _buildHeader(bool ar, String name, String country, String avatar) {
     final flag = _flagOf(country);
     final currency = _currencyOf(country);
     // Compact header: flag chip · avatar (center) · settings · all
@@ -453,18 +466,22 @@ class _ProfileHeaderState extends State<_ProfileHeader> {
       );
       final body = jsonDecode(utf8.decode(r.bodyBytes)) as Map<String, dynamic>;
       if (body['success'] == true && mounted) {
-        // Prefer the data URI from the server — renders instantly without
-        // the /web/image auth dance. Fall back to the cache-busted URL.
         final data = body['data'] as Map<String, dynamic>? ?? const {};
         final dataUri = data['avatar_data_uri'] as String?;
         final url     = data['avatar_url'] as String?;
+        final winner = (dataUri?.isNotEmpty == true)
+            ? dataUri!
+            : (url?.isNotEmpty == true ? url! : _avatarOverride);
         setState(() {
-          _avatarOverride = (dataUri?.isNotEmpty == true
-              ? dataUri
-              : (url?.isNotEmpty == true ? url : _avatarOverride));
-          _avatarBytes = bytes;  // local immediate fallback
+          _avatarOverride = winner;
+          _avatarBytes = bytes;
           _busy = false;
         });
+        // Broadcast to the rest of the app — any screen listening to
+        // avatarNotifier will immediately re-paint with the new image.
+        if (winner != null && winner.isNotEmpty) {
+          UellowApi.instance.setAvatar(winner);
+        }
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
             content: Text(ar ? 'تم تحديث الصورة' : 'Profile photo updated')));
       } else if (mounted) {
@@ -478,20 +495,38 @@ class _ProfileHeaderState extends State<_ProfileHeader> {
   }
 }
 
+/// Loyalty + Wallet side-by-side cards. Replaces the horizontal slider
+/// with a single row of two professional gradient cards so the user can
+/// see both at-a-glance without having to scroll.
 class _BannersRow extends StatelessWidget {
   const _BannersRow({required this.banners});
   final List banners;
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      height: 160,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-        itemCount: banners.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 10),
-        itemBuilder: (_, i) => _BannerCard(banner: banners[i] as Map),
-      ),
+    // Find loyalty + wallet by their `kind` (server-side names them).
+    Map? loyalty, wallet;
+    for (final b in banners) {
+      if (b is Map) {
+        final k = b['kind'] as String?;
+        if (k == 'loyalty' && loyalty == null) loyalty = b;
+        if (k == 'wallet'  && wallet  == null) wallet  = b;
+      }
+    }
+    // Defensive fallback — if backend ever returns neither, show both blank.
+    loyalty ??= const {'kind': 'loyalty', 'title': {'en': 'Loyalty', 'ar': 'الولاء'},
+        'subtitle': {'en': 'Earn rewards', 'ar': 'اكسب نقاط'},
+        'cta': {'en': 'Open', 'ar': 'فتح'}};
+    wallet  ??= const {'kind': 'wallet',  'title': {'en': 'Wallet',  'ar': 'المحفظة'},
+        'subtitle': {'en': 'Manage credit', 'ar': 'إدارة الرصيد'},
+        'cta': {'en': 'Open', 'ar': 'فتح'}};
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+      child: IntrinsicHeight(child: Row(crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(child: _BannerCard(banner: loyalty)),
+          const SizedBox(width: 10),
+          Expanded(child: _BannerCard(banner: wallet)),
+        ])),
     );
   }
 }
@@ -501,80 +536,103 @@ class _BannerCard extends StatelessWidget {
   final Map banner;
   @override
   Widget build(BuildContext context) {
+    final ar = UellowApi.instance.lang == 'ar';
+    final lang = ar ? 'ar' : 'en';
     final kind = (banner['kind'] as String?) ?? 'loyalty';
     final isLoyalty = kind == 'loyalty';
-    final title = (banner['title'] as Map?)?['en'] as String? ?? '';
-    final sub   = (banner['subtitle'] as Map?)?['en'] as String? ?? '';
+    final title = (banner['title'] as Map?)?[lang] as String? ?? '';
+    final sub   = (banner['subtitle'] as Map?)?[lang] as String? ?? '';
     final progressPct = (banner['progress_pct'] as int?) ?? 0;
-    final cta = (banner['cta'] as Map?)?['en'] as String? ?? '';
+    // Big value is what counts. Server gives us subtitle like "1,250 points · Silver"
+    // — keep the FIRST word as the headline, the rest as caption.
+    final parts = sub.split(' ');
+    final big = parts.isNotEmpty ? parts.first : '';
+    final small = parts.length > 1 ? parts.sublist(1).join(' ') : '';
     return GestureDetector(
       onTap: () => Navigator.pushNamed(context,
           isLoyalty ? Routes.loyalty : Routes.wallet),
-      child: SizedBox(width: 280, child: Container(
-        padding: const EdgeInsets.all(16),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
         decoration: BoxDecoration(
           gradient: isLoyalty ? UellowColors.heroLoyalty : UellowColors.heroWallet,
           borderRadius: BorderRadius.circular(18),
+          boxShadow: [BoxShadow(
+            color: (isLoyalty ? UellowColors.darkBrown : UellowColors.darkBrown).withValues(alpha: .25),
+            blurRadius: 16, offset: const Offset(0, 6))],
         ),
-        child: Stack(children: [
-          Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Row(children: [
-              Text(title.toUpperCase(), style: TextStyle(
-                  color: isLoyalty ? UellowColors.darkBrown : UellowColors.yellowLight,
-                  fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 0.5)),
-              if (isLoyalty && (banner['tier'] as String?) != null) ...[
-                const SizedBox(width: 8),
-                _tierBadge(
-                  (banner['tier'] as String?) ?? 'bronze',
-                  ((banner['tier_label'] as Map?)?['en'] as String?)
-                      ?? ((banner['tier'] as String?) ?? 'BRONZE').toUpperCase(),
-                ),
-              ],
-            ]),
-            const SizedBox(height: 6),
-            Text(sub.split(' ').take(3).join(' '),
-                style: TextStyle(
-                    color: isLoyalty ? UellowColors.darkBrown : UellowColors.yellowLight,
-                    fontSize: 24, fontWeight: FontWeight.w900, height: 1)),
-            const SizedBox(height: 6),
-            Text(sub, maxLines: 2, overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                    color: isLoyalty ? UellowColors.darkBrown : UellowColors.yellowLight,
-                    fontSize: 11)),
-            if (progressPct > 0) ...[
-              const SizedBox(height: 14),
-              Container(
-                height: 6,
-                decoration: BoxDecoration(
-                  color: (isLoyalty ? Colors.black : Colors.white).withOpacity(.18),
-                  borderRadius: BorderRadius.circular(999),
-                ),
-                child: FractionallySizedBox(
-                  alignment: Alignment.centerLeft,
-                  widthFactor: progressPct / 100,
-                  child: DecoratedBox(decoration: BoxDecoration(
-                    color: isLoyalty ? UellowColors.darkBrown : UellowColors.yellowLight,
-                    borderRadius: BorderRadius.circular(999),
-                  )),
-                ),
-              ),
-            ],
-          ]),
-          if (cta.isNotEmpty) Positioned(right: 0, bottom: 0,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+        child: Column(mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start, children: [
+          // Header — icon + label
+          Row(children: [
+            Container(
+              width: 30, height: 30, alignment: Alignment.center,
               decoration: BoxDecoration(
-                color: isLoyalty ? UellowColors.darkBrown : UellowColors.yellowLight,
-                borderRadius: BorderRadius.circular(10),
+                color: (isLoyalty ? UellowColors.darkBrown : UellowColors.yellowLight)
+                    .withValues(alpha: 0.18),
+                borderRadius: BorderRadius.circular(8),
               ),
-              child: Text(cta, style: TextStyle(
-                color: isLoyalty ? UellowColors.yellowLight : UellowColors.darkBrown,
-                fontWeight: FontWeight.w800, fontSize: 11,
-              )),
+              child: Icon(
+                isLoyalty ? Icons.local_activity : Icons.account_balance_wallet,
+                size: 16,
+                color: isLoyalty ? UellowColors.darkBrown : UellowColors.yellowLight),
             ),
-          ),
+            const SizedBox(width: 8),
+            Expanded(child: Text(title.toUpperCase(),
+                maxLines: 1, overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                    color: isLoyalty ? UellowColors.darkBrown : UellowColors.yellowLight,
+                    fontSize: 10.5, fontWeight: FontWeight.w900, letterSpacing: 0.7))),
+          ]),
+          const SizedBox(height: 8),
+          // Big value
+          Text(big, maxLines: 1, overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                  color: isLoyalty ? UellowColors.darkBrown : UellowColors.yellowLight,
+                  fontSize: 22, fontWeight: FontWeight.w900, height: 1.1)),
+          if (small.isNotEmpty) ...[
+            const SizedBox(height: 2),
+            Text(small, maxLines: 1, overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                    color: (isLoyalty ? UellowColors.darkBrown : UellowColors.yellowLight)
+                        .withValues(alpha: .85),
+                    fontSize: 10.5, fontWeight: FontWeight.w700)),
+          ],
+          // Tier badge for loyalty only
+          if (isLoyalty && (banner['tier'] as String?) != null) ...[
+            const SizedBox(height: 8),
+            _tierBadge(
+              (banner['tier'] as String?) ?? 'bronze',
+              ((banner['tier_label'] as Map?)?[lang] as String?)
+                  ?? ((banner['tier'] as String?) ?? 'BRONZE').toUpperCase(),
+            ),
+          ],
+          // Progress
+          if (progressPct > 0) ...[
+            const SizedBox(height: 10),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(999),
+              child: LinearProgressIndicator(
+                minHeight: 5,
+                value: progressPct / 100.0,
+                backgroundColor: (isLoyalty ? Colors.black : Colors.white).withValues(alpha: 0.18),
+                valueColor: AlwaysStoppedAnimation(
+                    isLoyalty ? UellowColors.darkBrown : UellowColors.yellowLight),
+              ),
+            ),
+          ] else const SizedBox(height: 6),
+          const SizedBox(height: 4),
+          Row(children: [
+            const Spacer(),
+            Icon(Icons.arrow_forward, size: 12,
+                color: isLoyalty ? UellowColors.darkBrown : UellowColors.yellowLight),
+            const SizedBox(width: 3),
+            Text(ar ? 'فتح' : 'OPEN',
+                style: TextStyle(
+                    color: isLoyalty ? UellowColors.darkBrown : UellowColors.yellowLight,
+                    fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 0.5)),
+          ]),
         ]),
-      )),
+      ),
     );
   }
 }

@@ -158,6 +158,14 @@ class UellowApi {
   }
   String get lang => langNotifier.value;
 
+  /// Avatar source — either a data: URI (instant) or a cache-busted URL.
+  /// Any screen that listens stays in sync the moment the profile photo
+  /// is changed, so users don't have to log out / back in to see it.
+  final ValueNotifier<String> avatarNotifier = ValueNotifier<String>('');
+  void setAvatar(String src) {
+    avatarNotifier.value = src;
+  }
+
   /// App version + platform, sent on every request so the server can decide
   /// version gates / log analytics. Set once at startup.
   String _appVersion = '1.0.0';
