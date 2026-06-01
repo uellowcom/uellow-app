@@ -675,6 +675,23 @@ class _CartApi {
     return _save(UellowCart.fromJson(res['data']['cart']));
   }
 
+  /// Returns a shareable URL the user can send to anyone — opens the cart
+  /// in browser/app and lets the recipient adopt the items.
+  Future<String> share() async {
+    final res = await _c._post(EP.cartShare);
+    return (res['data']?['url'] as String?) ?? '';
+  }
+
+  Future<UellowCart> bulkRemove(List<int> lineIds) async {
+    final res = await _c._post(EP.cartBulkRemove, body: {'line_ids': lineIds});
+    return _save(UellowCart.fromJson(res['data']['cart']));
+  }
+
+  Future<UellowCart> bulkMoveToWishlist(List<int> lineIds) async {
+    final res = await _c._post(EP.cartBulkWishlist, body: {'line_ids': lineIds});
+    return _save(UellowCart.fromJson(res['data']['cart']));
+  }
+
   Future<UellowCart> _save(UellowCart cart) async {
     if (cart.cartToken.isNotEmpty) {
       await _c.tokenStore.writeCartToken(cart.cartToken);

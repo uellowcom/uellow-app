@@ -87,24 +87,6 @@ class _OrderScreenState extends State<OrderScreen> {
           );
         },
       )),
-      bottomNavigationBar: SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(14, 8, 14, 14),
-          child: ElevatedButton.icon(
-            onPressed: () => Navigator.pushNamed(context, '/beena'),
-            icon: const Icon(Icons.chat_bubble_outline, size: 16),
-            label: Text(ar ? 'تواصل مع الدعم' : 'Contact support'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: UellowColors.darkBrown,
-              foregroundColor: UellowColors.yellowLight,
-              padding: const EdgeInsets.symmetric(vertical: 14),
-              shape: const RoundedRectangleBorder(
-                  borderRadius: BorderRadius.all(Radius.circular(14))),
-            ),
-          ),
-        ),
-      ),
     );
   }
 

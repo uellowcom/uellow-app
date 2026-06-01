@@ -5,6 +5,7 @@
 // =============================================================================
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../api/uellow_api.dart';
 import '../../api/uellow_models.dart';
@@ -19,6 +20,10 @@ class CartScreen extends StatefulWidget {
 class _CartScreenState extends State<CartScreen> {
   late Future<UellowCart> _future;
   final _couponCtrl = TextEditingController();
+
+  // Multi-select mode
+  bool _selectMode = false;
+  final Set<int> _selected = {};
 
   @override
   void initState() {
@@ -56,6 +61,89 @@ class _CartScreenState extends State<CartScreen> {
     }
   }
 
+  Future<void> _removeCoupon() async {
+    try {
+      final c = await UellowApi.instance.cart.removeCoupon();
+      setState(() => _future = Future.value(c));
+      _snack(UellowApi.instance.lang == 'ar' ? 'تم حذف الكوبون' : 'Coupon removed');
+    } on UellowApiException catch (e) {
+      _snack(e.message);
+    }
+  }
+
+  Future<void> _shareCart() async {
+    try {
+      final url = await UellowApi.instance.cart.share();
+      if (url.isEmpty) return;
+      final ar = UellowApi.instance.lang == 'ar';
+      final msg = ar
+          ? 'شاهد سلتي في يلو 🛒\n$url'
+          : 'Check out my Uellow cart 🛒\n$url';
+      await Share.share(msg, subject: ar ? 'سلتي' : 'My Uellow cart');
+    } on UellowApiException catch (e) {
+      _snack(e.message);
+    }
+  }
+
+  void _toggleSelectMode() {
+    setState(() {
+      _selectMode = !_selectMode;
+      _selected.clear();
+    });
+  }
+
+  void _toggleSelected(int lineId) {
+    setState(() {
+      if (_selected.contains(lineId)) {
+        _selected.remove(lineId);
+      } else {
+        _selected.add(lineId);
+      }
+    });
+  }
+
+  void _selectAll(List<UellowCartLine> lines) {
+    setState(() {
+      if (_selected.length == lines.length) {
+        _selected.clear();
+      } else {
+        _selected
+          ..clear()
+          ..addAll(lines.map((l) => l.id));
+      }
+    });
+  }
+
+  Future<void> _bulkDelete() async {
+    if (_selected.isEmpty) return;
+    try {
+      final c = await UellowApi.instance.cart.bulkRemove(_selected.toList());
+      setState(() {
+        _future = Future.value(c);
+        _selected.clear();
+        _selectMode = false;
+      });
+    } on UellowApiException catch (e) {
+      _snack(e.message);
+    }
+  }
+
+  Future<void> _bulkWishlist() async {
+    if (_selected.isEmpty) return;
+    try {
+      final c = await UellowApi.instance.cart.bulkMoveToWishlist(_selected.toList());
+      setState(() {
+        _future = Future.value(c);
+        _selected.clear();
+        _selectMode = false;
+      });
+      _snack(UellowApi.instance.lang == 'ar'
+          ? 'تم النقل إلى المفضّلة' : 'Moved to wishlist');
+    } on UellowApiException catch (e) {
+      _snack(e.message);
+    }
+  }
+
   void _snack(String msg) => ScaffoldMessenger.of(context)
       .showSnackBar(SnackBar(content: Text(msg)));
 
@@ -67,8 +155,13 @@ class _CartScreenState extends State<CartScreen> {
         backgroundColor: Colors.white,
         elevation: 0.5,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: UellowColors.darkBrown),
+          icon: Icon(_selectMode ? Icons.close : Icons.arrow_back,
+              color: UellowColors.darkBrown),
           onPressed: () {
+            if (_selectMode) {
+              setState(() { _selectMode = false; _selected.clear(); });
+              return;
+            }
             if (Navigator.canPop(context)) {
               Navigator.pop(context);
             } else {
@@ -76,9 +169,50 @@ class _CartScreenState extends State<CartScreen> {
             }
           },
         ),
-        title: Text(UellowApi.instance.lang == 'ar' ? 'سلة التسوق' : 'My Cart',
+        title: Text(
+            _selectMode
+                ? (UellowApi.instance.lang == 'ar'
+                    ? '${_selected.length} محدّد'
+                    : '${_selected.length} selected')
+                : (UellowApi.instance.lang == 'ar' ? 'سلة التسوق' : 'My Cart'),
             style: const TextStyle(color: UellowColors.ink,
                 fontWeight: FontWeight.w900, fontSize: 16)),
+        actions: [
+          FutureBuilder<UellowCart>(
+            future: _future,
+            builder: (_, snap) {
+              final hasLines = snap.data?.lineCount != null && snap.data!.lineCount > 0;
+              if (!hasLines) return const SizedBox.shrink();
+              if (_selectMode) {
+                return TextButton(
+                  onPressed: () => _selectAll(snap.data!.lines),
+                  child: Text(
+                    _selected.length == snap.data!.lines.length
+                        ? (UellowApi.instance.lang == 'ar' ? 'إلغاء' : 'Clear')
+                        : (UellowApi.instance.lang == 'ar' ? 'تحديد الكل' : 'Select all'),
+                    style: const TextStyle(
+                        color: UellowColors.darkBrown,
+                        fontWeight: FontWeight.w800, fontSize: 12),
+                  ),
+                );
+              }
+              return Row(children: [
+                IconButton(
+                  icon: const Icon(Icons.checklist_rtl,
+                      color: UellowColors.darkBrown, size: 22),
+                  tooltip: UellowApi.instance.lang == 'ar' ? 'تحديد' : 'Select',
+                  onPressed: _toggleSelectMode,
+                ),
+                IconButton(
+                  icon: const Icon(Icons.share_outlined,
+                      color: UellowColors.darkBrown, size: 22),
+                  tooltip: UellowApi.instance.lang == 'ar' ? 'مشاركة' : 'Share',
+                  onPressed: _shareCart,
+                ),
+              ]);
+            },
+          ),
+        ],
       ),
       body: FutureBuilder<UellowCart>(
         future: _future,
@@ -100,6 +234,13 @@ class _CartScreenState extends State<CartScreen> {
           }
           final c = snap.data!;
           if (c.lineCount == 0) return const SizedBox.shrink();
+          if (_selectMode) {
+            return _BulkActionsBar(
+              count: _selected.length,
+              onDelete: _selected.isEmpty ? null : _bulkDelete,
+              onWishlist: _selected.isEmpty ? null : _bulkWishlist,
+            );
+          }
           return _CheckoutCta(total: c.totals.total);
         },
       ),
@@ -113,6 +254,9 @@ class _CartScreenState extends State<CartScreen> {
         itemBuilder: (_, i) => _LineCard(
           line: cart.lines[i],
           onUpdate: _updateLine, onRemove: _remove,
+          selectMode: _selectMode,
+          selected: _selected.contains(cart.lines[i].id),
+          onSelectToggle: () => _toggleSelected(cart.lines[i].id),
         ),
       ),
       // Free-shipping progress stays — it's an incentive, not a method picker.
@@ -124,7 +268,7 @@ class _CartScreenState extends State<CartScreen> {
         controller: _couponCtrl, onApply: _applyCoupon,
       )),
       for (final code in cart.coupons)
-        SliverToBoxAdapter(child: _AppliedCoupon(code: code)),
+        SliverToBoxAdapter(child: _AppliedCoupon(code: code, onRemove: _removeCoupon)),
       SliverToBoxAdapter(child: _Totals(totals: cart.totals)),
       const SliverToBoxAdapter(child: SizedBox(height: 110)),
     ]));
@@ -154,22 +298,45 @@ class _Header extends StatelessWidget {
 }
 
 class _LineCard extends StatelessWidget {
-  const _LineCard({required this.line, required this.onUpdate, required this.onRemove});
+  const _LineCard({
+    required this.line,
+    required this.onUpdate,
+    required this.onRemove,
+    this.selectMode = false,
+    this.selected = false,
+    this.onSelectToggle,
+  });
   final UellowCartLine line;
   final void Function(int, int) onUpdate;
   final void Function(int) onRemove;
+  final bool selectMode;
+  final bool selected;
+  final VoidCallback? onSelectToggle;
   @override
   Widget build(BuildContext context) {
     final lang = UellowApi.instance.lang;
-    return Container(
+    return GestureDetector(
+      onTap: selectMode ? onSelectToggle : null,
+      child: Container(
       margin: const EdgeInsets.fromLTRB(14, 10, 14, 0),
       padding: const EdgeInsets.all(12),
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.all(Radius.circular(14)),
-        boxShadow: [BoxShadow(color: Color(0x0D000000), blurRadius: 4, offset: Offset(0, 1))],
+        borderRadius: const BorderRadius.all(Radius.circular(14)),
+        border: selected
+            ? Border.all(color: UellowColors.yellow, width: 2)
+            : null,
+        boxShadow: const [BoxShadow(color: Color(0x0D000000), blurRadius: 4, offset: Offset(0, 1))],
       ),
       child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        if (selectMode) Padding(
+          padding: const EdgeInsets.only(right: 10, top: 28),
+          child: Icon(
+            selected ? Icons.check_circle : Icons.radio_button_unchecked,
+            size: 22,
+            color: selected ? UellowColors.darkBrown : UellowColors.muted,
+          ),
+        ),
         ClipRRect(
           borderRadius: const BorderRadius.all(Radius.circular(10)),
           child: CachedNetworkImage(
@@ -228,6 +395,7 @@ class _LineCard extends StatelessWidget {
           ]),
         ])),
       ]),
+      ),
     );
   }
 }
@@ -457,10 +625,12 @@ class _CouponRow extends StatelessWidget {
 }
 
 class _AppliedCoupon extends StatelessWidget {
-  const _AppliedCoupon({required this.code});
+  const _AppliedCoupon({required this.code, this.onRemove});
   final String code;
+  final VoidCallback? onRemove;
   @override
   Widget build(BuildContext context) {
+    final ar = UellowApi.instance.lang == 'ar';
     return Container(
       margin: const EdgeInsets.fromLTRB(14, 14, 14, 0),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -480,11 +650,91 @@ class _AppliedCoupon extends StatelessWidget {
               color: UellowColors.darkBrown, fontWeight: FontWeight.w800, fontSize: 11)),
         ),
         const SizedBox(width: 8),
-        const Expanded(child: Text('Coupon applied',
-            style: TextStyle(fontSize: 12, color: UellowColors.text,
+        Expanded(child: Text(ar ? 'تم تطبيق الكوبون' : 'Coupon applied',
+            style: const TextStyle(fontSize: 12, color: UellowColors.text,
                 fontWeight: FontWeight.w700))),
         const Icon(Icons.check_circle, size: 18, color: UellowColors.success),
+        if (onRemove != null) ...[
+          const SizedBox(width: 6),
+          InkWell(
+            onTap: onRemove,
+            borderRadius: BorderRadius.circular(20),
+            child: Container(
+              width: 26, height: 26, alignment: Alignment.center,
+              decoration: const BoxDecoration(
+                color: Colors.white, shape: BoxShape.circle,
+                boxShadow: [BoxShadow(color: Color(0x14000000),
+                    blurRadius: 3, offset: Offset(0, 1))],
+              ),
+              child: const Icon(Icons.close, size: 14, color: UellowColors.danger),
+            ),
+          ),
+        ],
       ]),
+    );
+  }
+}
+
+class _BulkActionsBar extends StatelessWidget {
+  const _BulkActionsBar({
+    required this.count,
+    this.onDelete,
+    this.onWishlist,
+  });
+  final int count;
+  final VoidCallback? onDelete;
+  final VoidCallback? onWishlist;
+
+  @override
+  Widget build(BuildContext context) {
+    final ar = UellowApi.instance.lang == 'ar';
+    final enabled = count > 0;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 18),
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        border: Border(top: BorderSide(color: UellowColors.border)),
+        boxShadow: [BoxShadow(
+            color: Color(0x14000000), blurRadius: 10, offset: Offset(0, -2))],
+      ),
+      child: SafeArea(
+        top: false,
+        child: Row(children: [
+          Expanded(
+            child: OutlinedButton.icon(
+              onPressed: enabled ? onWishlist : null,
+              icon: const Icon(Icons.favorite_border, size: 16),
+              label: Text(ar ? 'إلى المفضّلة' : 'To wishlist',
+                  style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 12)),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: UellowColors.darkBrown,
+                side: BorderSide(color: enabled ? UellowColors.darkBrown : UellowColors.border),
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: const RoundedRectangleBorder(
+                    borderRadius: BorderRadius.all(Radius.circular(12))),
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: ElevatedButton.icon(
+              onPressed: enabled ? onDelete : null,
+              icon: const Icon(Icons.delete_outline, size: 16),
+              label: Text(
+                  ar ? 'حذف ($count)' : 'Delete ($count)',
+                  style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 12)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: UellowColors.danger,
+                foregroundColor: Colors.white,
+                disabledBackgroundColor: UellowColors.border,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: const RoundedRectangleBorder(
+                    borderRadius: BorderRadius.all(Radius.circular(12))),
+              ),
+            ),
+          ),
+        ]),
+      ),
     );
   }
 }

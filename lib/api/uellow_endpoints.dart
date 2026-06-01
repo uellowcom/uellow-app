@@ -39,6 +39,9 @@ class EP {
   static const cartClear         = '/api/mobile/v2/cart/clear';
   static const cartApplyCoupon   = '/api/mobile/v2/cart/apply-coupon';
   static const cartRemoveCoupon  = '/api/mobile/v2/cart/remove-coupon';
+  static const cartShare         = '/api/mobile/v2/cart/share';
+  static const cartBulkRemove    = '/api/mobile/v2/cart/bulk-remove';
+  static const cartBulkWishlist  = '/api/mobile/v2/cart/bulk-wishlist';
 
   // ── Orders
   static const orders            = '/api/mobile/v2/orders';
