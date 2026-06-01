@@ -13,7 +13,9 @@ import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../api/uellow_api.dart';
+import '../../api/uellow_models.dart';
 import '../router/uellow_router.dart';
+import '../widgets/product_card.dart';
 
 class DynamicPageScreen extends StatefulWidget {
   const DynamicPageScreen({super.key, required this.slug});
@@ -181,7 +183,7 @@ Widget _renderBlock(BuildContext c, Map<String, dynamic> b, DynTheme t) {
     case 'countdown':  return _CountdownBlock(p: p, t: t, ar: ar);
     case 'cats-grid':
     case 'cats-strip': return _CategoriesBlock(p: p, data: data, t: t, ar: ar);
-    case 'flash':
+    case 'flash':      return _FlashBlock(p: p, data: data, t: t, ar: ar);
     case 'products':
     case 'bestsellers':
     case 'rec-ai':
@@ -1095,4 +1097,491 @@ class _VideoBlock extends StatelessWidget {
           color: Colors.white, size: 56),
     );
   }
+}
+
+// ─── FLASH SALE BLOCK — 4 design variants ──────────────────────────────────
+
+class _FlashBlock extends StatelessWidget {
+  const _FlashBlock({required this.p, required this.data, required this.t, required this.ar});
+  final Map<String, dynamic> p;
+  final Map<String, dynamic> data;
+  final DynTheme t;
+  final bool ar;
+
+  @override
+  Widget build(BuildContext context) {
+    final variant = (p['variant'] as String?) ?? 'classic';
+    final raw = ((data['items'] as List?) ?? const []).cast<dynamic>()
+        .map((e) => (e as Map).cast<String, dynamic>()).toList();
+    if (raw.isEmpty) return const SizedBox.shrink();
+    // Convert resolved maps into real UellowProductCard so we can reuse
+    // the shared ProductCard widget across variants.
+    final items = raw.map((m) {
+      try { return UellowProductCard.fromJson(m); }
+      catch (_) { return null; }
+    }).whereType<UellowProductCard>().toList();
+    if (items.isEmpty) return const SizedBox.shrink();
+    final endsAt = _parseEndsAt(p['ends_at']);
+    final title = _tx(p, ar, 'title', ar ? 'فلاش سيل' : 'Flash Sale');
+    switch (variant) {
+      case 'dark':    return _FlashDark(items: items, title: title, ar: ar, endsAt: endsAt);
+      case 'minimal': return _FlashMinimal(items: items, title: title, ar: ar, endsAt: endsAt);
+      case 'hero':    return _FlashHero(items: items, title: title, ar: ar, endsAt: endsAt);
+      case 'classic':
+      default:        return _FlashClassic(items: items, title: title, ar: ar, endsAt: endsAt);
+    }
+  }
+
+  static Duration _parseEndsAt(dynamic v) {
+    if (v is String && v.isNotEmpty) {
+      final dt = DateTime.tryParse(v);
+      if (dt != null) {
+        final diff = dt.difference(DateTime.now());
+        if (diff.inSeconds > 0) return diff;
+      }
+    }
+    return const Duration(days: 1, hours: 4, minutes: 35);
+  }
+}
+
+// ── Variant: CLASSIC (the legacy yellow/orange one) ────────────────────────
+
+class _FlashClassic extends StatelessWidget {
+  const _FlashClassic({required this.items, required this.title, required this.ar, required this.endsAt});
+  final List<UellowProductCard> items;
+  final String title;
+  final bool ar;
+  final Duration endsAt;
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () => Navigator.pushNamed(context, Routes.flash),
+      child: Container(
+        margin: const EdgeInsets.fromLTRB(8, 4, 8, 8),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(18),
+          boxShadow: const [BoxShadow(
+              color: Color(0x29F5A800), blurRadius: 18, offset: Offset(0, 6))],
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Stack(children: [
+          Positioned.fill(child: Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft, end: Alignment.bottomRight,
+                colors: [Color(0xFFFFD340), Color(0xFFF59E0B), Color(0xFFEA580C)],
+                stops: [0.0, 0.55, 1.0],
+              ),
+            ),
+          )),
+          Positioned.fill(child: IgnorePointer(child: CustomPaint(
+            painter: _DiagonalStripes(),
+          ))),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: [
+                const Icon(Icons.flash_on, color: Colors.white, size: 16),
+                const SizedBox(width: 4),
+                Text(title, style: const TextStyle(color: Colors.white,
+                    fontSize: 13, fontWeight: FontWeight.w900,
+                    letterSpacing: 0.2)),
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(999),
+                    boxShadow: const [BoxShadow(
+                        color: Color(0x33000000), blurRadius: 3,
+                        offset: Offset(0, 1))],
+                  ),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    Text(ar ? 'المزيد' : 'See more',
+                        style: const TextStyle(color: Color(0xFFEA580C),
+                            fontSize: 9.5, fontWeight: FontWeight.w900,
+                            letterSpacing: 0.2)),
+                    const SizedBox(width: 1),
+                    Icon(ar ? Icons.chevron_left : Icons.chevron_right,
+                        size: 12, color: const Color(0xFFEA580C)),
+                  ]),
+                ),
+                const Spacer(),
+                _DhmsCounter(initial: endsAt),
+              ]),
+              const SizedBox(height: 10),
+              SizedBox(height: 216,
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: items.length,
+                  separatorBuilder: (_, __) => const SizedBox(width: 8),
+                  itemBuilder: (_, i) => SizedBox(
+                      width: 138,
+                      child: ProductCard(product: items[i], inFlashSale: true)),
+                ),
+              ),
+            ]),
+          ),
+        ]),
+      ),
+    );
+  }
+}
+
+// ── Variant: DARK — premium black/neon ────────────────────────────────────
+
+class _FlashDark extends StatelessWidget {
+  const _FlashDark({required this.items, required this.title, required this.ar, required this.endsAt});
+  final List<UellowProductCard> items;
+  final String title;
+  final bool ar;
+  final Duration endsAt;
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () => Navigator.pushNamed(context, Routes.flash),
+      child: Container(
+        margin: const EdgeInsets.fromLTRB(8, 4, 8, 8),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(18),
+          gradient: const LinearGradient(
+            begin: Alignment.topLeft, end: Alignment.bottomRight,
+            colors: [Color(0xFF0F0F0F), Color(0xFF1A1A1A), Color(0xFF2A0F00)],
+          ),
+          boxShadow: const [BoxShadow(
+              color: Color(0x66FF4500), blurRadius: 22, offset: Offset(0, 8))],
+        ),
+        clipBehavior: Clip.antiAlias,
+        padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFFFFD340), Color(0xFFEA580C)]),
+                borderRadius: BorderRadius.circular(6),
+                boxShadow: [BoxShadow(
+                    color: const Color(0xFFFFD340).withValues(alpha: 0.6),
+                    blurRadius: 12)],
+              ),
+              child: const Row(mainAxisSize: MainAxisSize.min, children: [
+                Icon(Icons.flash_on, color: Colors.black, size: 14),
+                SizedBox(width: 2),
+                Text('FLASH', style: TextStyle(color: Colors.black,
+                    fontSize: 11, fontWeight: FontWeight.w900,
+                    letterSpacing: 1.2)),
+              ]),
+            ),
+            const SizedBox(width: 10),
+            Expanded(child: Text(title, style: const TextStyle(
+                color: Colors.white, fontSize: 14, fontWeight: FontWeight.w900))),
+            _DhmsCounter(initial: endsAt, dark: true),
+          ]),
+          const SizedBox(height: 12),
+          SizedBox(height: 220,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: items.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 8),
+              itemBuilder: (_, i) => SizedBox(
+                  width: 138,
+                  child: ProductCard(product: items[i], inFlashSale: true)),
+            ),
+          ),
+        ]),
+      ),
+    );
+  }
+}
+
+// ── Variant: MINIMAL — clean, red accents ─────────────────────────────────
+
+class _FlashMinimal extends StatelessWidget {
+  const _FlashMinimal({required this.items, required this.title, required this.ar, required this.endsAt});
+  final List<UellowProductCard> items;
+  final String title;
+  final bool ar;
+  final Duration endsAt;
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(0, 8, 0, 8),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Padding(padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+          child: Row(children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: const Color(0xFFC0392B),
+                borderRadius: BorderRadius.circular(4)),
+              child: const Row(mainAxisSize: MainAxisSize.min, children: [
+                Icon(Icons.flash_on, color: Colors.white, size: 12),
+                SizedBox(width: 2),
+                Text('FLASH', style: TextStyle(color: Colors.white,
+                    fontSize: 10, fontWeight: FontWeight.w900,
+                    letterSpacing: 0.8)),
+              ]),
+            ),
+            const SizedBox(width: 8),
+            Expanded(child: Text(title, style: const TextStyle(
+                fontSize: 14, fontWeight: FontWeight.w900,
+                color: Color(0xFF1F1206)))),
+            _DhmsCounter(initial: endsAt, minimal: true),
+            const SizedBox(width: 8),
+            TextButton(
+              onPressed: () => Navigator.pushNamed(context, Routes.flash),
+              style: TextButton.styleFrom(
+                  foregroundColor: const Color(0xFFC0392B),
+                  textStyle: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w800),
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  minimumSize: const Size(40, 28)),
+              child: Text(ar ? 'الكل ←' : 'See all →'),
+            ),
+          ])),
+        SizedBox(height: 220,
+          child: ListView.separated(
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            scrollDirection: Axis.horizontal,
+            itemCount: items.length,
+            separatorBuilder: (_, __) => const SizedBox(width: 8),
+            itemBuilder: (_, i) => SizedBox(
+                width: 138,
+                child: ProductCard(product: items[i], inFlashSale: true)),
+          ),
+        ),
+      ]),
+    );
+  }
+}
+
+// ── Variant: HERO — full-bleed single-product spotlight ───────────────────
+
+class _FlashHero extends StatefulWidget {
+  const _FlashHero({required this.items, required this.title, required this.ar, required this.endsAt});
+  final List<UellowProductCard> items;
+  final String title;
+  final bool ar;
+  final Duration endsAt;
+  @override
+  State<_FlashHero> createState() => _FlashHeroState();
+}
+
+class _FlashHeroState extends State<_FlashHero> {
+  final _ctrl = PageController(viewportFraction: 0.92);
+  int _i = 0;
+  Timer? _auto;
+  @override
+  void initState() {
+    super.initState();
+    _auto = Timer.periodic(const Duration(seconds: 5), (_) {
+      if (!mounted || !_ctrl.hasClients || widget.items.length < 2) return;
+      _i = (_i + 1) % widget.items.length;
+      _ctrl.animateToPage(_i, duration: const Duration(milliseconds: 400),
+          curve: Curves.easeOut);
+    });
+  }
+  @override
+  void dispose() { _auto?.cancel(); _ctrl.dispose(); super.dispose(); }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(8, 4, 8, 8),
+      height: 260,
+      child: PageView.builder(
+        controller: _ctrl,
+        onPageChanged: (i) => setState(() => _i = i),
+        itemCount: widget.items.length,
+        itemBuilder: (_, i) {
+          final p = widget.items[i];
+          return Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: GestureDetector(
+              onTap: () => UellowRouter.goProduct(context, p.id),
+              child: Container(
+                clipBehavior: Clip.antiAlias,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(18),
+                  gradient: const LinearGradient(
+                    begin: Alignment.topLeft, end: Alignment.bottomRight,
+                    colors: [Color(0xFFC0392B), Color(0xFFF59E0B), Color(0xFFFFD340)],
+                  ),
+                  boxShadow: const [BoxShadow(
+                      color: Color(0x44C0392B), blurRadius: 18,
+                      offset: Offset(0, 6))],
+                ),
+                child: Stack(children: [
+                  // Product image, full-bleed right side
+                  Positioned(right: -20, top: 20, bottom: 20, width: 200,
+                    child: CachedNetworkImage(
+                      imageUrl: p.image,
+                      fit: BoxFit.contain,
+                      errorWidget: (_, __, ___) =>
+                          const Icon(Icons.shopping_bag, color: Colors.white70, size: 80),
+                    ),
+                  ),
+                  // Content overlay
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(18, 18, 18, 18),
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                      Row(children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(20)),
+                          child: const Row(mainAxisSize: MainAxisSize.min, children: [
+                            Icon(Icons.flash_on, color: Color(0xFFC0392B), size: 14),
+                            SizedBox(width: 2),
+                            Text('FLASH',
+                                style: TextStyle(color: Color(0xFFC0392B),
+                                    fontSize: 11, fontWeight: FontWeight.w900,
+                                    letterSpacing: 0.8)),
+                          ]),
+                        ),
+                        const Spacer(),
+                        _DhmsCounter(initial: widget.endsAt),
+                      ]),
+                      // Product name + price
+                      SizedBox(width: 200, child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Text(p.name.current(widget.ar ? 'ar' : 'en'),
+                            maxLines: 2, overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(color: Colors.white,
+                                fontSize: 18, fontWeight: FontWeight.w900,
+                                height: 1.2,
+                                shadows: [Shadow(color: Colors.black54, blurRadius: 6)])),
+                        const SizedBox(height: 6),
+                        Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                          Text(p.price.format(),
+                              style: const TextStyle(color: Colors.white,
+                                  fontSize: 22, fontWeight: FontWeight.w900,
+                                  shadows: [Shadow(color: Colors.black54, blurRadius: 6)])),
+                          if (p.comparePrice != null) ...[
+                            const SizedBox(width: 6),
+                            Text(p.comparePrice!.format(),
+                                style: const TextStyle(color: Colors.white70,
+                                    fontSize: 13, fontWeight: FontWeight.w600,
+                                    decoration: TextDecoration.lineThrough)),
+                          ],
+                        ]),
+                        const SizedBox(height: 10),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(20)),
+                          child: Text(widget.ar ? 'تسوّق الآن ←' : 'Shop now →',
+                              style: const TextStyle(color: Color(0xFFC0392B),
+                                  fontSize: 12, fontWeight: FontWeight.w900)),
+                        ),
+                      ])),
+                    ]),
+                  ),
+                  // Slide indicators
+                  Positioned(bottom: 8, left: 0, right: 0,
+                    child: Row(mainAxisAlignment: MainAxisAlignment.center, children:
+                      List.generate(widget.items.length, (k) => Container(
+                        width: k == _i ? 18 : 6, height: 4,
+                        margin: const EdgeInsets.symmetric(horizontal: 2),
+                        decoration: BoxDecoration(
+                          color: k == _i ? Colors.white : Colors.white54,
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      )))),
+                ]),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+// ── Shared DHMS countdown cell ────────────────────────────────────────────
+
+class _DhmsCounter extends StatefulWidget {
+  const _DhmsCounter({required this.initial, this.dark = false, this.minimal = false});
+  final Duration initial;
+  final bool dark;
+  final bool minimal;
+  @override
+  State<_DhmsCounter> createState() => _DhmsCounterState();
+}
+
+class _DhmsCounterState extends State<_DhmsCounter> {
+  Timer? _t;
+  late Duration _left;
+  @override
+  void initState() {
+    super.initState();
+    _left = widget.initial;
+    _t = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted) return;
+      setState(() {
+        _left = _left.inSeconds > 0
+            ? _left - const Duration(seconds: 1)
+            : const Duration(days: 1);
+      });
+    });
+  }
+  @override
+  void dispose() { _t?.cancel(); super.dispose(); }
+  String _two(int n) => n.toString().padLeft(2, '0');
+
+  @override
+  Widget build(BuildContext context) {
+    final d = _left.inDays;
+    final h = _left.inHours.remainder(24);
+    final m = _left.inMinutes.remainder(60);
+    final s = _left.inSeconds.remainder(60);
+    if (widget.minimal) {
+      // Inline H:M:S, no boxes
+      return Text('${_two(h)}:${_two(m)}:${_two(s)}',
+          style: const TextStyle(color: Color(0xFFC0392B),
+              fontSize: 12.5, fontWeight: FontWeight.w900,
+              fontFeatures: [FontFeature.tabularFigures()]));
+    }
+    return Row(mainAxisSize: MainAxisSize.min, children: [
+      _cell(_two(d), 'D'), const SizedBox(width: 3),
+      _cell(_two(h), 'H'), const SizedBox(width: 3),
+      _cell(_two(m), 'M'), const SizedBox(width: 3),
+      _cell(_two(s), 'S'),
+    ]);
+  }
+  Widget _cell(String v, String u) => Container(
+    width: 22, height: 24, alignment: Alignment.center,
+    decoration: BoxDecoration(
+      color: widget.dark ? const Color(0xFFFFD340) : const Color(0xCC000000),
+      borderRadius: BorderRadius.circular(4),
+    ),
+    child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+      Text(v, style: TextStyle(
+          color: widget.dark ? Colors.black : Colors.white,
+          fontWeight: FontWeight.w900,
+          fontSize: 11, height: 1, fontFamily: 'monospace')),
+      Text(u, style: TextStyle(
+          color: (widget.dark ? Colors.black : Colors.white).withValues(alpha: 0.7),
+          fontSize: 7, fontWeight: FontWeight.w800, letterSpacing: 0.3)),
+    ]),
+  );
+}
+
+/// Diagonal-stripe pattern painter (matches the legacy flash sale bg).
+class _DiagonalStripes extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = const Color(0x14FFFFFF)
+      ..strokeWidth = 6;
+    final spacing = 18.0;
+    for (var x = -size.height.toDouble(); x < size.width; x += spacing) {
+      canvas.drawLine(Offset(x, 0),
+          Offset(x + size.height, size.height), paint);
+    }
+  }
+  @override
+  bool shouldRepaint(covariant _) => false;
 }
