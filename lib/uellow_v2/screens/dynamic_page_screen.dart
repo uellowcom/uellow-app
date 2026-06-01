@@ -36,11 +36,15 @@ class _DynamicPageScreenState extends State<DynamicPageScreen> {
 
   Future<Map<String, dynamic>> _fetch() async {
     final api = UellowApi.instance;
-    final url = Uri.parse('${api.baseUrl}/api/mobile/v2/pages/${widget.slug}');
-    final lang = api.lang;
+    // Cache-buster query keeps Cloudflare/HTTP cache from serving stale
+    // JSON when the user just hit Publish in the builder.
+    final url = Uri.parse(
+        '${api.baseUrl}/api/mobile/v2/pages/${widget.slug}'
+        '?_t=${DateTime.now().millisecondsSinceEpoch}');
     final res = await http.get(url, headers: {
       'Accept': 'application/json',
-      'X-Lang': lang,
+      'X-Lang': api.lang,
+      'Cache-Control': 'no-cache',
     });
     if (res.statusCode != 200) {
       throw Exception('HTTP ${res.statusCode}');

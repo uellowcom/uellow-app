@@ -46,9 +46,15 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<_DynHome?> _fetchDynamicHome() async {
     try {
       final api = UellowApi.instance;
+      // `_t` cache-buster forces every reload to bypass any HTTP cache so
+      // edits made in the builder show up immediately after a refresh.
       final res = await http.get(
-        Uri.parse('${api.baseUrl}/api/mobile/v2/pages/home'),
-        headers: {'Accept': 'application/json', 'X-Lang': api.lang},
+        Uri.parse('${api.baseUrl}/api/mobile/v2/pages/home?_t=${DateTime.now().millisecondsSinceEpoch}'),
+        headers: {
+          'Accept': 'application/json',
+          'X-Lang': api.lang,
+          'Cache-Control': 'no-cache',
+        },
       ).timeout(const Duration(seconds: 5));
       if (res.statusCode != 200) return null;
       final j = jsonDecode(res.body) as Map<String, dynamic>;
