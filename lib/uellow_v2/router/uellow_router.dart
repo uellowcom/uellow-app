@@ -33,6 +33,7 @@ import '../screens/flash_screen.dart';
 import '../screens/tryon_screen.dart';
 import '../screens/beena_screen.dart';
 import '../screens/helpdesk_screen.dart';
+import '../screens/dynamic_page_screen.dart';
 
 class Routes {
   Routes._();
@@ -65,6 +66,7 @@ class Routes {
   static const orders        = '/orders';
   static const scan          = '/scan';
   static const helpdesk      = '/helpdesk';
+  static const dynPage       = '/dyn-page';   // arg: slug
 }
 
 class UellowRouter {
@@ -166,9 +168,18 @@ class UellowRouter {
             category: args['category'] as String?,
           ),
         );
+      case Routes.dynPage:
+        final slug = (settings.arguments as Map?)?['slug'] as String? ?? '';
+        return MaterialPageRoute(
+          settings: settings,
+          builder: (_) => DynamicPageScreen(slug: slug),
+        );
     }
     return null;
   }
+
+  static void goDynPage(BuildContext context, String slug) =>
+      Navigator.of(context).pushNamed(Routes.dynPage, arguments: {'slug': slug});
 
   static void goVendor(BuildContext context, int vendorId) =>
       Navigator.of(context).pushNamed(Routes.vendor, arguments: {'id': vendorId});

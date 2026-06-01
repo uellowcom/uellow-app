@@ -3,15 +3,97 @@
 // target route as a replacement so the back stack stays clean. Cart badge
 // is pulled live from /api/mobile/v2/cart on every mount so it always
 // matches what's in the user's cart.
+//
+// When the admin has configured a custom nav bar via the visual builder,
+// `NavBarCache` loads it from /api/mobile/v2/navbar at app start and this
+// widget renders those items instead of the hardcoded fallback. The user
+// can add/reorder tabs in the builder and the change is live on the next
+// app launch (or after a manual refresh).
 // =============================================================================
+import 'dart:async';
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 
 import '../../api/uellow_api.dart';
 import '../router/uellow_router.dart';
+import '../screens/dynamic_page_screen.dart';
 import '../theme/uellow_l10n.dart';
 import '../theme/uellow_theme.dart';
 
 enum UNavTab { home, shop, beena, cart, account }
+
+// ── Dynamic nav bar items loaded from the admin's design ─────────────────
+
+class DynNavItem {
+  DynNavItem({
+    required this.id, required this.icon, required this.label,
+    required this.targetType, required this.targetValue, required this.badge,
+  });
+  final String id;
+  final String icon;       // emoji or material name; emojis stay raw
+  final String label;
+  final String targetType; // 'page' | 'screen' | 'url' | 'product' | 'category'
+  final String targetValue;
+  final String? badge;     // 'cart_count' | 'wishlist_count' | 'notifications' | null
+
+  factory DynNavItem.fromJson(Map j) {
+    final lbl = j['label'];
+    final lblStr = lbl is String ? lbl : (lbl is Map ? (lbl['en'] ?? '').toString() : '');
+    final tgt = (j['target'] as Map?) ?? const {};
+    return DynNavItem(
+      id:           j['id']?.toString() ?? '',
+      icon:         j['icon']?.toString() ?? '🔘',
+      label:        lblStr,
+      targetType:   tgt['type']?.toString() ?? 'screen',
+      targetValue:  tgt['value']?.toString() ?? 'home',
+      badge:        j['badge']?.toString(),
+    );
+  }
+}
+
+class NavBarCache {
+  NavBarCache._();
+  static final NavBarCache instance = NavBarCache._();
+  final ValueNotifier<List<DynNavItem>> items =
+      ValueNotifier<List<DynNavItem>>(const []);
+  bool _loaded = false;
+  Future<void>? _loading;
+
+  Future<void> ensure() {
+    if (_loaded) return Future.value();
+    return _loading ??= _fetch();
+  }
+  Future<void> refresh() async {
+    _loaded = false; _loading = null;
+    await ensure();
+  }
+
+  Future<void> _fetch() async {
+    try {
+      final api = UellowApi.instance;
+      final res = await http.get(
+        Uri.parse('${api.baseUrl}/api/mobile/v2/navbar'),
+        headers: {'Accept': 'application/json', 'X-Lang': api.lang},
+      ).timeout(const Duration(seconds: 6));
+      if (res.statusCode != 200) return;
+      final j = jsonDecode(res.body) as Map<String, dynamic>;
+      if (j['success'] != true) return;
+      final d = (j['data'] as Map).cast<String, dynamic>();
+      final raw = (d['items'] as List?) ?? const [];
+      final list = raw
+          .map((e) => DynNavItem.fromJson((e as Map)))
+          .where((it) => it.label.isNotEmpty)
+          .toList();
+      if (list.isNotEmpty) items.value = list;
+    } catch (_) {
+      // ignore — fall back to hardcoded tabs
+    } finally {
+      _loaded = true;
+    }
+  }
+}
 
 class UellowBottomNav extends StatefulWidget {
   const UellowBottomNav({super.key, required this.active, this.cartBadge});
@@ -34,6 +116,9 @@ class _UellowBottomNavState extends State<UellowBottomNav> {
       // Background refresh so the badge is accurate on first launch
       UellowApi.instance.cart.get().then((_) {}).catchError((_) {});
     }
+    // Kick off (or reuse) the dynamic nav fetch — the build() below
+    // re-renders automatically when items load via ValueListenableBuilder.
+    NavBarCache.instance.ensure();
   }
   @override
   void dispose() {
@@ -43,6 +128,48 @@ class _UellowBottomNavState extends State<UellowBottomNav> {
   void _syncCount() {
     if (!mounted) return;
     setState(() => _count = UellowApi.instance.cart.count.value);
+  }
+
+  // Navigate to a dynamic item's target. Page slugs open DynamicPageScreen,
+  // built-in screen names map to existing named routes.
+  void _gotoDyn(BuildContext context, DynNavItem it) {
+    switch (it.targetType) {
+      case 'page':
+        UellowRouter.goDynPage(context, it.targetValue);
+        break;
+      case 'screen':
+        const map = {
+          'home': Routes.home, 'shop': Routes.category,
+          'wishlist': Routes.wishlist, 'cart': Routes.cart,
+          'account': Routes.account, 'beena': Routes.beena,
+          'orders': Routes.orders, 'loyalty': Routes.loyalty,
+          'wallet': Routes.wallet, 'coupons': Routes.coupons,
+          'notifications': Routes.notifications, 'search': Routes.search,
+        };
+        final r = map[it.targetValue];
+        if (r != null) Navigator.of(context).pushReplacementNamed(r);
+        break;
+      case 'product':
+        final id = int.tryParse(it.targetValue) ?? 0;
+        if (id > 0) UellowRouter.goProduct(context, id);
+        break;
+      case 'category':
+        final id = int.tryParse(it.targetValue) ?? 0;
+        if (id > 0) UellowRouter.goCollection(context, id);
+        break;
+    }
+  }
+
+  // Map the legacy `active` enum to a target-value so we can highlight the
+  // matching dynamic item.
+  String _activeValue() {
+    switch (widget.active) {
+      case UNavTab.home:    return 'home';
+      case UNavTab.shop:    return 'shop';
+      case UNavTab.beena:   return 'beena';
+      case UNavTab.cart:    return 'cart';
+      case UNavTab.account: return 'account';
+    }
   }
 
   void _goto(BuildContext context, UNavTab tab) {
@@ -60,6 +187,16 @@ class _UellowBottomNavState extends State<UellowBottomNav> {
 
   @override
   Widget build(BuildContext context) {
+    return ValueListenableBuilder<List<DynNavItem>>(
+      valueListenable: NavBarCache.instance.items,
+      builder: (_, items, __) {
+        if (items.isNotEmpty) return _buildDynamic(context, items);
+        return _buildStatic(context);
+      },
+    );
+  }
+
+  Widget _buildStatic(BuildContext context) {
     final badge = widget.cartBadge ?? _count;
     return Container(
       decoration: const BoxDecoration(
@@ -78,6 +215,58 @@ class _UellowBottomNavState extends State<UellowBottomNav> {
             _tab(context, UNavTab.cart,    Icons.shopping_cart_outlined,  T.t('nav.cart'), badge: badge),
             _tab(context, UNavTab.account, Icons.person_outline,          T.t('nav.account')),
           ]),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDynamic(BuildContext context, List<DynNavItem> items) {
+    final cartBadge = widget.cartBadge ?? _count;
+    final active = _activeValue();
+    return Container(
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        border: Border(top: BorderSide(color: UellowColors.border, width: 0.5)),
+      ),
+      padding: const EdgeInsets.only(top: 6, bottom: 6),
+      child: SafeArea(
+        top: false,
+        child: SizedBox(
+          height: 56,
+          child: Row(children: items.map((it) {
+            final on = it.targetValue == active;
+            int badge = 0;
+            if (it.badge == 'cart_count') badge = cartBadge;
+            return Expanded(child: InkWell(
+              onTap: () => _gotoDyn(context, it),
+              child: Stack(alignment: Alignment.center, children: [
+                Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                  Text(it.icon, style: TextStyle(
+                      fontSize: 20,
+                      color: on ? UellowColors.darkBrown : const Color(0xFF3F3F3F))),
+                  const SizedBox(height: 2),
+                  Text(it.label, maxLines: 1, overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                          fontSize: 10.5,
+                          color: on ? UellowColors.darkBrown : const Color(0xFF3F3F3F),
+                          fontWeight: FontWeight.w600)),
+                ]),
+                if (badge > 0) Positioned(
+                  top: 4, right: 20,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                    decoration: BoxDecoration(
+                      color: UellowColors.danger, borderRadius: BorderRadius.circular(9),
+                    ),
+                    constraints: const BoxConstraints(minWidth: 18),
+                    child: Text('$badge', textAlign: TextAlign.center,
+                        style: const TextStyle(color: Colors.white,
+                            fontSize: 10, fontWeight: FontWeight.w800)),
+                  ),
+                ),
+              ]),
+            ));
+          }).toList()),
         ),
       ),
     );
