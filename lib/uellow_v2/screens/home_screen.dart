@@ -1,20 +1,19 @@
 // =============================================================================
-// HomeScreen — full mockup home with:
-//   • Top bar (search + barcode + camera)
-//   • Category strip (top, names only)
-//   • Hero slider
-//   • Features chips (Free delivery / Same-day / Returns / Warranty)
-//   • Category icons row
-//   • Flash sale block
-//   • Product sections (rails) — one per mobile.product.slider
+// HomeScreen — primary surface of the app.
 //
-// All data comes from a single /api/mobile/v2/home call + parallel
-// /products/section/{id} for each section's rail.
+// Renders the home page designed in the visual builder when one is
+// configured (mobile.page slug='home'). When the dynamic page is empty
+// or the fetch fails, falls back to the legacy hand-built layout below:
+//   • Top bar (search + barcode + camera)
+//   • Category strip
+//   • Hero slider · features chips · category icons · flash · product rails
 // =============================================================================
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 
 import '../../api/uellow_api.dart';
 import '../../api/uellow_endpoints.dart';
@@ -23,6 +22,7 @@ import '../router/uellow_router.dart';
 import '../theme/uellow_theme.dart';
 import '../widgets/product_card.dart';
 import '../widgets/uellow_bottom_nav.dart';
+import 'dynamic_page_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -32,16 +32,45 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   late Future<UellowHome> _future;
+  late Future<_DynHome?> _dynFuture;
 
   @override
   void initState() {
     super.initState();
     _future = UellowApi.instance.home.get();
+    _dynFuture = _fetchDynamicHome();
+  }
+
+  /// Fetch the builder-designed `home` page. Returns null on any failure so
+  /// the legacy layout always wins when nothing has been designed yet.
+  Future<_DynHome?> _fetchDynamicHome() async {
+    try {
+      final api = UellowApi.instance;
+      final res = await http.get(
+        Uri.parse('${api.baseUrl}/api/mobile/v2/pages/home'),
+        headers: {'Accept': 'application/json', 'X-Lang': api.lang},
+      ).timeout(const Duration(seconds: 5));
+      if (res.statusCode != 200) return null;
+      final j = jsonDecode(res.body) as Map<String, dynamic>;
+      if (j['success'] != true) return null;
+      final d = (j['data'] as Map).cast<String, dynamic>();
+      final blocks = (d['blocks'] as List? ?? const []).cast<dynamic>();
+      if (blocks.isEmpty) return null;
+      return _DynHome(
+        theme: DynTheme.fromJson((d['theme'] as Map? ?? const {})),
+        blocks: blocks.map((e) => (e as Map).cast<String, dynamic>()).toList(),
+      );
+    } catch (_) {
+      return null;
+    }
   }
 
   Future<void> _refresh() async {
-    setState(() => _future = UellowApi.instance.home.get());
-    await _future;
+    setState(() {
+      _future = UellowApi.instance.home.get();
+      _dynFuture = _fetchDynamicHome();
+    });
+    await Future.wait([_future, _dynFuture]);
   }
 
   @override
@@ -52,50 +81,90 @@ class _HomeScreenState extends State<HomeScreen> {
         color: UellowColors.darkBrown,
         backgroundColor: UellowColors.yellowLight,
         onRefresh: _refresh,
-        child: FutureBuilder<UellowHome>(
-          future: _future,
-          builder: (context, snap) {
-            if (snap.connectionState != ConnectionState.done) {
+        child: FutureBuilder<_DynHome?>(
+          future: _dynFuture,
+          builder: (context, dynSnap) {
+            // Once the dynamic fetch is settled, branch on the result.
+            if (dynSnap.connectionState != ConnectionState.done) {
               return const _LoadingState();
             }
-            if (snap.hasError) {
-              final e = snap.error;
-              final msg = e is UellowApiException ? e.message : e.toString();
-              return _ErrorState(message: msg, onRetry: _refresh);
-            }
-            final home = snap.data!;
-            return CustomScrollView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              slivers: [
-                SliverToBoxAdapter(child: _TopBar()),
-                // Tight category strip just under the search bar.
-                SliverPadding(
-                  padding: const EdgeInsets.only(top: 2, bottom: 0),
-                  sliver: SliverToBoxAdapter(child: _CategoryStrip()),
-                ),
-                SliverToBoxAdapter(child: _HeroSlider(sliders: home.sliders)),
-                SliverPadding(
-                  padding: const EdgeInsets.only(top: 2, bottom: 8),
-                  sliver: SliverToBoxAdapter(child: const _FeaturesChips()),
-                ),
-                SliverToBoxAdapter(child: _CategoryIcons(icons: home.categoryIcons)),
-                if (home.featureBanners.isNotEmpty)
-                  SliverToBoxAdapter(child: _FeatureBannersRail(banners: home.featureBanners)),
-                const SliverToBoxAdapter(child: _FlashSaleBlock()),
-                if (home.sections.isNotEmpty)
-                  ...home.sections.map(
-                    (s) => SliverToBoxAdapter(child: _ProductRail(section: s)),
-                  ),
-                const _ExploreMoreSliver(),
-                const SliverToBoxAdapter(child: SizedBox(height: 80)),
-              ],
-            );
+            final dyn = dynSnap.data;
+            if (dyn != null) return _buildDynamic(context, dyn);
+            return _buildLegacy(context);
           },
         ),
       )),
       bottomNavigationBar: const UellowBottomNav(active: UNavTab.home),
     );
   }
+
+  // ── Dynamic body — top bar + dynamic blocks from /api/mobile/v2/pages/home
+  Widget _buildDynamic(BuildContext context, _DynHome dyn) {
+    return Container(
+      color: dyn.theme.pageBg,
+      child: CustomScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        slivers: [
+          SliverToBoxAdapter(child: _TopBar()),
+          SliverList.builder(
+            itemCount: dyn.blocks.length,
+            itemBuilder: (ctx, i) => renderDynamicBlock(ctx, dyn.blocks[i], dyn.theme),
+          ),
+          const SliverToBoxAdapter(child: SizedBox(height: 80)),
+        ],
+      ),
+    );
+  }
+
+  // ── Legacy body — keeps the hand-built home as fallback so nothing is
+  // lost if the builder page is misconfigured or the API is unreachable.
+  Widget _buildLegacy(BuildContext context) {
+    return FutureBuilder<UellowHome>(
+      future: _future,
+      builder: (context, snap) {
+        if (snap.connectionState != ConnectionState.done) {
+          return const _LoadingState();
+        }
+        if (snap.hasError) {
+          final e = snap.error;
+          final msg = e is UellowApiException ? e.message : e.toString();
+          return _ErrorState(message: msg, onRetry: _refresh);
+        }
+        final home = snap.data!;
+        return CustomScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          slivers: [
+            SliverToBoxAdapter(child: _TopBar()),
+            SliverPadding(
+              padding: const EdgeInsets.only(top: 2, bottom: 0),
+              sliver: SliverToBoxAdapter(child: _CategoryStrip()),
+            ),
+            SliverToBoxAdapter(child: _HeroSlider(sliders: home.sliders)),
+            SliverPadding(
+              padding: const EdgeInsets.only(top: 2, bottom: 8),
+              sliver: SliverToBoxAdapter(child: const _FeaturesChips()),
+            ),
+            SliverToBoxAdapter(child: _CategoryIcons(icons: home.categoryIcons)),
+            if (home.featureBanners.isNotEmpty)
+              SliverToBoxAdapter(child: _FeatureBannersRail(banners: home.featureBanners)),
+            const SliverToBoxAdapter(child: _FlashSaleBlock()),
+            if (home.sections.isNotEmpty)
+              ...home.sections.map(
+                (s) => SliverToBoxAdapter(child: _ProductRail(section: s)),
+              ),
+            const _ExploreMoreSliver(),
+            const SliverToBoxAdapter(child: SizedBox(height: 80)),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _DynHome {
+  _DynHome({required this.theme, required this.blocks});
+  final DynTheme theme;
+  final List<Map<String, dynamic>> blocks;
 }
 
 // ─── Flash sale block ──────────────────────────────────────────────

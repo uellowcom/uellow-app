@@ -82,7 +82,7 @@ class _DynamicPageScreenState extends State<DynamicPageScreen> {
   }
 
   Widget _build(Map<String, dynamic> data) {
-    final theme = _DynTheme.fromJson(data['theme'] as Map? ?? const {});
+    final theme = DynTheme.fromJson(data['theme'] as Map? ?? const {});
     final blocks = (data['blocks'] as List? ?? const []).cast<dynamic>();
     final name = (data['name'] ?? '').toString();
     return Scaffold(
@@ -112,8 +112,8 @@ class _DynamicPageScreenState extends State<DynamicPageScreen> {
 
 // ─── THEME ─────────────────────────────────────────────────────────────────
 
-class _DynTheme {
-  _DynTheme({
+class DynTheme {
+  DynTheme({
     required this.primary, required this.dark, required this.pageBg,
     required this.heroBg, required this.accent,
   });
@@ -123,8 +123,8 @@ class _DynTheme {
   final String heroBg;   // CSS gradient string — we approximate it
   final Color accent;
 
-  factory _DynTheme.fromJson(Map j) {
-    return _DynTheme(
+  factory DynTheme.fromJson(Map j) {
+    return DynTheme(
       primary: _hex(j['primary'], const Color(0xFFF5C320)),
       dark:    _hex(j['dark'],    const Color(0xFF412402)),
       pageBg:  _hex(j['page_bg'], const Color(0xFFFAF6EB)),
@@ -160,7 +160,13 @@ class _DynTheme {
 
 // ─── BLOCK DISPATCHER ──────────────────────────────────────────────────────
 
-Widget _renderBlock(BuildContext c, Map<String, dynamic> b, _DynTheme t) {
+/// Render a single block from a `mobile.page.blocks_json` element using the
+/// supplied theme. Public so HomeScreen (and any other screen) can reuse the
+/// renderers without duplicating widget code.
+Widget renderDynamicBlock(BuildContext c, Map<String, dynamic> b, DynTheme t) =>
+    _renderBlock(c, b, t);
+
+Widget _renderBlock(BuildContext c, Map<String, dynamic> b, DynTheme t) {
   if (b['hidden'] == true) return const SizedBox.shrink();
   final kind = b['kind'] as String? ?? '';
   final p = ((b['props'] as Map?) ?? const {}).cast<String, dynamic>();
@@ -254,7 +260,7 @@ String _tx(Map p, bool ar, String key, String fallback) {
 class _Hero extends StatelessWidget {
   const _Hero({required this.p, required this.t, required this.ar});
   final Map<String, dynamic> p;
-  final _DynTheme t;
+  final DynTheme t;
   final bool ar;
   @override
   Widget build(BuildContext context) {
@@ -303,7 +309,7 @@ class _Hero extends StatelessWidget {
 class _SearchBarBlock extends StatelessWidget {
   const _SearchBarBlock({required this.p, required this.t, required this.ar});
   final Map<String, dynamic> p;
-  final _DynTheme t;
+  final DynTheme t;
   final bool ar;
   @override
   Widget build(BuildContext context) {
@@ -331,7 +337,7 @@ class _SearchBarBlock extends StatelessWidget {
 class _CountdownBlock extends StatefulWidget {
   const _CountdownBlock({required this.p, required this.t, required this.ar});
   final Map<String, dynamic> p;
-  final _DynTheme t;
+  final DynTheme t;
   final bool ar;
   @override
   State<_CountdownBlock> createState() => _CountdownBlockState();
@@ -381,7 +387,7 @@ class _CountdownBlockState extends State<_CountdownBlock> {
 class _CategoriesBlock extends StatelessWidget {
   const _CategoriesBlock({required this.p, required this.t, required this.ar});
   final Map<String, dynamic> p;
-  final _DynTheme t;
+  final DynTheme t;
   final bool ar;
   @override
   Widget build(BuildContext context) {
@@ -427,7 +433,7 @@ class _CategoriesBlock extends StatelessWidget {
 class _ProductsBlock extends StatelessWidget {
   const _ProductsBlock({required this.p, required this.t, required this.ar, required this.kind});
   final Map<String, dynamic> p;
-  final _DynTheme t;
+  final DynTheme t;
   final bool ar;
   final String kind;
   @override
@@ -502,11 +508,11 @@ class _ProductsBlock extends StatelessWidget {
 class _Banner1 extends StatelessWidget {
   const _Banner1({required this.p, required this.t, required this.ar});
   final Map<String, dynamic> p;
-  final _DynTheme t;
+  final DynTheme t;
   final bool ar;
   @override
   Widget build(BuildContext context) {
-    final color = _DynTheme._hex(p['color'], t.accent);
+    final color = DynTheme._hex(p['color'], t.accent);
     final link = (p['link'] as Map?)?.cast<String, dynamic>();
     final text = _tx(p, ar, 'title', 'Promo banner');
     return GestureDetector(
@@ -535,7 +541,7 @@ class _Banner1 extends StatelessWidget {
 class _BannerMulti extends StatelessWidget {
   const _BannerMulti({required this.p, required this.t, required this.columns});
   final Map<String, dynamic> p;
-  final _DynTheme t;
+  final DynTheme t;
   final int columns;
   @override
   Widget build(BuildContext context) {
@@ -572,7 +578,7 @@ class _BannerMulti extends StatelessWidget {
 class _VendorsBlock extends StatelessWidget {
   const _VendorsBlock({required this.p, required this.t, required this.ar});
   final Map<String, dynamic> p;
-  final _DynTheme t;
+  final DynTheme t;
   final bool ar;
   @override
   Widget build(BuildContext context) {
@@ -626,7 +632,7 @@ class _VendorsBlock extends StatelessWidget {
 class _LoyaltyBlock extends StatelessWidget {
   const _LoyaltyBlock({required this.p, required this.t, required this.ar, required this.wallet});
   final Map<String, dynamic> p;
-  final _DynTheme t;
+  final DynTheme t;
   final bool ar;
   final bool wallet;
   @override
@@ -639,7 +645,7 @@ class _LoyaltyBlock extends StatelessWidget {
         decoration: BoxDecoration(
           gradient: wallet
               ? const LinearGradient(colors: [Color(0xFF1F8A40), Color(0xFF5BC97A)])
-              : LinearGradient(colors: [t.dark, _DynTheme._hex('#6B3A05', t.dark)]),
+              : LinearGradient(colors: [t.dark, DynTheme._hex('#6B3A05', t.dark)]),
           borderRadius: BorderRadius.circular(14),
         ),
         child: Row(children: [
@@ -676,7 +682,7 @@ class _LoyaltyBlock extends StatelessWidget {
 class _CouponsBlock extends StatelessWidget {
   const _CouponsBlock({required this.p, required this.t, required this.ar});
   final Map<String, dynamic> p;
-  final _DynTheme t;
+  final DynTheme t;
   final bool ar;
   @override
   Widget build(BuildContext context) {
@@ -709,7 +715,7 @@ class _CouponsBlock extends StatelessWidget {
 class _NewsletterBlock extends StatelessWidget {
   const _NewsletterBlock({required this.p, required this.t, required this.ar});
   final Map<String, dynamic> p;
-  final _DynTheme t;
+  final DynTheme t;
   final bool ar;
   @override
   Widget build(BuildContext context) {
@@ -763,7 +769,7 @@ class _NewsletterBlock extends StatelessWidget {
 class _AppPromoBlock extends StatelessWidget {
   const _AppPromoBlock({required this.p, required this.t, required this.ar});
   final Map<String, dynamic> p;
-  final _DynTheme t;
+  final DynTheme t;
   final bool ar;
   @override
   Widget build(BuildContext context) {
@@ -800,7 +806,7 @@ class _AppPromoBlock extends StatelessWidget {
 class _BeenaBlock extends StatelessWidget {
   const _BeenaBlock({required this.p, required this.t, required this.ar});
   final Map<String, dynamic> p;
-  final _DynTheme t;
+  final DynTheme t;
   final bool ar;
   @override
   Widget build(BuildContext context) {
@@ -838,7 +844,7 @@ class _BeenaBlock extends StatelessWidget {
 class _ReviewsBlock extends StatelessWidget {
   const _ReviewsBlock({required this.p, required this.t, required this.ar});
   final Map<String, dynamic> p;
-  final _DynTheme t;
+  final DynTheme t;
   final bool ar;
   @override
   Widget build(BuildContext context) {
@@ -869,7 +875,7 @@ class _ReviewsBlock extends StatelessWidget {
 class _TextBlock extends StatelessWidget {
   const _TextBlock({required this.p, required this.t, required this.ar});
   final Map<String, dynamic> p;
-  final _DynTheme t;
+  final DynTheme t;
   final bool ar;
   @override
   Widget build(BuildContext context) {
@@ -893,7 +899,7 @@ class _TextBlock extends StatelessWidget {
 class _VideoBlock extends StatelessWidget {
   const _VideoBlock({required this.p, required this.t});
   final Map<String, dynamic> p;
-  final _DynTheme t;
+  final DynTheme t;
   @override
   Widget build(BuildContext context) {
     return Container(
