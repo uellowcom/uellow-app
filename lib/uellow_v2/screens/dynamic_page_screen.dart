@@ -7,6 +7,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
@@ -170,25 +171,27 @@ Widget _renderBlock(BuildContext c, Map<String, dynamic> b, DynTheme t) {
   if (b['hidden'] == true) return const SizedBox.shrink();
   final kind = b['kind'] as String? ?? '';
   final p = ((b['props'] as Map?) ?? const {}).cast<String, dynamic>();
+  // `data` is the server-resolved payload (real categories/products/vendors)
+  final data = ((b['data'] as Map?) ?? const {}).cast<String, dynamic>();
   final ar = UellowApi.instance.lang == 'ar';
   switch (kind) {
     case 'hero':       return _Hero(p: p, t: t, ar: ar);
-    case 'carousel':   return _Hero(p: p, t: t, ar: ar);   // approximate
+    case 'carousel':   return _CarouselBlock(p: p, data: data, t: t, ar: ar);
     case 'searchbar':  return _SearchBarBlock(p: p, t: t, ar: ar);
     case 'countdown':  return _CountdownBlock(p: p, t: t, ar: ar);
     case 'cats-grid':
-    case 'cats-strip': return _CategoriesBlock(p: p, t: t, ar: ar);
+    case 'cats-strip': return _CategoriesBlock(p: p, data: data, t: t, ar: ar);
     case 'flash':
     case 'products':
     case 'bestsellers':
     case 'rec-ai':
     case 'recent':
-    case 'grid':       return _ProductsBlock(p: p, t: t, ar: ar, kind: kind);
+    case 'grid':       return _ProductsBlock(p: p, data: data, t: t, ar: ar, kind: kind);
     case 'banner-1':   return _Banner1(p: p, t: t, ar: ar);
     case 'banner-2':   return _BannerMulti(p: p, t: t, columns: 2);
     case 'banner-3':   return _BannerMulti(p: p, t: t, columns: 3);
     case 'vendors':
-    case 'vendor-feat':return _VendorsBlock(p: p, t: t, ar: ar);
+    case 'vendor-feat':return _VendorsBlock(p: p, data: data, t: t, ar: ar);
     case 'loyalty':    return _LoyaltyBlock(p: p, t: t, ar: ar, wallet: false);
     case 'wallet':     return _LoyaltyBlock(p: p, t: t, ar: ar, wallet: true);
     case 'coupons':    return _CouponsBlock(p: p, t: t, ar: ar);
@@ -265,42 +268,127 @@ class _Hero extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final link = (p['link'] as Map?)?.cast<String, dynamic>();
+    final imgUrl = (p['image_url'] as String?) ?? '';
     return GestureDetector(
       onTap: () => _openLink(context, link),
       child: Container(
         margin: const EdgeInsets.fromLTRB(12, 8, 12, 8),
         height: 180,
+        clipBehavior: Clip.antiAlias,
         decoration: BoxDecoration(
-          gradient: t.heroGradient(),
+          gradient: imgUrl.isEmpty ? t.heroGradient() : null,
           borderRadius: BorderRadius.circular(18),
           boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.12),
               blurRadius: 14, offset: const Offset(0, 6))],
         ),
-        padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
-        child: Column(mainAxisAlignment: MainAxisAlignment.end,
-            crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(_tx(p, ar, 'title', 'Welcome'),
-              style: const TextStyle(color: Colors.white,
-                  fontSize: 22, fontWeight: FontWeight.w900, height: 1.2)),
-          if ((p['subEn'] ?? p['subAr']) != null) ...[
-            const SizedBox(height: 4),
-            Text(_tx(p, ar, 'sub', ''),
-                style: TextStyle(color: Colors.white.withValues(alpha: 0.85), fontSize: 13)),
-          ],
-          if ((p['ctaEn'] ?? p['ctaAr']) != null) ...[
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-              decoration: BoxDecoration(
-                color: t.primary,
-                borderRadius: BorderRadius.circular(20),
+        child: Stack(fit: StackFit.expand, children: [
+          if (imgUrl.isNotEmpty)
+            CachedNetworkImage(imageUrl: imgUrl, fit: BoxFit.cover,
+              errorWidget: (_, __, ___) => Container(decoration: BoxDecoration(gradient: t.heroGradient()))),
+          if (imgUrl.isNotEmpty)
+            Container(decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter, end: Alignment.bottomCenter,
+                colors: [Colors.transparent, Colors.black.withValues(alpha: 0.6)],
               ),
-              child: Text('${_tx(p, ar, 'cta', 'Shop')} →',
-                  style: TextStyle(color: t.dark,
-                      fontWeight: FontWeight.w900, fontSize: 12)),
-            ),
-          ],
+            )),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
+            child: Column(mainAxisAlignment: MainAxisAlignment.end,
+              crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(_tx(p, ar, 'title', 'Welcome'),
+                  style: const TextStyle(color: Colors.white,
+                      fontSize: 22, fontWeight: FontWeight.w900, height: 1.2,
+                      shadows: [Shadow(color: Colors.black54, blurRadius: 6)])),
+              if ((p['subEn'] ?? p['subAr']) != null) ...[
+                const SizedBox(height: 4),
+                Text(_tx(p, ar, 'sub', ''),
+                    style: TextStyle(color: Colors.white.withValues(alpha: 0.92), fontSize: 13,
+                        shadows: const [Shadow(color: Colors.black54, blurRadius: 6)])),
+              ],
+              if ((p['ctaEn'] ?? p['ctaAr']) != null) ...[
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: t.primary,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text('${_tx(p, ar, 'cta', 'Shop')} →',
+                      style: TextStyle(color: t.dark,
+                          fontWeight: FontWeight.w900, fontSize: 12)),
+                ),
+              ],
+            ]),
+          ),
         ]),
+      ),
+    );
+  }
+}
+
+class _CarouselBlock extends StatefulWidget {
+  const _CarouselBlock({required this.p, required this.data, required this.t, required this.ar});
+  final Map<String, dynamic> p;
+  final Map<String, dynamic> data;
+  final DynTheme t;
+  final bool ar;
+  @override
+  State<_CarouselBlock> createState() => _CarouselBlockState();
+}
+
+class _CarouselBlockState extends State<_CarouselBlock> {
+  final _ctrl = PageController(viewportFraction: 0.92);
+  int _i = 0;
+  Timer? _auto;
+
+  @override
+  void initState() {
+    super.initState();
+    _auto = Timer.periodic(const Duration(seconds: 5), (_) {
+      if (!mounted || !_ctrl.hasClients) return;
+      final slides = (widget.data['slides'] as List?) ?? const [];
+      if (slides.length < 2) return;
+      _i = (_i + 1) % slides.length;
+      _ctrl.animateToPage(_i, duration: const Duration(milliseconds: 400),
+          curve: Curves.easeOut);
+    });
+  }
+  @override
+  void dispose() { _auto?.cancel(); _ctrl.dispose(); super.dispose(); }
+
+  @override
+  Widget build(BuildContext context) {
+    final slides = ((widget.data['slides'] as List?) ?? const []).cast<dynamic>();
+    if (slides.isEmpty) {
+      // No mobile.slider records → fall back to a styled hero from props.
+      return _Hero(p: widget.p, t: widget.t, ar: widget.ar);
+    }
+    return SizedBox(
+      height: 180,
+      child: PageView.builder(
+        controller: _ctrl,
+        onPageChanged: (i) => setState(() => _i = i),
+        itemCount: slides.length,
+        itemBuilder: (_, i) {
+          final s = (slides[i] as Map).cast<String, dynamic>();
+          final url = s['image_url']?.toString() ?? '';
+          final link = (s['link'] is Map) ? (s['link'] as Map).cast<String, dynamic>() : null;
+          return Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 6),
+            child: GestureDetector(
+              onTap: () => _openLink(context, link),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(18),
+                child: url.isNotEmpty
+                    ? CachedNetworkImage(imageUrl: url, fit: BoxFit.cover,
+                        placeholder: (_, __) => Container(color: widget.t.dark.withValues(alpha: 0.1)),
+                        errorWidget: (_, __, ___) => Container(decoration: BoxDecoration(gradient: widget.t.heroGradient())))
+                    : Container(decoration: BoxDecoration(gradient: widget.t.heroGradient())),
+              ),
+            ),
+          );
+        },
       ),
     );
   }
@@ -385,44 +473,57 @@ class _CountdownBlockState extends State<_CountdownBlock> {
 }
 
 class _CategoriesBlock extends StatelessWidget {
-  const _CategoriesBlock({required this.p, required this.t, required this.ar});
+  const _CategoriesBlock({required this.p, required this.data, required this.t, required this.ar});
   final Map<String, dynamic> p;
+  final Map<String, dynamic> data;
   final DynTheme t;
   final bool ar;
   @override
   Widget build(BuildContext context) {
-    // For v1 we just open the Shop screen on tap of any tile. Real source
-    // selection ("All categories auto") is wired in a follow-up.
     final title = _tx(p, ar, 'title', ar ? 'تسوّق حسب الفئة' : 'Shop by category');
-    const seeds = ['📱','👕','👟','💄','🏠','🎮','⌚','🎁'];
+    final items = ((data['items'] as List?) ?? const []).cast<dynamic>()
+        .map((e) => (e as Map).cast<String, dynamic>()).toList();
+    if (items.isEmpty) return const SizedBox.shrink();
     return Container(
       margin: const EdgeInsets.fromLTRB(0, 8, 0, 8),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Padding(padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
           child: Text(title, style: TextStyle(
               color: t.dark, fontSize: 14, fontWeight: FontWeight.w900))),
-        SizedBox(height: 78,
+        SizedBox(height: 86,
           child: ListView.separated(
             padding: const EdgeInsets.symmetric(horizontal: 14),
             scrollDirection: Axis.horizontal,
-            itemCount: seeds.length,
-            separatorBuilder: (_, __) => const SizedBox(width: 8),
-            itemBuilder: (_, i) => GestureDetector(
-              onTap: () => Navigator.pushNamed(context, Routes.category),
-              child: Column(children: [
-                Container(width: 56, height: 56,
-                  decoration: BoxDecoration(
-                    color: t.primary.withValues(alpha: 0.18),
-                    shape: BoxShape.circle,
-                    border: Border.all(color: t.primary.withValues(alpha: 0.35)),
-                  ),
-                  alignment: Alignment.center,
-                  child: Text(seeds[i], style: const TextStyle(fontSize: 24))),
-                const SizedBox(height: 4),
-                Text('Cat ${i+1}',
-                    style: TextStyle(color: t.dark, fontSize: 11, fontWeight: FontWeight.w600)),
-              ]),
-            ),
+            itemCount: items.length,
+            separatorBuilder: (_, __) => const SizedBox(width: 10),
+            itemBuilder: (_, i) {
+              final cat = items[i];
+              final url = (cat['icon_url'] as String?) ?? '';
+              return GestureDetector(
+                onTap: () => UellowRouter.goCollection(context, (cat['id'] as num).toInt()),
+                child: SizedBox(width: 70,
+                  child: Column(children: [
+                    Container(width: 56, height: 56,
+                      decoration: BoxDecoration(
+                        color: t.primary.withValues(alpha: 0.12),
+                        shape: BoxShape.circle,
+                        border: Border.all(color: t.primary.withValues(alpha: 0.30)),
+                      ),
+                      clipBehavior: Clip.antiAlias,
+                      child: url.isNotEmpty
+                          ? CachedNetworkImage(imageUrl: url, fit: BoxFit.cover,
+                              errorWidget: (_, __, ___) => Icon(Icons.category, color: t.dark.withValues(alpha: 0.5)))
+                          : Icon(Icons.category, color: t.dark.withValues(alpha: 0.5))),
+                    const SizedBox(height: 4),
+                    Text(cat['name']?.toString() ?? '',
+                        textAlign: TextAlign.center,
+                        maxLines: 2, overflow: TextOverflow.ellipsis,
+                        style: TextStyle(color: t.dark, fontSize: 10.5,
+                            height: 1.15, fontWeight: FontWeight.w600)),
+                  ]),
+                ),
+              );
+            },
           ),
         ),
       ]),
@@ -431,15 +532,18 @@ class _CategoriesBlock extends StatelessWidget {
 }
 
 class _ProductsBlock extends StatelessWidget {
-  const _ProductsBlock({required this.p, required this.t, required this.ar, required this.kind});
+  const _ProductsBlock({required this.p, required this.data, required this.t, required this.ar, required this.kind});
   final Map<String, dynamic> p;
+  final Map<String, dynamic> data;
   final DynTheme t;
   final bool ar;
   final String kind;
   @override
   Widget build(BuildContext context) {
     final title = _tx(p, ar, 'title', _fallbackTitle(kind, ar));
-    // Hand off to a real product list — for v1 we link to /collection or /flash.
+    final items = ((data['items'] as List?) ?? const []).cast<dynamic>()
+        .map((e) => (e as Map).cast<String, dynamic>()).toList();
+    if (items.isEmpty) return const SizedBox.shrink();
     return Container(
       margin: const EdgeInsets.fromLTRB(0, 8, 0, 8),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -458,36 +562,81 @@ class _ProductsBlock extends StatelessWidget {
               child: Text(ar ? 'الكل ←' : 'See all →'),
             ),
           ])),
-        SizedBox(height: 170,
+        SizedBox(height: 198,
           child: ListView.separated(
             padding: const EdgeInsets.symmetric(horizontal: 14),
             scrollDirection: Axis.horizontal,
-            itemCount: 6,
+            itemCount: items.length,
             separatorBuilder: (_, __) => const SizedBox(width: 8),
-            itemBuilder: (_, i) => Container(
-              width: 130,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: t.dark.withValues(alpha: 0.08)),
-              ),
-              padding: const EdgeInsets.all(8),
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Container(height: 84,
+            itemBuilder: (_, i) {
+              final prod = items[i];
+              final price = (prod['price'] as Map?)?.cast<String, dynamic>();
+              final compare = prod['compare_price'];
+              final discount = (prod['discount_pct'] as num?)?.toInt() ?? 0;
+              final url = (prod['image'] as String?) ?? '';
+              return GestureDetector(
+                onTap: () => UellowRouter.goProduct(context, (prod['id'] as num).toInt()),
+                child: Container(
+                  width: 138,
                   decoration: BoxDecoration(
-                    color: t.primary.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(8)),
-                  child: Icon(Icons.shopping_bag_outlined,
-                      size: 32, color: t.dark.withValues(alpha: 0.5))),
-                const SizedBox(height: 6),
-                Text('Product ${i+1}',
-                    maxLines: 2, overflow: TextOverflow.ellipsis,
-                    style: TextStyle(color: t.dark, fontSize: 11.5, fontWeight: FontWeight.w600)),
-                const SizedBox(height: 2),
-                Text('${(i+1) * 4.5} KD',
-                    style: TextStyle(color: t.dark, fontSize: 13, fontWeight: FontWeight.w900)),
-              ]),
-            ),
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: t.dark.withValues(alpha: 0.08)),
+                  ),
+                  clipBehavior: Clip.antiAlias,
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Stack(children: [
+                      AspectRatio(aspectRatio: 1,
+                        child: url.isNotEmpty
+                            ? CachedNetworkImage(imageUrl: url, fit: BoxFit.cover,
+                                placeholder: (_, __) => Container(color: t.primary.withValues(alpha: 0.06)),
+                                errorWidget: (_, __, ___) => Container(
+                                    color: t.primary.withValues(alpha: 0.08),
+                                    child: Icon(Icons.broken_image_outlined,
+                                        color: t.dark.withValues(alpha: 0.4))))
+                            : Container(color: t.primary.withValues(alpha: 0.08),
+                                child: Icon(Icons.shopping_bag_outlined,
+                                    color: t.dark.withValues(alpha: 0.4)))),
+                      if (discount > 0) Positioned(
+                        top: 4, left: 4,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFC0392B),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text('-$discount%',
+                              style: const TextStyle(color: Colors.white,
+                                  fontSize: 9, fontWeight: FontWeight.w900)),
+                        ),
+                      ),
+                    ]),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
+                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Text(prod['name']?.toString() ?? '',
+                            maxLines: 2, overflow: TextOverflow.ellipsis,
+                            style: TextStyle(color: t.dark, fontSize: 11,
+                                height: 1.25, fontWeight: FontWeight.w600)),
+                        const SizedBox(height: 4),
+                        Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                          Text('${(price?['amount'] as num? ?? 0).toStringAsFixed(price?['digits'] ?? 3)} ${price?['symbol'] ?? ''}',
+                              style: TextStyle(color: t.dark, fontSize: 13,
+                                  fontWeight: FontWeight.w900)),
+                          if (compare != null) ...[
+                            const SizedBox(width: 4),
+                            Text('${(compare as num).toStringAsFixed(price?['digits'] ?? 3)}',
+                                style: TextStyle(color: t.dark.withValues(alpha: 0.45),
+                                    fontSize: 10, fontWeight: FontWeight.w600,
+                                    decoration: TextDecoration.lineThrough)),
+                          ],
+                        ]),
+                      ]),
+                    ),
+                  ]),
+                ),
+              );
+            },
           ),
         ),
       ]),
@@ -515,23 +664,37 @@ class _Banner1 extends StatelessWidget {
     final color = DynTheme._hex(p['color'], t.accent);
     final link = (p['link'] as Map?)?.cast<String, dynamic>();
     final text = _tx(p, ar, 'title', 'Promo banner');
+    final imgUrl = (p['image_url'] as String?) ?? '';
     return GestureDetector(
       onTap: () => _openLink(context, link),
       child: Container(
         margin: const EdgeInsets.fromLTRB(12, 8, 12, 8),
-        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+        height: 90,
+        clipBehavior: Clip.antiAlias,
         decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft, end: Alignment.bottomRight,
-            colors: [color, color.withValues(alpha: 0.7)],
-          ),
+          gradient: imgUrl.isEmpty
+              ? LinearGradient(
+                  begin: Alignment.topLeft, end: Alignment.bottomRight,
+                  colors: [color, color.withValues(alpha: 0.7)])
+              : null,
           borderRadius: BorderRadius.circular(14),
         ),
-        child: Row(children: [
-          Expanded(child: Text(text,
-              style: const TextStyle(color: Colors.white,
-                  fontSize: 14, fontWeight: FontWeight.w800))),
-          if (link != null) const Icon(Icons.arrow_forward, color: Colors.white, size: 18),
+        child: Stack(fit: StackFit.expand, children: [
+          if (imgUrl.isNotEmpty)
+            CachedNetworkImage(imageUrl: imgUrl, fit: BoxFit.cover,
+                errorWidget: (_, __, ___) => Container(color: color)),
+          if (imgUrl.isNotEmpty)
+            Container(color: Colors.black.withValues(alpha: 0.35)),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+            child: Row(children: [
+              Expanded(child: Text(text,
+                  style: const TextStyle(color: Colors.white,
+                      fontSize: 14, fontWeight: FontWeight.w800,
+                      shadows: [Shadow(color: Colors.black54, blurRadius: 4)]))),
+              if (link != null) const Icon(Icons.arrow_forward, color: Colors.white, size: 18),
+            ]),
+          ),
         ]),
       ),
     );
@@ -576,52 +739,72 @@ class _BannerMulti extends StatelessWidget {
 }
 
 class _VendorsBlock extends StatelessWidget {
-  const _VendorsBlock({required this.p, required this.t, required this.ar});
+  const _VendorsBlock({required this.p, required this.data, required this.t, required this.ar});
   final Map<String, dynamic> p;
+  final Map<String, dynamic> data;
   final DynTheme t;
   final bool ar;
   @override
   Widget build(BuildContext context) {
     final title = _tx(p, ar, 'title', ar ? 'أفضل البائعين' : 'Top sellers');
-    final names = ['Eureka','HainoTeko','BelleVie','Cherie','TechZone'];
+    final items = ((data['items'] as List?) ?? const []).cast<dynamic>()
+        .map((e) => (e as Map).cast<String, dynamic>()).toList();
+    if (items.isEmpty) return const SizedBox.shrink();
     return Container(
       margin: const EdgeInsets.fromLTRB(0, 8, 0, 8),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Padding(padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
           child: Text(title, style: TextStyle(
               color: t.dark, fontSize: 14, fontWeight: FontWeight.w900))),
-        SizedBox(height: 110,
+        SizedBox(height: 118,
           child: ListView.separated(
             padding: const EdgeInsets.symmetric(horizontal: 14),
             scrollDirection: Axis.horizontal,
-            itemCount: names.length,
+            itemCount: items.length,
             separatorBuilder: (_, __) => const SizedBox(width: 8),
-            itemBuilder: (_, i) => Container(
-              width: 96,
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: Colors.white, borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: t.dark.withValues(alpha: 0.08)),
-              ),
-              child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                Container(width: 44, height: 44,
+            itemBuilder: (_, i) {
+              final v = items[i];
+              final url = (v['logo'] as String?) ?? '';
+              final rating = (v['rating'] as num?)?.toDouble();
+              final name = v['name']?.toString() ?? '';
+              return GestureDetector(
+                onTap: () => UellowRouter.goVendor(context, (v['id'] as num).toInt()),
+                child: Container(
+                  width: 100,
+                  padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: t.primary.withValues(alpha: 0.2),
-                    shape: BoxShape.circle),
-                  alignment: Alignment.center,
-                  child: Text(names[i][0],
-                      style: TextStyle(color: t.dark,
-                          fontSize: 18, fontWeight: FontWeight.w900))),
-                const SizedBox(height: 4),
-                Text(names[i],
-                    style: TextStyle(color: t.dark,
-                        fontSize: 11.5, fontWeight: FontWeight.w700)),
-                const SizedBox(height: 2),
-                Text('★ 4.${5+i}',
-                    style: TextStyle(color: t.primary.withValues(alpha: 0.9),
-                        fontSize: 10, fontWeight: FontWeight.w800)),
-              ]),
-            ),
+                    color: Colors.white, borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: t.dark.withValues(alpha: 0.08)),
+                  ),
+                  child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                    Container(width: 48, height: 48,
+                      decoration: BoxDecoration(
+                        color: t.primary.withValues(alpha: 0.2),
+                        shape: BoxShape.circle),
+                      clipBehavior: Clip.antiAlias,
+                      child: url.isNotEmpty
+                          ? CachedNetworkImage(imageUrl: url, fit: BoxFit.cover,
+                              errorWidget: (_, __, ___) => Center(child: Text(
+                                  (name.isNotEmpty ? name[0] : '?').toUpperCase(),
+                                  style: TextStyle(color: t.dark,
+                                      fontSize: 18, fontWeight: FontWeight.w900))))
+                          : Center(child: Text((name.isNotEmpty ? name[0] : '?').toUpperCase(),
+                              style: TextStyle(color: t.dark,
+                                  fontSize: 18, fontWeight: FontWeight.w900)))),
+                    const SizedBox(height: 4),
+                    Text(name, maxLines: 1, overflow: TextOverflow.ellipsis,
+                        style: TextStyle(color: t.dark,
+                            fontSize: 11, fontWeight: FontWeight.w700)),
+                    if (rating != null && rating > 0) ...[
+                      const SizedBox(height: 2),
+                      Text('★ ${rating.toStringAsFixed(1)}',
+                          style: TextStyle(color: t.primary.withValues(alpha: 0.9),
+                              fontSize: 10, fontWeight: FontWeight.w800)),
+                    ],
+                  ]),
+                ),
+              );
+            },
           ),
         ),
       ]),
