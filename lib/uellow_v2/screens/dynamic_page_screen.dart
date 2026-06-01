@@ -373,6 +373,7 @@ class _CarouselBlockState extends State<_CarouselBlock> {
     return SizedBox(
       height: 180,
       child: PageView.builder(
+        physics: const ClampingScrollPhysics(),
         controller: _ctrl,
         onPageChanged: (i) => setState(() => _i = i),
         itemCount: slides.length,
@@ -498,6 +499,7 @@ class _CategoriesBlock extends StatelessWidget {
               color: t.dark, fontSize: 14, fontWeight: FontWeight.w900))),
         SizedBox(height: 86,
           child: ListView.separated(
+            physics: const ClampingScrollPhysics(),
             padding: const EdgeInsets.symmetric(horizontal: 14),
             scrollDirection: Axis.horizontal,
             itemCount: items.length,
@@ -570,6 +572,7 @@ class _ProductsBlock extends StatelessWidget {
           ])),
         SizedBox(height: 198,
           child: ListView.separated(
+            physics: const ClampingScrollPhysics(),
             padding: const EdgeInsets.symmetric(horizontal: 14),
             scrollDirection: Axis.horizontal,
             itemCount: items.length,
@@ -764,6 +767,7 @@ class _VendorsBlock extends StatelessWidget {
               color: t.dark, fontSize: 14, fontWeight: FontWeight.w900))),
         SizedBox(height: 118,
           child: ListView.separated(
+            physics: const ClampingScrollPhysics(),
             padding: const EdgeInsets.symmetric(horizontal: 14),
             scrollDirection: Axis.horizontal,
             itemCount: items.length,
@@ -1216,6 +1220,7 @@ class _FlashClassic extends StatelessWidget {
               const SizedBox(height: 10),
               SizedBox(height: 216,
                 child: ListView.separated(
+            physics: const ClampingScrollPhysics(),
                   scrollDirection: Axis.horizontal,
                   itemCount: items.length,
                   separatorBuilder: (_, __) => const SizedBox(width: 8),
@@ -1285,6 +1290,7 @@ class _FlashDark extends StatelessWidget {
           const SizedBox(height: 12),
           SizedBox(height: 220,
             child: ListView.separated(
+            physics: const ClampingScrollPhysics(),
               scrollDirection: Axis.horizontal,
               itemCount: items.length,
               separatorBuilder: (_, __) => const SizedBox(width: 8),
@@ -1345,6 +1351,7 @@ class _FlashMinimal extends StatelessWidget {
           ])),
         SizedBox(height: 220,
           child: ListView.separated(
+            physics: const ClampingScrollPhysics(),
             padding: const EdgeInsets.symmetric(horizontal: 14),
             scrollDirection: Axis.horizontal,
             itemCount: items.length,
@@ -1394,6 +1401,7 @@ class _FlashHeroState extends State<_FlashHero> {
       margin: const EdgeInsets.fromLTRB(8, 4, 8, 8),
       height: 260,
       child: PageView.builder(
+        physics: const ClampingScrollPhysics(),
         controller: _ctrl,
         onPageChanged: (i) => setState(() => _i = i),
         itemCount: widget.items.length,
