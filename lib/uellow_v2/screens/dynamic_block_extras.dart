@@ -343,33 +343,205 @@ class PromoPillsBlock extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final items = (p['pills'] as List? ?? const []).cast<dynamic>();
+    final items = ((p['pills'] as List?) ?? const []).cast<dynamic>()
+        .map((e) => (e as Map).cast<String, dynamic>()).toList();
     if (items.isEmpty) return const SizedBox.shrink();
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 4, 12, 4),
-      child: Row(
-        children: List.generate(items.length, (i) {
-          final it = (items[i] as Map).cast<String, dynamic>();
-          return Expanded(
-            child: Padding(
-              padding: EdgeInsets.only(left: i == 0 ? 0 : 5, right: i == items.length - 1 ? 0 : 5),
-              child: _PromoPill(it: it, t: t, ar: ar),
-            ),
-          );
-        }),
-      ),
+
+    final layout = (p['layout'] as String?) ?? 'row';
+    final gap = ((p['gap'] as num?)?.toDouble() ?? 8).clamp(2, 20).toDouble();
+    final pad = const EdgeInsets.fromLTRB(12, 4, 12, 4);
+
+    Widget pill(Map<String, dynamic> it, int i) =>
+        _PromoPill(it: it, t: t, ar: ar, layout: layout, parentP: p, index: i);
+
+    switch (layout) {
+      case 'grid_2x2':
+      case 'grid_2x3':
+      case 'grid_3x2':
+        final cols = layout == 'grid_3x2' ? 3 : 2;
+        final ratio = layout == 'grid_3x2' ? 1.6 : 2.4;
+        return Padding(padding: pad,
+          child: GridView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: cols,
+                crossAxisSpacing: gap, mainAxisSpacing: gap,
+                childAspectRatio: ratio),
+            itemCount: items.length,
+            itemBuilder: (_, i) => pill(items[i], i),
+          ));
+      case 'vertical':
+        return Padding(padding: pad, child: Column(children: [
+          for (int i = 0; i < items.length; i++) ...[
+            pill(items[i], i),
+            if (i < items.length - 1) SizedBox(height: gap),
+          ],
+        ]));
+      case 'ticker':
+        return _PromoTicker(items: items, t: t, ar: ar, p: p);
+      case 'compact_row':
+        return Padding(padding: pad,
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            physics: const ClampingScrollPhysics(),
+            child: Row(children: [
+              for (int i = 0; i < items.length; i++) ...[
+                _PromoCompact(it: items[i], t: t, ar: ar, parentP: p, index: i),
+                if (i < items.length - 1) SizedBox(width: gap),
+              ],
+            ]),
+          ));
+      case 'featured':
+        // First pill renders large, rest fit in a 2-col grid below.
+        if (items.isEmpty) return const SizedBox.shrink();
+        final first = items.first;
+        final rest = items.skip(1).toList();
+        return Padding(padding: pad, child: Column(children: [
+          SizedBox(height: 80, child: pill(first, 0)),
+          if (rest.isNotEmpty) SizedBox(height: gap),
+          if (rest.isNotEmpty) GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 2, crossAxisSpacing: gap, mainAxisSpacing: gap,
+                  childAspectRatio: 2.2),
+              itemCount: rest.length,
+              itemBuilder: (_, i) => pill(rest[i], i + 1)),
+        ]));
+      case 'iconic_row':
+        return Padding(padding: pad,
+          child: Row(mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              for (int i = 0; i < items.length; i++)
+                _PromoIconic(it: items[i], t: t, ar: ar, parentP: p, index: i),
+            ]),
+        );
+      default: // row
+        return Padding(padding: pad, child: Row(children: [
+          for (int i = 0; i < items.length; i++) ...[
+            Expanded(child: pill(items[i], i)),
+            if (i < items.length - 1) SizedBox(width: gap),
+          ],
+        ]));
+    }
+  }
+}
+
+class _PromoTicker extends StatefulWidget {
+  const _PromoTicker({required this.items, required this.t, required this.ar,
+      required this.p});
+  final List<Map<String, dynamic>> items;
+  final DynTheme t;
+  final bool ar;
+  final Map<String, dynamic> p;
+  @override State<_PromoTicker> createState() => _PromoTickerState();
+}
+class _PromoTickerState extends State<_PromoTicker> {
+  final _ctrl = ScrollController();
+  Timer? _timer;
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(const Duration(milliseconds: 50), (_) {
+      if (!_ctrl.hasClients) return;
+      final max = _ctrl.position.maxScrollExtent;
+      final off = _ctrl.offset + 1.0;
+      _ctrl.jumpTo(off >= max ? 0 : off);
+    });
+  }
+  @override void dispose() { _timer?.cancel(); _ctrl.dispose(); super.dispose(); }
+  @override
+  Widget build(BuildContext context) {
+    final doubled = [...widget.items, ...widget.items];
+    return SizedBox(height: 56, child: ListView.separated(
+      controller: _ctrl,
+      scrollDirection: Axis.horizontal,
+      physics: const NeverScrollableScrollPhysics(),
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      itemCount: doubled.length,
+      separatorBuilder: (_, __) => const SizedBox(width: 8),
+      itemBuilder: (_, i) => _PromoPill(
+          it: doubled[i], t: widget.t, ar: widget.ar,
+          layout: 'ticker', parentP: widget.p, index: i),
+    ));
+  }
+}
+
+class _PromoCompact extends StatelessWidget {
+  const _PromoCompact({required this.it, required this.t, required this.ar,
+      required this.parentP, required this.index});
+  final Map<String, dynamic> it;
+  final DynTheme t;
+  final bool ar;
+  final Map<String, dynamic> parentP;
+  final int index;
+  @override
+  Widget build(BuildContext context) {
+    final icon = (it['icon'] as String?) ?? '🎁';
+    final title = ar
+        ? (it['titleAr']?.toString() ?? it['titleEn']?.toString() ?? '')
+        : (it['titleEn']?.toString() ?? '');
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+          color: BlockEnvelope._hex(it['color']) ?? const Color(0xFFFFF6E0),
+          borderRadius: BorderRadius.circular(20)),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Text(icon, style: const TextStyle(fontSize: 13)),
+        const SizedBox(width: 6),
+        Text(title, style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700,
+            color: BlockEnvelope._hex(it['text_color']) ?? t.dark)),
+      ]),
+    );
+  }
+}
+
+class _PromoIconic extends StatelessWidget {
+  const _PromoIconic({required this.it, required this.t, required this.ar,
+      required this.parentP, required this.index});
+  final Map<String, dynamic> it;
+  final DynTheme t;
+  final bool ar;
+  final Map<String, dynamic> parentP;
+  final int index;
+  @override
+  Widget build(BuildContext context) {
+    final icon = (it['icon'] as String?) ?? '🎁';
+    final title = ar
+        ? (it['titleAr']?.toString() ?? it['titleEn']?.toString() ?? '')
+        : (it['titleEn']?.toString() ?? '');
+    final bg = BlockEnvelope._hex(it['color']) ?? const Color(0xFFFFF6E0);
+    return GestureDetector(
+      onTap: () => _openLink(context, (it['link'] as Map?)?.cast<String, dynamic>()),
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        Container(width: 44, height: 44,
+          decoration: BoxDecoration(color: bg, shape: BoxShape.circle),
+          child: Center(child: Text(icon, style: const TextStyle(fontSize: 22))),
+        ),
+        const SizedBox(height: 4),
+        Text(title, textAlign: TextAlign.center, maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w700,
+                color: t.dark, height: 1.1)),
+      ]),
     );
   }
 }
 
 class _PromoPill extends StatelessWidget {
-  const _PromoPill({required this.it, required this.t, required this.ar});
+  const _PromoPill({required this.it, required this.t, required this.ar,
+      this.layout = 'row', this.parentP = const {}, this.index = 0});
   final Map<String, dynamic> it;
   final DynTheme t;
   final bool ar;
+  final String layout;
+  final Map<String, dynamic> parentP;
+  final int index;
 
   @override
   Widget build(BuildContext context) {
+    final kind = (it['kind'] as String?) ?? 'pill';
     final icon = (it['icon'] as String?) ?? '🎁';
     final title = ar
         ? (it['titleAr']?.toString() ?? it['titleEn']?.toString() ?? '')
@@ -377,43 +549,197 @@ class _PromoPill extends StatelessWidget {
     final sub = ar
         ? (it['subtitleAr']?.toString() ?? it['subtitleEn']?.toString() ?? '')
         : (it['subtitleEn']?.toString() ?? '');
+    final style = (parentP['style'] as String?) ?? 'filled';
+    final iconPos = (parentP['icon_position'] as String?) ?? 'left';
+    final iconSize = {'sm': 14.0, 'md': 18.0, 'lg': 24.0, 'xl': 32.0}
+        [parentP['icon_size'] as String? ?? 'md'] ?? 18.0;
+    final animation = (parentP['animation'] as String?) ?? 'fade_in';
+    final countUp = parentP['count_up'] != false;
+    final badge = (it['badge_text'] as String?) ?? '';
+
     final bg = BlockEnvelope._hex(it['color']) ?? const Color(0xFFFFF6E0);
-    return GestureDetector(
-      onTap: () => _openLink(context, (it['link'] as Map?)?.cast<String, dynamic>()),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
-        decoration: BoxDecoration(
-          color: bg,
-          borderRadius: BorderRadius.circular(10),
+    final iconColor = BlockEnvelope._hex(it['icon_color']) ?? t.dark;
+    final textColor = BlockEnvelope._hex(it['text_color']) ?? t.dark;
+
+    // Decoration based on style
+    BoxDecoration deco;
+    switch (style) {
+      case 'outlined':
+        deco = BoxDecoration(color: Colors.white,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: iconColor.withValues(alpha: 0.35), width: 1));
+        break;
+      case 'gradient':
+        deco = BoxDecoration(
+            borderRadius: BorderRadius.circular(10),
+            gradient: LinearGradient(
+                begin: Alignment.topLeft, end: Alignment.bottomRight,
+                colors: [bg, Color.lerp(bg, Colors.white, 0.35)!]));
+        break;
+      case 'glass':
+        deco = BoxDecoration(
+            color: bg.withValues(alpha: 0.55),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.45)));
+        break;
+      case 'minimal':
+        deco = const BoxDecoration();
+        break;
+      case 'iconic':
+        deco = const BoxDecoration();
+        break;
+      case 'neumorphic':
+        deco = BoxDecoration(color: bg,
+            borderRadius: BorderRadius.circular(14),
+            boxShadow: [
+              BoxShadow(color: Colors.white.withValues(alpha: 0.6),
+                  blurRadius: 6, offset: const Offset(-3, -3)),
+              BoxShadow(color: t.dark.withValues(alpha: 0.12),
+                  blurRadius: 8, offset: const Offset(3, 3)),
+            ]);
+        break;
+      default: // filled
+        deco = BoxDecoration(color: bg,
+            borderRadius: BorderRadius.circular(10));
+    }
+
+    // Stat counter
+    Widget statValue() {
+      final raw = (it['value'] as num?) ?? 0;
+      final suffix = (it['value_suffix'] as String?) ?? '';
+      if (!countUp) {
+        return Text(_fmt(raw) + suffix, style: TextStyle(
+            fontSize: 18, fontWeight: FontWeight.w900, color: textColor,
+            letterSpacing: -0.3));
+      }
+      return TweenAnimationBuilder<double>(
+        tween: Tween(begin: 0, end: raw.toDouble()),
+        duration: Duration(milliseconds: 1500 + (index * 100).clamp(0, 600)),
+        curve: Curves.easeOutCubic,
+        builder: (_, v, __) => Text(_fmt(v) + suffix, style: TextStyle(
+            fontSize: 18, fontWeight: FontWeight.w900, color: textColor,
+            letterSpacing: -0.3)),
+      );
+    }
+
+    // Icon widget — different sizes per style
+    Widget iconWidget() {
+      if (style == 'iconic') {
+        return Container(
+          width: 48, height: 48,
+          decoration: BoxDecoration(color: bg, shape: BoxShape.circle),
+          child: Center(child: Text(icon, style: TextStyle(fontSize: iconSize + 6))),
+        );
+      }
+      return Text(icon, style: TextStyle(fontSize: iconSize));
+    }
+
+    Widget textCol() {
+      if (kind == 'stat') {
+        return Column(crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min, children: [
+          statValue(),
+          if (title.isNotEmpty) Text(title, maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700,
+                  color: textColor.withValues(alpha: 0.75))),
+        ]);
+      }
+      if (kind == 'icon_only') return const SizedBox.shrink();
+      if (kind == 'badge') {
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+          decoration: BoxDecoration(color: iconColor,
+              borderRadius: BorderRadius.circular(4)),
+          child: Text(title, style: const TextStyle(
+              color: Colors.white, fontSize: 10, fontWeight: FontWeight.w900,
+              letterSpacing: 0.6)),
+        );
+      }
+      // pill kind (default)
+      return Column(crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min, children: [
+        Text(title, maxLines: 1, overflow: TextOverflow.ellipsis,
+            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w900,
+                color: textColor)),
+        if (sub.isNotEmpty)
+          Text(sub, maxLines: 1, overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: 10.5,
+                  color: textColor.withValues(alpha: 0.65),
+                  fontWeight: FontWeight.w600)),
+      ]);
+    }
+
+    // Build inner content based on icon position
+    Widget inner;
+    if (iconPos == 'top') {
+      inner = Column(mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start, children: [
+        IconTheme(data: IconThemeData(color: iconColor), child: iconWidget()),
+        const SizedBox(height: 6),
+        textCol(),
+      ]);
+    } else if (iconPos == 'right') {
+      inner = Row(children: [
+        Expanded(child: textCol()),
+        const SizedBox(width: 8),
+        IconTheme(data: IconThemeData(color: iconColor), child: iconWidget()),
+      ]);
+    } else {
+      inner = Row(children: [
+        IconTheme(data: IconThemeData(color: iconColor), child: iconWidget()),
+        if (kind != 'icon_only') const SizedBox(width: 8),
+        if (kind != 'icon_only') Expanded(child: textCol()),
+      ]);
+    }
+
+    final card = Stack(clipBehavior: Clip.none, children: [
+      GestureDetector(
+        onTap: () => _openLink(context, (it['link'] as Map?)?.cast<String, dynamic>()),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+          decoration: deco,
+          child: inner,
         ),
-        child: Row(children: [
-          Text(icon, style: const TextStyle(fontSize: 18)),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(title,
-                    maxLines: 1, overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 12, fontWeight: FontWeight.w900,
-                      color: t.dark,
-                    )),
-                if (sub.isNotEmpty)
-                  Text(sub,
-                      maxLines: 1, overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 10.5,
-                        color: t.dark.withOpacity(0.65),
-                        fontWeight: FontWeight.w600,
-                      )),
-              ],
-            ),
-          ),
-        ]),
       ),
-    );
+      if (badge.isNotEmpty) Positioned(top: -4, right: -4, child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+        decoration: BoxDecoration(color: const Color(0xFFE63946),
+            borderRadius: BorderRadius.circular(4),
+            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.15),
+                blurRadius: 3)]),
+        child: Text(badge, style: const TextStyle(color: Colors.white,
+            fontSize: 8.5, fontWeight: FontWeight.w900, letterSpacing: 0.5)),
+      )),
+    ]);
+
+    // Entry animation
+    if (animation == 'fade_in') {
+      return TweenAnimationBuilder<double>(
+        tween: Tween(begin: 0, end: 1),
+        duration: Duration(milliseconds: 300 + (index * 80).clamp(0, 800)),
+        curve: Curves.easeOut,
+        builder: (_, v, child) => Opacity(opacity: v, child: child),
+        child: card,
+      );
+    }
+    if (animation == 'slide_up') {
+      return TweenAnimationBuilder<double>(
+        tween: Tween(begin: 0, end: 1),
+        duration: Duration(milliseconds: 300 + (index * 80).clamp(0, 800)),
+        curve: Curves.easeOutCubic,
+        builder: (_, v, child) => Transform.translate(
+            offset: Offset(0, (1 - v) * 12),
+            child: Opacity(opacity: v, child: child)),
+        child: card,
+      );
+    }
+    return card;
+  }
+
+  static String _fmt(num v) {
+    if (v == v.toInt()) return v.toInt().toString();
+    return v.toStringAsFixed(1);
   }
 }
 
