@@ -243,6 +243,7 @@ Widget _renderBlock(BuildContext c, Map<String, dynamic> b, DynTheme t) {
       if (p['pad_y'] == null) p['pad_y'] = 0;
       inner = TabNavBlock(p: p, t: t, ar: ar);
       break;
+    case 'image-banner':   inner = ImageBannerBlock(p: p, t: t, ar: ar); break;
     case 'story-bubbles':  inner = StoryBubblesBlock(p: p, t: t, ar: ar); break;
     case 'lookbook':       inner = LookbookBlock(p: p, t: t, ar: ar); break;
     case 'sticky-cta':     inner = StickyCtaBlock(p: p, t: t, ar: ar); break;

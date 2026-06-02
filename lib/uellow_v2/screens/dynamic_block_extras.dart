@@ -13,6 +13,7 @@ import 'dart:math' as math;
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:http/http.dart' as http;
 
 import '../../api/uellow_api.dart';
@@ -3675,6 +3676,130 @@ class LookbookBlock extends StatelessWidget {
                 placeholder: (_, __) => Container(color: const Color(0xFFEEE6D6))),
       ),
     );
+  }
+}
+
+// ─── IMAGE BANNER — pure image block (1/2/3 col) with per-lang images ───────
+// v2.0.74 — every item carries `image_url` (default) and optional
+// `image_url_ar` (Arabic override). Renderer picks the AR image only when
+// `ar==true` and the field is non-empty; otherwise falls back to the EN one
+// so admins don't have to upload twice for non-localized artwork.
+class ImageBannerBlock extends StatelessWidget {
+  const ImageBannerBlock({super.key, required this.p, required this.t, required this.ar});
+  final Map<String, dynamic> p;
+  final DynTheme t;
+  final bool ar;
+
+  static const _aspectMap = {
+    '16_9': 16 / 9,
+    '3_1':  3 / 1,
+    '4_3':  4 / 3,
+    '1_1':  1.0,
+    '3_4':  3 / 4,
+  };
+
+  String _pickImage(Map<String, dynamic> item) {
+    final base = (item['image_url'] as String?) ?? '';
+    if (!ar) return base;
+    final loc = (item['image_url_ar'] as String?) ?? '';
+    return loc.isNotEmpty ? loc : base;
+  }
+
+  String _pickAlt(Map<String, dynamic> item) {
+    final v = (ar ? item['altAr'] : item['altEn'])?.toString();
+    return v ?? '';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final banners = ((p['banners'] as List?) ?? const []).cast<dynamic>()
+        .map((e) => (e as Map).cast<String, dynamic>())
+        .where((b) => _pickImage(b).isNotEmpty)
+        .toList();
+    if (banners.isEmpty) return const SizedBox.shrink();
+    final variant = (p['variant'] as String?) ?? 'full';
+    final aspect = _aspectMap[(p['aspect'] as String?) ?? '16_9'] ?? 16 / 9;
+    final radius = ((p['radius'] as num?)?.toDouble() ?? 12).clamp(0, 32).toDouble();
+    final gap = ((p['gap'] as num?)?.toDouble() ?? 8).clamp(0, 32).toDouble();
+
+    Widget tile(Map<String, dynamic> b) {
+      final img = _pickImage(b);
+      final alt = _pickAlt(b);
+      final link = (b['link'] as Map?)?.cast<String, dynamic>();
+      return GestureDetector(
+        onTap: () => _openLink(context, link),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(radius),
+          child: AspectRatio(
+            aspectRatio: aspect,
+            child: Semantics(
+              label: alt,
+              image: true,
+              child: CachedNetworkImage(
+                imageUrl: img,
+                fit: BoxFit.cover,
+                placeholder: (_, __) => Container(color: t.primary.withOpacity(0.06)),
+                errorWidget: (_, __, ___) => Container(
+                  color: t.primary.withOpacity(0.06),
+                  child: Icon(Icons.image_outlined, color: t.dark.withOpacity(0.3)),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    Widget body;
+    if (variant == 'cols_2' && banners.length >= 1) {
+      final pair = banners.take(2).toList();
+      body = Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        for (int i = 0; i < pair.length; i++) ...[
+          Expanded(child: tile(pair[i])),
+          if (i != pair.length - 1) SizedBox(width: gap),
+        ],
+      ]);
+    } else if (variant == 'cols_3') {
+      final trio = banners.take(3).toList();
+      body = Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        for (int i = 0; i < trio.length; i++) ...[
+          Expanded(child: tile(trio[i])),
+          if (i != trio.length - 1) SizedBox(width: gap),
+        ],
+      ]);
+    } else {
+      body = tile(banners.first);
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      child: body,
+    );
+  }
+}
+
+// Local link opener mirroring dynamic_page_screen.dart's _openLink — kept
+// inline so this widget stays self-contained.
+void _openLink(BuildContext context, Map<String, dynamic>? link) {
+  if (link == null) return;
+  final type = link['type']?.toString();
+  final value = link['value']?.toString();
+  if (type == null || value == null || value.isEmpty) return;
+  switch (type) {
+    case 'product':
+      final id = int.tryParse(value) ?? 0;
+      if (id > 0) UellowRouter.goProduct(context, id);
+      break;
+    case 'category':
+      final id = int.tryParse(value) ?? 0;
+      if (id > 0) UellowRouter.goCollection(context, id);
+      break;
+    case 'url':
+      launchUrl(Uri.parse(value), mode: LaunchMode.externalApplication);
+      break;
+    case 'screen':
+      Navigator.of(context).pushNamed('/$value');
+      break;
   }
 }
 
