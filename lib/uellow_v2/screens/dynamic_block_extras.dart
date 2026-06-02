@@ -497,6 +497,23 @@ class PromoPillsBlock extends StatelessWidget {
         return SizedBox(height: 28, child: _PromoTickerSlim(
             items: items, t: t, ar: ar, p: p));
 
+      case 'cols_3':
+        // v2.0.66 — 3 equal columns spanning full screen width.
+        // Each cell shows an icon above a single tiny line of text so
+        // 3 items fit comfortably even on narrow phones.
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          child: Row(
+            children: [
+              for (int i = 0; i < items.length && i < 3; i++) ...[
+                Expanded(child: _PromoCol3(
+                    it: items[i], t: t, ar: ar, parentP: p, index: i)),
+                if (i < items.length - 1 && i < 2) SizedBox(width: gap),
+              ],
+            ],
+          ),
+        );
+
       default: // row
         return Padding(padding: pad, child: Row(children: [
           for (int i = 0; i < items.length; i++) ...[
@@ -684,6 +701,45 @@ class _PromoMiniBar extends StatelessWidget {
                 fontWeight: FontWeight.w600,
                 color: fg.withValues(alpha: 0.65))),
           ],
+        ]),
+      ),
+    );
+  }
+}
+
+class _PromoCol3 extends StatelessWidget {
+  const _PromoCol3({required this.it, required this.t, required this.ar,
+      required this.parentP, required this.index});
+  final Map<String, dynamic> it;
+  final DynTheme t;
+  final bool ar;
+  final Map<String, dynamic> parentP;
+  final int index;
+  @override
+  Widget build(BuildContext context) {
+    final icon = (it['icon'] as String?) ?? '🎁';
+    final title = ar
+        ? (it['titleAr']?.toString() ?? it['titleEn']?.toString() ?? '')
+        : (it['titleEn']?.toString() ?? '');
+    final bg = BlockEnvelope._hex(it['color']) ?? const Color(0xFFFFF6E0);
+    final iconColor = BlockEnvelope._hex(it['icon_color']) ?? t.dark;
+    final fg = BlockEnvelope._hex(it['text_color']) ?? t.dark;
+    return GestureDetector(
+      onTap: () => _openLink(context, (it['link'] as Map?)?.cast<String, dynamic>()),
+      child: Container(
+        height: 36,
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+        decoration: BoxDecoration(color: bg,
+            borderRadius: BorderRadius.circular(8)),
+        child: Row(mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+          Text(icon, style: TextStyle(fontSize: 12, color: iconColor)),
+          const SizedBox(width: 4),
+          Flexible(child: Text(title,
+              maxLines: 1, overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 9.5,
+                  fontWeight: FontWeight.w700, color: fg, height: 1.1))),
         ]),
       ),
     );
