@@ -1508,14 +1508,14 @@ class _FlashClassic extends StatelessWidget {
                 _DhmsCounter(initial: endsAt),
               ]),
               const SizedBox(height: 10),
-              SizedBox(height: 216,
+              SizedBox(height: 178,
                 child: ListView.separated(
             physics: const ClampingScrollPhysics(),
                   scrollDirection: Axis.horizontal,
                   itemCount: items.length,
                   separatorBuilder: (_, __) => const SizedBox(width: 8),
                   itemBuilder: (_, i) => SizedBox(
-                      width: 138,
+                      width: 124,
                       child: ProductCard(product: items[i], inFlashSale: true)),
                 ),
               ),

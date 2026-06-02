@@ -191,51 +191,68 @@ class _FlashLayout extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // v2.0.62 — Compact pro design: smaller card, lighter typography,
+    // styled "Save" pill, no bottom % badge.
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       _Image(product: product, hasDiscount: hasDiscount,
           discountPct: discountPct, faved: faved, onFav: onFav),
       Padding(
-        padding: const EdgeInsets.fromLTRB(10, 10, 10, 12),
+        padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          // Price row — current + crossed-out original next to each other
+          // Price row — smaller, refined
           Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
             Text(product.price.amount.toStringAsFixed(3),
-                style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w900,
-                    color: UellowColors.danger, letterSpacing: -0.3)),
-            const SizedBox(width: 3),
-            Padding(padding: const EdgeInsets.only(bottom: 2),
+                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w900,
+                    color: UellowColors.danger, letterSpacing: -0.2)),
+            const SizedBox(width: 2),
+            Padding(padding: const EdgeInsets.only(bottom: 1),
                 child: Text(product.price.symbol,
-                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800,
+                    style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w800,
                         color: UellowColors.danger))),
             if (hasDiscount) ...[
-              const SizedBox(width: 8),
-              Padding(padding: const EdgeInsets.only(bottom: 3),
+              const SizedBox(width: 6),
+              Padding(padding: const EdgeInsets.only(bottom: 2),
                   child: MidStrikePrice(
                       text: product.comparePrice!.amount.toStringAsFixed(3),
-                      fontSize: 12, color: UellowColors.muted)),
+                      fontSize: 9, color: UellowColors.muted)),
             ],
           ]),
           if (hasDiscount) ...[
-            const SizedBox(height: 6),
-            Row(children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: UellowColors.danger,
-                  borderRadius: BorderRadius.circular(5),
-                ),
-                child: Text('-$discountPct%',
-                    style: const TextStyle(color: Colors.white,
-                        fontSize: 10, fontWeight: FontWeight.w900)),
+            const SizedBox(height: 5),
+            // v2.0.62 — single elegant "Save X.XXX KD" pill instead of
+            // the loud %-off badge + bare text combo.
+            Align(alignment: Alignment.centerLeft, child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  begin: Alignment.centerLeft, end: Alignment.centerRight,
+                  colors: [Color(0xFFE6F7EF), Color(0xFFD4F0DD)]),
+                borderRadius: BorderRadius.circular(4),
+                border: Border.all(
+                    color: UellowColors.successDk.withValues(alpha: 0.18),
+                    width: 0.6),
               ),
-              const SizedBox(width: 6),
-              Text(lang == 'ar'
-                  ? 'وفّر ${saveAmount.toStringAsFixed(3)} ${product.price.displaySymbol(lang)}'
-                  : 'Save ${saveAmount.toStringAsFixed(3)} ${product.price.displaySymbol(lang)}',
-                  style: const TextStyle(fontSize: 10.5,
-                      fontWeight: FontWeight.w800,
-                      color: UellowColors.successDk)),
-            ]),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                const Icon(Icons.savings_outlined, size: 9,
+                    color: UellowColors.successDk),
+                const SizedBox(width: 3),
+                Text(lang == 'ar' ? 'وفّر' : 'Save',
+                    style: const TextStyle(fontSize: 8.5,
+                        fontWeight: FontWeight.w700,
+                        color: UellowColors.successDk,
+                        letterSpacing: 0.3)),
+                const SizedBox(width: 3),
+                Text(saveAmount.toStringAsFixed(3),
+                    style: const TextStyle(fontSize: 9.5,
+                        fontWeight: FontWeight.w900,
+                        color: UellowColors.successDk)),
+                const SizedBox(width: 2),
+                Text(product.price.displaySymbol(lang),
+                    style: const TextStyle(fontSize: 7.5,
+                        fontWeight: FontWeight.w700,
+                        color: UellowColors.successDk)),
+              ]),
+            )),
           ],
         ]),
       ),
