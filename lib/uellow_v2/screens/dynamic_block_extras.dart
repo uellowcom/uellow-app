@@ -3727,7 +3727,7 @@ class ImageBannerBlock extends StatelessWidget {
       final alt = _pickAlt(b);
       final link = (b['link'] as Map?)?.cast<String, dynamic>();
       return GestureDetector(
-        onTap: () => _openLink(context, link),
+        onTap: () => _openBannerLink(context, link),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(radius),
           child: AspectRatio(
@@ -3778,9 +3778,10 @@ class ImageBannerBlock extends StatelessWidget {
   }
 }
 
-// Local link opener mirroring dynamic_page_screen.dart's _openLink — kept
-// inline so this widget stays self-contained.
-void _openLink(BuildContext context, Map<String, dynamic>? link) {
+// Local link opener for ImageBannerBlock — mirrors the global _openLink in
+// dynamic_page_screen.dart. Named distinctly because another `_openLink`
+// already lives in this file (used by Slider / Story Bubbles etc).
+void _openBannerLink(BuildContext context, Map<String, dynamic>? link) {
   if (link == null) return;
   final type = link['type']?.toString();
   final value = link['value']?.toString();
