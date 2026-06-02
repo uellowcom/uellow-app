@@ -244,13 +244,13 @@ class _SubcatStrip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final lang = UellowApi.instance.lang;
+    // v2.0.78 — subcategory thumbs: light-gray background (was yellow);
+    // tighter vertical padding so the gap to the filter/sort bar below
+    // doesn't feel like a separate band.
     return Container(
       color: Colors.white,
-      padding: const EdgeInsets.symmetric(vertical: 10),
-      decoration: const BoxDecoration(
-        border: Border(bottom: BorderSide(color: UellowColors.border)),
-      ),
-      child: SizedBox(height: 100, child: ListView.separated(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: SizedBox(height: 92, child: ListView.separated(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 12),
         itemCount: subs.length,
@@ -259,13 +259,13 @@ class _SubcatStrip extends StatelessWidget {
           final c = subs[i];
           return GestureDetector(
             onTap: () => UellowRouter.goCollection(context, c.id),
-            child: SizedBox(width: 76, child: Column(children: [
+            child: SizedBox(width: 72, child: Column(children: [
               Container(
-                width: 64, height: 64,
+                width: 60, height: 60,
                 decoration: BoxDecoration(
-                  color: UellowColors.yellowSoft,
+                  color: const Color(0xFFEFEFEF),
                   borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: UellowColors.border),
+                  border: Border.all(color: const Color(0xFFE5E5E5)),
                 ),
                 clipBehavior: Clip.antiAlias,
                 child: (c.image != null && c.image!.isNotEmpty)

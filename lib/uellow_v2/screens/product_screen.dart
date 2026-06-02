@@ -64,7 +64,19 @@ class _ProductScreenState extends State<ProductScreen> {
               ]),
             ));
           }
-          return _buildScroll(snap.data!);
+          // v2.0.78 — pull-to-refresh wraps the scroll so the user can
+          // drag the product page down to reload its data (price, stock,
+          // related products, etc.).
+          return RefreshIndicator(
+            color: UellowColors.darkBrown,
+            backgroundColor: Colors.white,
+            onRefresh: () async {
+              final f = UellowApi.instance.products.detail(widget.productId);
+              setState(() { _future = f; });
+              await f;
+            },
+            child: _buildScroll(snap.data!),
+          );
         },
       )),
       // Beena now lives in the bottom CTA bar — no floating button needed
@@ -101,7 +113,11 @@ class _ProductScreenState extends State<ProductScreen> {
       gallery = [selectedColorVal.image!, ...gallery.where((u) => u != selectedColorVal.image)];
     }
 
-    return CustomScrollView(slivers: [
+    return CustomScrollView(
+      // v2.0.78 — AlwaysScrollableScrollPhysics so the RefreshIndicator
+      // above can trigger even when the page hasn't fully overflowed.
+      physics: const AlwaysScrollableScrollPhysics(),
+      slivers: [
       SliverToBoxAdapter(child: _Gallery(
         images: gallery, videos: p.videos, page: _galleryPage,
         onChanged: (i) => setState(() => _galleryPage = i),
@@ -133,7 +149,13 @@ class _ProductScreenState extends State<ProductScreen> {
       ),
       SliverToBoxAdapter(child: _Title(p: p)),
       SliverToBoxAdapter(child: _PriceRow(p: p)),
-      if (p.vendor != null) SliverToBoxAdapter(child: _VendorCard(vendor: p.vendor!)),
+      // v2.0.78 — when a product has no vendor, show a "Fulfilled by
+      // Uellow" badge so the user knows who's responsible (instead of an
+      // empty / missing seller card).
+      if (p.vendor != null)
+        SliverToBoxAdapter(child: _VendorCard(vendor: p.vendor!))
+      else
+        const SliverToBoxAdapter(child: _FulfilledByUellowCard()),
       SliverToBoxAdapter(child: _Attributes(
         productId: p.id,
         attributes: p.attributes,
@@ -222,7 +244,12 @@ class _Gallery extends StatelessWidget {
             }
             final it = items[i];
             if (it['type'] == 'video') {
-              return _VideoTile(video: it['video'] as UellowProductVideo);
+              // v2.0.78 — pass the first product image as a fallback
+              // thumbnail so video tiles aren't featureless black squares.
+              return _VideoTile(
+                video: it['video'] as UellowProductVideo,
+                fallbackImage: images.isNotEmpty ? images.first : null,
+              );
             }
             return CachedNetworkImage(imageUrl: it['url'] as String, fit: BoxFit.contain);
           },
@@ -280,15 +307,19 @@ class _Gallery extends StatelessWidget {
 /// Single video tile in the product gallery — shows the thumbnail with
 /// a big play button overlay; tap opens the full-screen player.
 class _VideoTile extends StatelessWidget {
-  const _VideoTile({required this.video});
+  const _VideoTile({required this.video, this.fallbackImage});
   final UellowProductVideo video;
+  // v2.0.78 — if the video has no thumbnail AND we can't derive one from
+  // YouTube, fall back to one of the product's gallery images so the
+  // tile isn't a featureless black square.
+  final String? fallbackImage;
   String get _thumb {
     if (video.thumbnail.isNotEmpty) {
       return '${UellowApi.instance.baseUrl}${video.thumbnail}';
     }
-    // YouTube auto-thumbnail from the embed URL.
     final m = RegExp(r'embed/([a-zA-Z0-9_-]{11})').firstMatch(video.embedUrl);
     if (m != null) return 'https://i.ytimg.com/vi/${m.group(1)}/hqdefault.jpg';
+    if (fallbackImage != null && fallbackImage!.isNotEmpty) return fallbackImage!;
     return '';
   }
   @override
@@ -841,6 +872,67 @@ class _VendorCard extends StatelessWidget {
   );
 }
 
+// v2.0.78 — fallback for products without a vendor — shows that Uellow
+// itself fulfils the order. Mirrors _VendorCard's footprint so screen
+// layout stays consistent.
+class _FulfilledByUellowCard extends StatelessWidget {
+  const _FulfilledByUellowCard();
+  @override
+  Widget build(BuildContext context) {
+    final ar = UellowApi.instance.lang == 'ar';
+    return Container(
+      color: Colors.white,
+      padding: const EdgeInsets.fromLTRB(18, 0, 18, 12),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: UellowColors.yellowSoft,
+          border: Border.all(color: UellowColors.yellow, width: 1.2),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(children: [
+          Container(
+            width: 44, height: 44,
+            decoration: BoxDecoration(
+              color: UellowColors.yellow,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: UellowColors.yellowDk, width: 1.5),
+            ),
+            alignment: Alignment.center,
+            child: const Text('uellow.',
+                style: TextStyle(fontSize: 11.5,
+                    fontWeight: FontWeight.w900,
+                    color: UellowColors.darkBrown, letterSpacing: -0.5)),
+          ),
+          const SizedBox(width: 12),
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(children: [
+              const Icon(Icons.verified_outlined, size: 11,
+                  color: UellowColors.muted),
+              const SizedBox(width: 3),
+              Text(ar ? 'تم بواسطة' : 'FULFILLED BY',
+                  style: const TextStyle(fontSize: 9.5,
+                      fontWeight: FontWeight.w900, color: UellowColors.muted,
+                      letterSpacing: 0.6)),
+            ]),
+            const SizedBox(height: 2),
+            Text('Uellow',
+                style: const TextStyle(fontWeight: FontWeight.w900,
+                    fontSize: 14.5, color: UellowColors.darkBrown)),
+            const SizedBox(height: 1),
+            Text(ar
+                ? 'الشحن والاستبدال وخدمة العملاء من يلو مباشرةً'
+                : 'Shipping, returns & support handled directly by Uellow',
+                style: const TextStyle(fontSize: 10.5,
+                    color: UellowColors.muted, fontWeight: FontWeight.w600,
+                    height: 1.3)),
+          ])),
+        ]),
+      ),
+    );
+  }
+}
+
 // ─── Attributes ────────────────────────────────────────────────────
 
 class _Attributes extends StatelessWidget {
@@ -1279,21 +1371,49 @@ class _BulkPricing extends StatelessWidget {
             ),
         ]),
         const SizedBox(height: 14),
-        // Render up to 4 tiers in a tight row. Spacing is 6px so 4 columns
-        // still breathe on small phones.
-        Row(children: List.generate(tiers.length, (i) {
-          final t = tiers[i];
-          final nextMin = i < tiers.length - 1 ? tiers[i + 1].minQty - 1 : null;
-          final qtyLabel = nextMin != null
-              ? '${t.minQty}–$nextMin'
-              : '${t.minQty}+';
-          return Expanded(child: Padding(
-            padding: EdgeInsets.only(right: i < tiers.length - 1 ? 6 : 0),
-            child: _tier(qtyLabel: qtyLabel, price: t.price, sym: t.currency,
-                save: t.savePct, best: i == bestIdx && tiers.length > 1,
-                capped: t.capped, ar: ar),
-          ));
-        })),
+        // v2.0.78 — when more than 3 tiers are configured, switch from a
+        // cramped equal-Expanded row to a horizontally-scrollable strip.
+        // 3 tiles peek-fit at typical phone widths so the user sees there
+        // are more to swipe to.
+        if (tiers.length <= 3)
+          Row(children: List.generate(tiers.length, (i) {
+            final t = tiers[i];
+            final nextMin = i < tiers.length - 1 ? tiers[i + 1].minQty - 1 : null;
+            final qtyLabel = nextMin != null
+                ? '${t.minQty}–$nextMin'
+                : '${t.minQty}+';
+            return Expanded(child: Padding(
+              padding: EdgeInsets.only(right: i < tiers.length - 1 ? 6 : 0),
+              child: _tier(qtyLabel: qtyLabel, price: t.price, sym: t.currency,
+                  save: t.savePct, best: i == bestIdx && tiers.length > 1,
+                  capped: t.capped, ar: ar),
+            ));
+          }))
+        else
+          SizedBox(
+            height: 118,
+            child: ListView.separated(
+              padding: EdgeInsets.zero,
+              scrollDirection: Axis.horizontal,
+              physics: const ClampingScrollPhysics(),
+              itemCount: tiers.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 6),
+              itemBuilder: (_, i) {
+                final t = tiers[i];
+                final nextMin = i < tiers.length - 1 ? tiers[i + 1].minQty - 1 : null;
+                final qtyLabel = nextMin != null
+                    ? '${t.minQty}–$nextMin'
+                    : '${t.minQty}+';
+                return SizedBox(
+                  // ~3 tiles across visible screen width — peek hints at more
+                  width: (MediaQuery.of(context).size.width - 28 - 14 - 12) / 3,
+                  child: _tier(qtyLabel: qtyLabel, price: t.price,
+                      sym: t.currency, save: t.savePct,
+                      best: i == bestIdx, capped: t.capped, ar: ar),
+                );
+              },
+            ),
+          ),
         // Tier-floor protection legend (only shows if ANY tier was capped)
         if (tiers.any((t) => t.capped)) ...[
           const SizedBox(height: 10),
@@ -1661,16 +1781,26 @@ class _ReviewsBlockState extends State<_ReviewsBlock> {
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
           Expanded(child: Text(T.t('product.reviews'), style: UT.h3)),
-          OutlinedButton.icon(
-            onPressed: () => _openWriteReview(context),
-            icon: const Icon(Icons.edit_outlined, size: 14, color: UellowColors.darkBrown),
-            label: Text(T.t('product.write_review'),
-                style: const TextStyle(fontSize: 11.5,
-                    fontWeight: FontWeight.w800, color: UellowColors.darkBrown)),
-            style: OutlinedButton.styleFrom(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              side: const BorderSide(color: UellowColors.yellow, width: 1.5),
-              shape: const StadiumBorder(),
+          // v2.0.78 — solid yellow pill, smaller, with a leading star icon.
+          // Reads as a clear branded CTA instead of a thin outlined button.
+          Material(
+            color: UellowColors.yellow,
+            shape: const StadiumBorder(),
+            elevation: 0,
+            child: InkWell(
+              customBorder: const StadiumBorder(),
+              onTap: () => _openWriteReview(context),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  const Icon(Icons.star_rounded, size: 14, color: UellowColors.darkBrown),
+                  const SizedBox(width: 4),
+                  Text(T.t('product.write_review'),
+                      style: const TextStyle(fontSize: 11,
+                          fontWeight: FontWeight.w900, color: UellowColors.darkBrown,
+                          letterSpacing: -0.1)),
+                ]),
+              ),
             ),
           ),
         ]),
@@ -2486,9 +2616,14 @@ class _ImageZoom extends StatelessWidget {
 
 void _showAtcSuccessDialog(BuildContext context, UellowProductFull p, int qty) {
   final ar = UellowApi.instance.lang == 'ar';
+  // v2.0.78 — enableDrag: true so the user can swipe the sheet down to
+  // close (the default is true but make it explicit). isDismissible too.
   showModalBottomSheet(
     context: context, backgroundColor: Colors.transparent,
     isScrollControlled: true,
+    enableDrag: true,
+    isDismissible: true,
+    showDragHandle: true,
     builder: (sheetContext) {
       // Capture this sheet's own NavigatorState so the buttons keep
       // working even after a re-parent (e.g. lang switch rebuilds).
