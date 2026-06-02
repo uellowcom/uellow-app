@@ -114,6 +114,9 @@ class _StdLayout extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // v2.0.73 redesign — 2-line product name, discount % INLINE with
+    // price, small sales/views badges (when known), and Save + Avail
+    // pinned at the END of the card so they always read as "summary".
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -124,43 +127,62 @@ class _StdLayout extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Single-line name — more room for the price + meta below.
-              Text(product.name.current(lang),
-                  maxLines: 1, overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 11, height: 1.25, color: UellowColors.ink,
-                    fontWeight: FontWeight.w700,
-                  )),
+              // Two-line product name (height fixed so cards align).
+              SizedBox(
+                height: 30,
+                child: Text(product.name.current(lang),
+                    maxLines: 2, overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 11, height: 1.25, color: UellowColors.ink,
+                      fontWeight: FontWeight.w700,
+                    )),
+              ),
               const SizedBox(height: 4),
-              // Price row — current + crossed-out original, INLINE
-              Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+              // Price + inline -X% pill + struck-through compare (number-only,
+              // black strike to read cleanly on the gold/cream background).
+              Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
                 Text(product.price.amount.toStringAsFixed(3),
                     style: const TextStyle(
-                      fontSize: 14.5, fontWeight: FontWeight.w900,
+                      fontSize: 13.5, fontWeight: FontWeight.w900,
                       color: UellowColors.ink, letterSpacing: -0.3,
                     )),
                 const SizedBox(width: 3),
-                Padding(padding: const EdgeInsets.only(bottom: 1),
-                    child: Text(product.price.displaySymbol(lang),
-                        style: const TextStyle(
-                          fontSize: 9.5, fontWeight: FontWeight.w700,
-                          color: UellowColors.muted,
-                        ))),
+                Text(product.price.displaySymbol(lang),
+                    style: const TextStyle(
+                      fontSize: 9, fontWeight: FontWeight.w700,
+                      color: UellowColors.muted,
+                    )),
                 if (hasDiscount) ...[
                   const SizedBox(width: 5),
-                  Padding(padding: const EdgeInsets.only(bottom: 1),
-                      child: MidStrikePrice(
-                          text: product.comparePrice!.amount.toStringAsFixed(3),
-                          fontSize: 10, color: UellowColors.muted)),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1.5),
+                    decoration: BoxDecoration(
+                      color: UellowColors.danger,
+                      borderRadius: BorderRadius.circular(3),
+                    ),
+                    child: Text('-$discountPct%',
+                        style: const TextStyle(
+                          color: Colors.white, fontSize: 8.5,
+                          fontWeight: FontWeight.w900, height: 1.0,
+                        )),
+                  ),
+                  const SizedBox(width: 4),
+                  Flexible(child: MidStrikePrice(
+                      text: product.comparePrice!.amount.toStringAsFixed(3),
+                      fontSize: 9, color: Colors.black87)),
                 ],
               ]),
               const SizedBox(height: 4),
-              _RatingRow(rating: product.rating),
-              const SizedBox(height: 4),
-              // Bottom row — save amount + availability
+              // Stats row: ⭐ rating · 🛒 sales · 👁 views — only shows
+              // non-zero metrics so quiet products stay clean.
+              _StatsRow(product: product, lang: lang),
+              const SizedBox(height: 6),
+              // Bottom row — save amount + availability, the summary line
+              // at the end of the card.
               Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
                 if (hasDiscount)
-                  _SavePill(amount: saveAmount, currency: product.price.displaySymbol(lang))
+                  Flexible(child: _SavePill(amount: saveAmount,
+                      currency: product.price.displaySymbol(lang)))
                 else
                   const SizedBox.shrink(),
                 if (showStockLabel) _AvailPill(product: product),
@@ -171,6 +193,77 @@ class _StdLayout extends StatelessWidget {
       ],
     );
   }
+}
+
+// v2.0.73 — compact stats line (rating · sales · views). All three are
+// optional; the row collapses when nothing relevant is set.
+class _StatsRow extends StatelessWidget {
+  const _StatsRow({required this.product, required this.lang});
+  final UellowProductCard product;
+  final String lang;
+
+  String _fmtCount(int n) {
+    if (n >= 1000) return '${(n / 1000).toStringAsFixed(n >= 10000 ? 0 : 1)}k';
+    return n.toString();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final hasRating = product.rating.count > 0 || product.rating.avg > 0;
+    final hasSold = product.soldCount > 0;
+    final hasViews = product.viewCount > 0;
+    if (!hasRating && !hasSold && !hasViews) return const SizedBox.shrink();
+    final children = <Widget>[];
+    if (hasRating) {
+      children.addAll([
+        const Icon(Icons.star_rounded, size: 11, color: Color(0xFFFFC107)),
+        const SizedBox(width: 2),
+        Text(product.rating.avg.toStringAsFixed(1),
+            style: const TextStyle(fontSize: 9.5,
+                fontWeight: FontWeight.w800, color: UellowColors.ink)),
+        if (product.rating.count > 0) ...[
+          const SizedBox(width: 2),
+          Text('(${_fmtCount(product.rating.count)})',
+              style: const TextStyle(fontSize: 9,
+                  color: UellowColors.muted, fontWeight: FontWeight.w600)),
+        ],
+      ]);
+    }
+    if (hasSold) {
+      if (children.isNotEmpty) children.add(const _Dot());
+      children.addAll([
+        const Icon(Icons.shopping_bag_outlined, size: 10,
+            color: UellowColors.muted),
+        const SizedBox(width: 2),
+        Text(_fmtCount(product.soldCount),
+            style: const TextStyle(fontSize: 9.5,
+                fontWeight: FontWeight.w700, color: UellowColors.ink)),
+      ]);
+    }
+    if (hasViews) {
+      if (children.isNotEmpty) children.add(const _Dot());
+      children.addAll([
+        const Icon(Icons.visibility_outlined, size: 10,
+            color: UellowColors.muted),
+        const SizedBox(width: 2),
+        Text(_fmtCount(product.viewCount),
+            style: const TextStyle(fontSize: 9.5,
+                fontWeight: FontWeight.w700, color: UellowColors.ink)),
+      ]);
+    }
+    return Row(children: children);
+  }
+}
+
+class _Dot extends StatelessWidget {
+  const _Dot();
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(horizontal: 5),
+    child: Container(width: 2.5, height: 2.5,
+        decoration: const BoxDecoration(
+            color: UellowColors.muted, shape: BoxShape.circle)),
+  );
 }
 
 // ─── Flash-sale layout — name hidden, big price row + save block ───
@@ -232,7 +325,7 @@ class _FlashLayout extends StatelessWidget {
                     width: 0.6),
               ),
               child: Row(mainAxisSize: MainAxisSize.min, children: [
-                const Icon(Icons.savings_outlined, size: 9,
+                const Icon(Icons.discount_outlined, size: 9,
                     color: UellowColors.successDk),
                 const SizedBox(width: 3),
                 Text(lang == 'ar' ? 'وفّر' : 'Save',

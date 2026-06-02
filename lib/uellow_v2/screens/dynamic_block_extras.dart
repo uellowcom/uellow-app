@@ -268,7 +268,11 @@ class DynSectionHeader extends StatelessWidget {
     //               soft shadow.
     final headerImg = (props['header_image_url'] as String?) ?? '';
     final headerIcon = (props['header_icon'] as String?) ?? '';
-    final headerMode = (props['header_image_mode'] as String?) ?? 'beside';
+    // v2.0.73 — when the admin uploads a header image, default to BANNER
+    // (full-width). Was defaulting to a small beside-the-title icon, but
+    // that hid the uploaded artwork. They can switch back via the builder.
+    final headerMode = (props['header_image_mode'] as String?)
+        ?? (headerImg.isNotEmpty ? 'banner' : 'beside');
     final iconSize = ((props['header_icon_size'] as num?)?.toDouble() ?? 22).clamp(12, 64).toDouble();
     final bannerHeight = ((props['header_banner_height'] as num?)?.toDouble() ?? 84).clamp(40, 240).toDouble();
     final bannerRadius = ((props['header_banner_radius'] as num?)?.toDouble() ?? 12).clamp(0, 32).toDouble();
@@ -1530,23 +1534,27 @@ String _currency(Map<String, dynamic> p) {
 }
 
 // v2.0.71 — format a {amount, currency, symbol, digits} map into a readable
-// string. Falls back to a legacy `display` field if present. The resolver
-// only ships the numeric fields, so without this the prices showed blank.
-String _fmtPrice(dynamic raw) {
+// string. v2.0.73 — localize the currency symbol (KD → د.ك for Arabic)
+// and add `withSymbol:false` so the strikethrough-compare row can be just
+// the bare number.
+String _fmtPrice(dynamic raw, {bool ar = false, bool withSymbol = true}) {
   if (raw == null) return '';
   if (raw is num) return raw.toStringAsFixed(3);
   if (raw is String) return raw;
   if (raw is Map) {
     final m = raw.cast<String, dynamic>();
-    final disp = m['display']?.toString();
-    if (disp != null && disp.isNotEmpty) return disp;
     final amt = m['amount'];
-    if (amt is! num) return '';
+    if (amt is! num) {
+      final disp = m['display']?.toString();
+      return disp ?? '';
+    }
     final digits = (m['digits'] is num) ? (m['digits'] as num).toInt() : 3;
-    final sym = m['symbol']?.toString().isNotEmpty == true
-        ? m['symbol'].toString()
-        : (m['currency']?.toString() ?? '');
-    return '${amt.toStringAsFixed(digits)} $sym'.trim();
+    final numStr = amt.toStringAsFixed(digits);
+    if (!withSymbol) return numStr;
+    final rawSym = m['symbol']?.toString() ?? '';
+    final code = m['currency']?.toString() ?? '';
+    final sym = ar ? UellowMoney.localizedSymbol(code, rawSym, 'ar') : rawSym;
+    return '$numStr $sym'.trim();
   }
   return raw.toString();
 }
@@ -1606,10 +1614,10 @@ class _DiscountCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final img = (p['image'] as String?) ?? '';
-    // v2.0.71 — use _fmtPrice helper. The resolver returns {amount, currency,
-    // symbol, digits} with NO `display` key, so the old code rendered blank.
-    final price = _fmtPrice(p['price']);
-    final compare = _fmtPrice(p['compare_price']);
+    // v2.0.71/73 — localized currency in Arabic; compare price renders as
+    // a bare number to save space alongside an inline discount-% badge.
+    final price = _fmtPrice(p['price'], ar: ar);
+    final compare = _fmtPrice(p['compare_price'], ar: ar, withSymbol: false);
     final discount = _discountPct(p);
     final accent = _parseColor(props['accent']) ?? const Color(0xFFE63946);
     final radius = ((props['card_radius'] as num?)?.toDouble() ?? 10).clamp(0, 32).toDouble();
@@ -1653,17 +1661,8 @@ class _DiscountCard extends StatelessWidget {
                   ? CachedNetworkImage(imageUrl: img, fit: BoxFit.cover)
                   : Container(color: const Color(0xFFF1EBDF)),
             ),
-            if (showBadge && discount > 0)
-              Positioned(top: 6, left: 6, child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2.5),
-                decoration: BoxDecoration(
-                  color: accent,
-                  borderRadius: BorderRadius.circular(5),
-                  boxShadow: [BoxShadow(color: accent.withOpacity(0.4), blurRadius: 4, offset: const Offset(0, 1))],
-                ),
-                child: Text('-$discount%',
-                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 11, height: 1.0)),
-              )),
+            // v2.0.73 — on-image -X% badge removed; the discount now lives
+            // inline next to the price (per user request to reduce clutter).
             if (showUrg && discount >= urgTh)
               Positioned(top: 6, right: 6, child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2.5),
@@ -1735,24 +1734,40 @@ class _DiscountCard extends StatelessWidget {
                 ),
               SizedBox(height: big ? 6 : 5),
 
-              // Row 3: BIG price + strikethrough compare (inline, baseline-aligned)
-              Row(crossAxisAlignment: CrossAxisAlignment.baseline,
-                  textBaseline: TextBaseline.alphabetic, children: [
+              // v2.0.73 — Price row: BIG price + inline -X% pill + bare-number
+              // strikethrough compare with BLACK strike. Smaller fonts so all
+              // three elements fit comfortably on the same line.
+              Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
                 Flexible(child: Text(price,
                     maxLines: 1, overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       color: t.dark, fontWeight: FontWeight.w900,
-                      fontSize: big ? 17 : 14.5, height: 1.0,
+                      fontSize: big ? 15 : 13, height: 1.0,
                       letterSpacing: -0.3,
                     ))),
+                if (showBadge && discount > 0) ...[
+                  const SizedBox(width: 4),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1.5),
+                    decoration: BoxDecoration(
+                      color: accent,
+                      borderRadius: BorderRadius.circular(3),
+                    ),
+                    child: Text('-$discount%',
+                        style: const TextStyle(
+                          color: Colors.white, fontWeight: FontWeight.w900,
+                          fontSize: 9, height: 1.0,
+                        )),
+                  ),
+                ],
                 if (showCompare && compare.isNotEmpty) ...[
-                  const SizedBox(width: 5),
+                  const SizedBox(width: 4),
                   Flexible(child: Text(compare,
                       maxLines: 1, overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: t.dark.withOpacity(0.42), fontSize: 10,
+                      style: const TextStyle(
+                        color: Colors.black87, fontSize: 9.5,
                         decoration: TextDecoration.lineThrough,
-                        decorationColor: t.dark.withOpacity(0.42),
+                        decorationColor: Colors.black87,
                         fontWeight: FontWeight.w600, height: 1.0,
                       ))),
                 ],

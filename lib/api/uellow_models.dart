@@ -418,6 +418,10 @@ class UellowProductCard {
   final UellowVendorRef? vendor;
   final bool allowOutOfStockOrder;
   final bool hasVideo;
+  // v2.0.73 — sold/view counts surfaced as small badges on the product
+  // card. Backend may omit them; defaults to 0 so layout stays stable.
+  final int soldCount;
+  final int viewCount;
 
   const UellowProductCard({
     required this.id, required this.name, required this.slug,
@@ -427,6 +431,8 @@ class UellowProductCard {
     this.vendor,
     this.allowOutOfStockOrder = true,
     this.hasVideo = false,
+    this.soldCount = 0,
+    this.viewCount = 0,
   });
 
   factory UellowProductCard.fromJson(Map<String, dynamic> j) => UellowProductCard(
@@ -449,6 +455,8 @@ class UellowProductCard {
             : UellowVendorRef.fromJson(j['vendor'] as Map<String, dynamic>),
         allowOutOfStockOrder: (j['allow_out_of_stock_order'] ?? true) as bool,
         hasVideo: (j['has_video'] ?? false) as bool,
+        soldCount: (j['sold_count'] ?? 0) as int,
+        viewCount: (j['view_count'] ?? 0) as int,
       );
 }
 
@@ -463,8 +471,8 @@ class UellowProductFull extends UellowProductCard {
   final String barcode;
   final int warrantyMonths;
   final UellowText shippingInfoLabel;
-  final int soldCount;
-  final int viewCount;
+  // v2.0.73 — soldCount + viewCount moved to UellowProductCard so both the
+  // card and full models expose them. Re-declared here previously; removed.
   final UellowCategoryRef? brand;
   final List<UellowBulkTier> bulkPricing;
   /// v2.0.58 — effective max purchasable quantity from the backend
@@ -487,7 +495,7 @@ class UellowProductFull extends UellowProductCard {
     required this.attributes,
     required this.categories, required this.sku, required this.barcode,
     required this.warrantyMonths, required this.shippingInfoLabel,
-    this.soldCount = 0, this.viewCount = 0, this.brand,
+    int soldCount = 0, int viewCount = 0, this.brand,
     this.bulkPricing = const [],
     this.maxQtyBuyable = 10,
     bool allowOutOfStockOrder = true,
@@ -499,7 +507,8 @@ class UellowProductFull extends UellowProductCard {
             inStock: inStock, qtyAvailable: qtyAvailable, rating: rating,
             isPublished: isPublished, badges: badges, vendor: vendor,
             allowOutOfStockOrder: allowOutOfStockOrder,
-            hasVideo: hasVideo);
+            hasVideo: hasVideo,
+            soldCount: soldCount, viewCount: viewCount);
 
   factory UellowProductFull.fromJson(Map<String, dynamic> j) => UellowProductFull(
         id: (j['id'] ?? 0) as int,

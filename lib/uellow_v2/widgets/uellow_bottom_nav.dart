@@ -66,8 +66,22 @@ class DynNavItem {
   final String? badge;     // 'cart_count' | 'wishlist_count' | 'notifications' | null
 
   factory DynNavItem.fromJson(Map j) {
+    // v2.0.73 — pick the localized label for the current app language.
+    // Was hard-coded to `en`, so Arabic users saw English tab labels.
     final lbl = j['label'];
-    final lblStr = lbl is String ? lbl : (lbl is Map ? (lbl['en'] ?? '').toString() : '');
+    final ar = UellowApi.instance.lang.toLowerCase().startsWith('ar');
+    String lblStr;
+    if (lbl is String) {
+      lblStr = lbl;
+    } else if (lbl is Map) {
+      final m = lbl.cast<String, dynamic>();
+      final preferred = ar ? m['ar'] : m['en'];
+      lblStr = (preferred?.toString().isNotEmpty == true
+          ? preferred.toString()
+          : (m['en'] ?? m['ar'] ?? '').toString());
+    } else {
+      lblStr = '';
+    }
     final tgt = (j['target'] as Map?) ?? const {};
     return DynNavItem(
       id:           j['id']?.toString() ?? '',
