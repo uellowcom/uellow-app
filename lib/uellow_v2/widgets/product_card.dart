@@ -219,9 +219,8 @@ class _FlashLayout extends StatelessWidget {
           ]),
           if (hasDiscount) ...[
             const SizedBox(height: 5),
-            // v2.0.62 — single elegant "Save X.XXX KD" pill instead of
-            // the loud %-off badge + bare text combo.
-            Align(alignment: Alignment.centerLeft, child: Container(
+            // v2.0.65 — centered "Save X.XXX KD" pill in the flash card.
+            Align(alignment: Alignment.center, child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
               decoration: BoxDecoration(
                 gradient: const LinearGradient(
