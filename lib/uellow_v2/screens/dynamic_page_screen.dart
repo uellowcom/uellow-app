@@ -736,30 +736,33 @@ class _CategoriesBlock extends StatelessWidget {
       }
     }
 
+    // v2.0.71 — use DynSectionHeader so header_icon + banner mode work here.
+    final arrows = (showArrows && layout != 'grid')
+        ? Row(mainAxisSize: MainAxisSize.min, children: [
+            Container(width: 28, height: 28,
+                decoration: BoxDecoration(
+                    color: t.primary.withValues(alpha: 0.15),
+                    shape: BoxShape.circle),
+                child: Icon(ar ? Icons.chevron_right : Icons.chevron_left,
+                    color: t.dark, size: 18)),
+            const SizedBox(width: 6),
+            Container(width: 28, height: 28,
+                decoration: BoxDecoration(
+                    color: t.primary.withValues(alpha: 0.15),
+                    shape: BoxShape.circle),
+                child: Icon(ar ? Icons.chevron_left : Icons.chevron_right,
+                    color: t.dark, size: 18)),
+          ])
+        : null;
     return Container(
       margin: const EdgeInsets.fromLTRB(0, 8, 0, 8),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         if (showTitle)
-          Padding(padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-            child: Row(children: [
-              Expanded(child: Text(title, style: TextStyle(
-                  color: t.dark, fontSize: 14, fontWeight: FontWeight.w900))),
-              if (showArrows && layout != 'grid') ...[
-                Container(width: 28, height: 28,
-                    decoration: BoxDecoration(
-                        color: t.primary.withValues(alpha: 0.15),
-                        shape: BoxShape.circle),
-                    child: Icon(ar ? Icons.chevron_right : Icons.chevron_left,
-                        color: t.dark, size: 18)),
-                const SizedBox(width: 6),
-                Container(width: 28, height: 28,
-                    decoration: BoxDecoration(
-                        color: t.primary.withValues(alpha: 0.15),
-                        shape: BoxShape.circle),
-                    child: Icon(ar ? Icons.chevron_left : Icons.chevron_right,
-                        color: t.dark, size: 18)),
-              ],
-            ])),
+          DynSectionHeader(
+            props: p, theme: t, ar: ar,
+            fallbackEn: ar ? 'تسوّق حسب الفئة' : 'Shop by category',
+            trailing: arrows,
+          ),
         body,
       ]),
     );
@@ -785,7 +788,6 @@ class _ProductsBlock extends StatelessWidget {
     final items = ((data['items'] as List?) ?? const []).cast<dynamic>()
         .map((e) => (e as Map).cast<String, dynamic>()).toList();
     if (items.isEmpty) return const SizedBox.shrink();
-    final titleGap = (p['title_gap'] as num?)?.toDouble() ?? 6;
     final showHeader = title.isNotEmpty;
     // Default variant: kind='grid' → grid_2; everything else → carousel.
     final variant = (p['variant'] as String?) ??
@@ -801,24 +803,24 @@ class _ProductsBlock extends StatelessWidget {
       default:           body = _carousel(items);
     }
 
+    // v2.0.71 — use DynSectionHeader so header_icon + banner mode work here.
+    final seeAll = TextButton(
+      onPressed: () => Navigator.pushNamed(context,
+          kind == 'flash' ? Routes.flash : Routes.category),
+      style: TextButton.styleFrom(
+          foregroundColor: t.primary,
+          textStyle: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w800),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+          minimumSize: const Size(40, 28)),
+      child: Text(ar ? 'الكل ←' : 'See all →'),
+    );
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       if (showHeader)
-        Padding(padding: EdgeInsets.fromLTRB(16, 4, 16, titleGap),
-          child: Row(children: [
-            Expanded(child: Text(title, style: TextStyle(
-                color: t.dark, fontSize: 15, fontWeight: FontWeight.w900,
-                letterSpacing: -0.2))),
-            TextButton(
-              onPressed: () => Navigator.pushNamed(context,
-                  kind == 'flash' ? Routes.flash : Routes.category),
-              style: TextButton.styleFrom(
-                  foregroundColor: t.primary,
-                  textStyle: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w800),
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                  minimumSize: const Size(40, 28)),
-              child: Text(ar ? 'الكل ←' : 'See all →'),
-            ),
-          ])),
+        DynSectionHeader(
+          props: p, theme: t, ar: ar,
+          fallbackEn: _fallbackTitle(kind, false),
+          trailing: seeAll,
+        ),
       body,
     ]);
   }

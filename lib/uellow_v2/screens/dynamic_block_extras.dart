@@ -128,7 +128,9 @@ class _BackgroundLayer extends StatelessWidget {
           child: CustomPaint(
             painter: _PatternPainter(
               kind: pattern,
-              color: patternColor.withOpacity(0.08),
+              // v2.0.71 — slightly more visible (was 0.08) so the pattern
+              // reads on yellow/gold backgrounds without looking dirty.
+              color: patternColor.withValues(alpha: 0.13),
             ),
           ),
         ),
@@ -143,23 +145,29 @@ class _PatternPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final p = Paint()..color = color;
+    // v2.0.71 — antialiased + slightly rounded strokes so the pattern looks
+    // crisp on top of yellow/gold backgrounds (was hard-edged jaggy lines).
+    final p = Paint()
+      ..color = color
+      ..isAntiAlias = true
+      ..strokeCap = StrokeCap.round;
     switch (kind) {
       case 'dots':
-        for (double y = 8; y < size.height; y += 18) {
-          for (double x = 8; x < size.width; x += 18) {
-            canvas.drawCircle(Offset(x, y), 1.4, p);
+        // Slightly bigger dots on a tighter grid for a premium polka feel.
+        for (double y = 10; y < size.height; y += 16) {
+          for (double x = 10; x < size.width; x += 16) {
+            canvas.drawCircle(Offset(x, y), 1.6, p);
           }
         }
         break;
       case 'lines':
-        p.strokeWidth = 1;
+        p.strokeWidth = 0.9;
         for (double y = 0; y < size.height; y += 14) {
           canvas.drawLine(Offset(0, y), Offset(size.width, y), p);
         }
         break;
       case 'grid':
-        p.strokeWidth = 1;
+        p.strokeWidth = 0.9;
         for (double y = 0; y < size.height; y += 20) {
           canvas.drawLine(Offset(0, y), Offset(size.width, y), p);
         }
@@ -168,7 +176,7 @@ class _PatternPainter extends CustomPainter {
         }
         break;
       case 'mesh':
-        p.strokeWidth = 1;
+        p.strokeWidth = 0.9;
         for (double y = 0; y < size.height + size.width; y += 22) {
           canvas.drawLine(Offset(y, 0), Offset(0, y), p);
           canvas.drawLine(
@@ -1521,6 +1529,28 @@ String _currency(Map<String, dynamic> p) {
   return priceMap?['currency']?.toString() ?? 'KWD';
 }
 
+// v2.0.71 — format a {amount, currency, symbol, digits} map into a readable
+// string. Falls back to a legacy `display` field if present. The resolver
+// only ships the numeric fields, so without this the prices showed blank.
+String _fmtPrice(dynamic raw) {
+  if (raw == null) return '';
+  if (raw is num) return raw.toStringAsFixed(3);
+  if (raw is String) return raw;
+  if (raw is Map) {
+    final m = raw.cast<String, dynamic>();
+    final disp = m['display']?.toString();
+    if (disp != null && disp.isNotEmpty) return disp;
+    final amt = m['amount'];
+    if (amt is! num) return '';
+    final digits = (m['digits'] is num) ? (m['digits'] as num).toInt() : 3;
+    final sym = m['symbol']?.toString().isNotEmpty == true
+        ? m['symbol'].toString()
+        : (m['currency']?.toString() ?? '');
+    return '${amt.toStringAsFixed(digits)} $sym'.trim();
+  }
+  return raw.toString();
+}
+
 BoxDecoration _cardDecoration(Map<String, dynamic> props, {required double radius}) {
   final style = (props['card_style'] as String?) ?? 'flat';
   switch (style) {
@@ -1576,8 +1606,10 @@ class _DiscountCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final img = (p['image'] as String?) ?? '';
-    final price = ((p['price'] as Map?)?.cast<String, dynamic>())?['display']?.toString() ?? '';
-    final compare = ((p['compare_price'] as Map?)?.cast<String, dynamic>())?['display']?.toString();
+    // v2.0.71 — use _fmtPrice helper. The resolver returns {amount, currency,
+    // symbol, digits} with NO `display` key, so the old code rendered blank.
+    final price = _fmtPrice(p['price']);
+    final compare = _fmtPrice(p['compare_price']);
     final discount = _discountPct(p);
     final accent = _parseColor(props['accent']) ?? const Color(0xFFE63946);
     final radius = ((props['card_radius'] as num?)?.toDouble() ?? 10).clamp(0, 32).toDouble();
@@ -1713,7 +1745,7 @@ class _DiscountCard extends StatelessWidget {
                       fontSize: big ? 17 : 14.5, height: 1.0,
                       letterSpacing: -0.3,
                     ))),
-                if (showCompare && compare != null && compare.isNotEmpty) ...[
+                if (showCompare && compare.isNotEmpty) ...[
                   const SizedBox(width: 5),
                   Flexible(child: Text(compare,
                       maxLines: 1, overflow: TextOverflow.ellipsis,
@@ -1740,7 +1772,7 @@ class _DiscountCard extends StatelessWidget {
                     border: Border.all(color: const Color(0xFF1F8A40).withOpacity(0.25), width: 0.7),
                   ),
                   child: Row(mainAxisSize: MainAxisSize.min, children: [
-                    const Icon(Icons.savings_outlined, size: 11, color: Color(0xFF1F8A40)),
+                    const Icon(Icons.discount_outlined, size: 11, color: Color(0xFF1F8A40)),
                     const SizedBox(width: 4),
                     Flexible(child: Text(
                       ar ? 'وفر $saveAmt ${_currency(p)}' : 'Save $saveAmt ${_currency(p)}',
@@ -1774,8 +1806,9 @@ class _DiscountHorizontalRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final img = (p['image'] as String?) ?? '';
-    final price = ((p['price'] as Map?)?.cast<String, dynamic>())?['display']?.toString() ?? '';
-    final compare = ((p['compare_price'] as Map?)?.cast<String, dynamic>())?['display']?.toString();
+    // v2.0.71 — use _fmtPrice (resolver returns amount/symbol/digits, not display).
+    final price = _fmtPrice(p['price']);
+    final compare = _fmtPrice(p['compare_price']);
     final discount = _discountPct(p);
     final accent = _parseColor(props['accent']) ?? const Color(0xFFE63946);
     final radius = ((props['card_radius'] as num?)?.toDouble() ?? 10).clamp(0, 32).toDouble();
@@ -1811,7 +1844,7 @@ class _DiscountHorizontalRow extends StatelessWidget {
               SizedBox(height: small ? 2 : 4),
               Row(children: [
                 Text(price, style: TextStyle(color: t.dark, fontWeight: FontWeight.w900, fontSize: small ? 11 : 13)),
-                if (showCompare && compare != null && compare.isNotEmpty) ...[
+                if (showCompare && compare.isNotEmpty) ...[
                   const SizedBox(width: 6),
                   Flexible(child: Text(compare, maxLines: 1, overflow: TextOverflow.ellipsis,
                       style: TextStyle(color: t.dark.withOpacity(0.45),

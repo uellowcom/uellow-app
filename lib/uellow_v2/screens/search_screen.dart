@@ -2,6 +2,7 @@
 // SearchScreen — typing autocomplete + recent (from Odoo) + trending (from
 // Odoo) + browse categories (real). Live suggestions via /api/mobile/v2/search.
 // =============================================================================
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -171,34 +172,52 @@ class _SearchScreenState extends State<SearchScreen> {
       ])),
     );
     if (src == null) return;
+    // v2.0.71 — image-search reliability: tighter image size to keep uploads
+    // small (was 1024/80 → now 768/70 = ~3× smaller body), explicit 20s
+    // timeout, retry-on-timeout once, restore the input text on any failure
+    // path (was leaving "Analysing…" stuck).
     final picked = await picker.pickImage(source: src,
-        maxWidth: 1024, imageQuality: 80);
+        maxWidth: 768, imageQuality: 70);
     if (picked == null || !mounted) return;
     final bytes = await File(picked.path).readAsBytes();
     final b64 = base64Encode(bytes);
+    final originalText = _ctrl.text;
     setState(() {
       _ctrl.text = ar ? 'جارٍ التحليل…' : 'Analysing…';
     });
-    try {
-      final r = await http.post(
+    Future<http.Response> postOnce() => http.post(
         Uri.parse('${UellowApi.instance.baseUrl}/api/mobile/v2/search/image'),
         headers: const {'Content-Type': 'application/json'},
         body: jsonEncode({'image_base64': b64}),
-      );
+      ).timeout(const Duration(seconds: 20));
+    try {
+      http.Response r;
+      try { r = await postOnce(); }
+      on TimeoutException { r = await postOnce(); } // single retry
       final body = jsonDecode(utf8.decode(r.bodyBytes)) as Map<String, dynamic>;
       if (body['success'] == true) {
         final q = (body['data']?['query'] as String?) ?? '';
         if (q.isNotEmpty && mounted) {
           _ctrl.text = q;
           _onChanged();
+        } else if (mounted) {
+          _ctrl.text = originalText;
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+              content: Text(ar ? 'لم نتعرف على المنتج، جرب صورة أوضح'
+                              : 'Could not identify product — try a clearer photo')));
         }
       } else if (mounted) {
+        _ctrl.text = originalText;
         ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text(body['error']?.toString() ?? 'Search failed')));
       }
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.toString())));
+      if (mounted) {
+        _ctrl.text = originalText;
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(ar ? 'تعذّر البحث بالصورة، حاول مرة أخرى'
+                            : 'Image search failed — try again')));
+      }
     }
   }
 
