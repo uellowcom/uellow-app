@@ -519,10 +519,15 @@ class _ProductsGrid extends StatelessWidget {
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2, crossAxisSpacing: 8, mainAxisSpacing: 8, childAspectRatio: 0.58,
+              crossAxisCount: 2, crossAxisSpacing: 8, mainAxisSpacing: 8,
+              // v2.0.79 — taller aspect to suit the compact card (no Save/Avail row)
+              childAspectRatio: 0.66,
             ),
             itemCount: items.length,
-            itemBuilder: (_, i) => ProductCard(product: items[i]),
+            // v2.0.79 — shop "All products" grid: compact card,
+            // no Save/Avail row, smaller fonts, tighter rating gap.
+            itemBuilder: (_, i) => ProductCard(
+                product: items[i], compact: true, hideSavePill: true),
           ),
         );
       },

@@ -25,12 +25,18 @@ class ProductCard extends StatefulWidget {
     this.showStockLabel = true,
     this.inFlashSale = false,
     this.onTap,
+    this.compact = false,
+    this.hideSavePill = false,
   });
 
   final UellowProductCard product;
   final bool showStockLabel;
   final bool inFlashSale;
   final VoidCallback? onTap;
+  // v2.0.79 — compact: smaller name + price + rating gap (shop screen
+  // "All products" grid). hideSavePill: drop the bottom Save+Avail row.
+  final bool compact;
+  final bool hideSavePill;
 
   @override
   State<ProductCard> createState() => _ProductCardState();
@@ -66,7 +72,13 @@ class _ProductCardState extends State<ProductCard> {
               saveAmount: saveAmount, faved: _faved, onFav: _toggleFav)
           : _StdLayout(product: product, lang: lang,
               hasDiscount: hasDiscount, discountPct: discountPct,
-              saveAmount: saveAmount, showStockLabel: widget.showStockLabel,
+              saveAmount: saveAmount,
+              // v2.0.79 — `hideSavePill` overrides showStockLabel as well;
+              // when callers pass `compact: true` we typically don't want
+              // any of the bottom summary row.
+              showStockLabel: widget.hideSavePill ? false : widget.showStockLabel,
+              hideSavePill: widget.hideSavePill,
+              compact: widget.compact,
               faved: _faved, onFav: _toggleFav),
       ),
     );
@@ -102,6 +114,7 @@ class _StdLayout extends StatelessWidget {
     required this.hasDiscount, required this.discountPct,
     required this.saveAmount, required this.showStockLabel,
     required this.faved, required this.onFav,
+    this.compact = false, this.hideSavePill = false,
   });
   final UellowProductCard product;
   final String lang;
@@ -111,49 +124,63 @@ class _StdLayout extends StatelessWidget {
   final bool showStockLabel;
   final bool faved;
   final VoidCallback onFav;
+  // v2.0.79 — compact: smaller name + price + tighter gap. hideSavePill
+  // drops the Save+Avail bottom row entirely (shop "All products" grid).
+  // v2.0.79 — discount % now sits next to the STRUCK-THROUGH compare
+  // price (not the current price) so "what you save" reads as a unit.
+  final bool compact;
+  final bool hideSavePill;
 
   @override
   Widget build(BuildContext context) {
-    // v2.0.73 redesign — 2-line product name, discount % INLINE with
-    // price, small sales/views badges (when known), and Save + Avail
-    // pinned at the END of the card so they always read as "summary".
+    final nameFs   = compact ? 10.5 : 11.0;
+    final nameH    = compact ? 26.0 : 30.0;
+    final priceFs  = compact ? 12.0 : 13.5;
+    final symFs    = compact ? 8.5  : 9.0;
+    final cmpFs    = compact ? 8.5  : 9.0;
+    final discFs   = compact ? 8.0  : 8.5;
+    final padBetweenPriceAndStats = compact ? 2.0 : 4.0;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _Image(product: product, hasDiscount: hasDiscount,
             discountPct: discountPct, faved: faved, onFav: onFav),
         Padding(
-          padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
+          padding: EdgeInsets.fromLTRB(8, compact ? 4 : 6, 8, compact ? 6 : 8),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Two-line product name (height fixed so cards align).
               SizedBox(
-                height: 30,
+                height: nameH,
                 child: Text(product.name.current(lang),
                     maxLines: 2, overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 11, height: 1.25, color: UellowColors.ink,
-                      fontWeight: FontWeight.w700,
+                    style: TextStyle(
+                      fontSize: nameFs, height: 1.25,
+                      color: UellowColors.ink, fontWeight: FontWeight.w700,
                     )),
               ),
-              const SizedBox(height: 4),
-              // Price + inline -X% pill + struck-through compare (number-only,
-              // black strike to read cleanly on the gold/cream background).
+              SizedBox(height: compact ? 2 : 4),
+              // Current price + currency, then (if discounted) compare price
+              // with the -X% pill IMMEDIATELY adjacent — the user reads
+              // "old price ̶7̶ -28%" together.
               Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
                 Text(product.price.amount.toStringAsFixed(3),
-                    style: const TextStyle(
-                      fontSize: 13.5, fontWeight: FontWeight.w900,
+                    style: TextStyle(
+                      fontSize: priceFs, fontWeight: FontWeight.w900,
                       color: UellowColors.ink, letterSpacing: -0.3,
                     )),
                 const SizedBox(width: 3),
                 Text(product.price.displaySymbol(lang),
-                    style: const TextStyle(
-                      fontSize: 9, fontWeight: FontWeight.w700,
+                    style: TextStyle(
+                      fontSize: symFs, fontWeight: FontWeight.w700,
                       color: UellowColors.muted,
                     )),
                 if (hasDiscount) ...[
                   const SizedBox(width: 5),
+                  Flexible(child: MidStrikePrice(
+                      text: product.comparePrice!.amount.toStringAsFixed(3),
+                      fontSize: cmpFs, color: Colors.black87)),
+                  const SizedBox(width: 4),
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1.5),
                     decoration: BoxDecoration(
@@ -161,32 +188,26 @@ class _StdLayout extends StatelessWidget {
                       borderRadius: BorderRadius.circular(3),
                     ),
                     child: Text('-$discountPct%',
-                        style: const TextStyle(
-                          color: Colors.white, fontSize: 8.5,
+                        style: TextStyle(
+                          color: Colors.white, fontSize: discFs,
                           fontWeight: FontWeight.w900, height: 1.0,
                         )),
                   ),
-                  const SizedBox(width: 4),
-                  Flexible(child: MidStrikePrice(
-                      text: product.comparePrice!.amount.toStringAsFixed(3),
-                      fontSize: 9, color: Colors.black87)),
                 ],
               ]),
-              const SizedBox(height: 4),
-              // Stats row: ⭐ rating · 🛒 sales · 👁 views — only shows
-              // non-zero metrics so quiet products stay clean.
+              SizedBox(height: padBetweenPriceAndStats),
               _StatsRow(product: product, lang: lang),
-              const SizedBox(height: 6),
-              // Bottom row — save amount + availability, the summary line
-              // at the end of the card.
-              Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                if (hasDiscount)
-                  Flexible(child: _SavePill(amount: saveAmount,
-                      currency: product.price.displaySymbol(lang)))
-                else
-                  const SizedBox.shrink(),
-                if (showStockLabel) _AvailPill(product: product),
-              ]),
+              if (!hideSavePill) ...[
+                const SizedBox(height: 6),
+                Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                  if (hasDiscount)
+                    Flexible(child: _SavePill(amount: saveAmount,
+                        currency: product.price.displaySymbol(lang)))
+                  else
+                    const SizedBox.shrink(),
+                  if (showStockLabel) _AvailPill(product: product),
+                ]),
+              ],
             ],
           ),
         ),

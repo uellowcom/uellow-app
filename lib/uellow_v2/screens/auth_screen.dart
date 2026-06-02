@@ -235,9 +235,14 @@ class _AuthScreenState extends State<AuthScreen> {
   }
 
   void _socialPending(String name) {
+    // v2.0.79 — bilingual placeholder until each provider's SDK is wired
+    // (Apple/Google/Etisalat need separate auth-flow integrations).
+    final ar = UellowApi.instance.lang.toLowerCase().startsWith('ar');
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text('$name sign-in is coming soon — use email + password for now.'),
-      duration: const Duration(seconds: 2),
+      content: Text(ar
+          ? 'تسجيل الدخول عبر $name سيتاح قريباً — استخدم البريد الإلكتروني ورقم الهاتف الآن'
+          : '$name sign-in is coming soon — use email + password for now'),
+      duration: const Duration(seconds: 3),
     ));
   }
 }

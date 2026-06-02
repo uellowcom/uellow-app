@@ -1813,33 +1813,86 @@ class _ReviewsBlockState extends State<_ReviewsBlock> {
             final reviews = (data['reviews'] as List?) ?? [];
             final avg = (summary['avg'] as num?)?.toDouble() ?? 0;
             final total = (summary['total'] as int?) ?? reviews.length;
+            // v2.0.79 — Reviews block redesign.
+            // Layout: big avg + stars on the LEFT, 5-bar rating breakdown
+            // on the RIGHT, then either the review cards OR a warm empty
+            // state that invites the user to be the first reviewer.
+            final breakdown = (summary['breakdown'] as Map?)?.cast<String, dynamic>() ?? {};
+            final ar = UellowApi.instance.lang.toLowerCase().startsWith('ar');
             return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
-                Text(avg.toStringAsFixed(1), style: const TextStyle(
-                    fontSize: 42, fontWeight: FontWeight.w900,
-                    color: UellowColors.ink, height: 1)),
-                const SizedBox(width: 14),
-                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Row(children: [for (var i = 0; i < 5; i++) Icon(
-                    i < avg.round() ? Icons.star : Icons.star_border,
-                    size: 16, color: UellowColors.yellow)]),
-                  const SizedBox(height: 2),
-                  Text('Based on $total ${total == 1 ? "review" : "reviews"}',
-                      style: const TextStyle(color: UellowColors.muted, fontSize: 11)),
-                ]),
-              ]),
-              const SizedBox(height: 14),
-              if (reviews.isEmpty) Container(
-                padding: const EdgeInsets.all(20),
+              // Header strip
+              Container(
+                padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
-                  color: UellowColors.yellowSoft,
-                  borderRadius: BorderRadius.circular(10),
+                  color: UellowColors.yellowSoft.withValues(alpha: 0.6),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: UellowColors.yellow.withValues(alpha: 0.3)),
                 ),
-                child: Center(child: Text(T.t('reviews.no_reviews'),
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(color: UellowColors.text),
-                )),
-              ) else for (final r in reviews.take(3)) _reviewCard(r as Map<String, dynamic>),
+                child: Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
+                  // Left — average score
+                  Column(crossAxisAlignment: CrossAxisAlignment.center, children: [
+                    Text(avg.toStringAsFixed(1), style: const TextStyle(
+                        fontSize: 36, fontWeight: FontWeight.w900,
+                        color: UellowColors.darkBrown, height: 1, letterSpacing: -1)),
+                    const SizedBox(height: 4),
+                    Row(children: [for (var i = 0; i < 5; i++) Icon(
+                      i < avg.round() ? Icons.star_rounded : Icons.star_outline_rounded,
+                      size: 14, color: UellowColors.yellow)]),
+                    const SizedBox(height: 3),
+                    Text(ar ? '$total ${total == 1 ? "تقييم" : "تقييمات"}'
+                            : 'Based on $total ${total == 1 ? "review" : "reviews"}',
+                        style: const TextStyle(color: UellowColors.muted,
+                            fontSize: 10.5, fontWeight: FontWeight.w700)),
+                  ]),
+                  Container(width: 1, height: 70,
+                      margin: const EdgeInsets.symmetric(horizontal: 14),
+                      color: UellowColors.yellow.withValues(alpha: 0.25)),
+                  // Right — rating breakdown (5★, 4★, …)
+                  Expanded(child: Column(mainAxisSize: MainAxisSize.min, children: [
+                    for (final s in const [5, 4, 3, 2, 1])
+                      Padding(padding: const EdgeInsets.symmetric(vertical: 1.5),
+                        child: _RatingBar(
+                          star: s,
+                          count: (breakdown['$s'] as num?)?.toInt() ?? 0,
+                          total: total == 0 ? 1 : total,
+                        )),
+                  ])),
+                ]),
+              ),
+              const SizedBox(height: 14),
+              if (reviews.isEmpty)
+                // Warm empty state — invite the first review
+                Container(
+                  padding: const EdgeInsets.fromLTRB(16, 18, 16, 18),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFAFAFA),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: UellowColors.border),
+                  ),
+                  child: Row(children: [
+                    Container(
+                      width: 44, height: 44,
+                      decoration: const BoxDecoration(
+                        color: UellowColors.yellowSoft, shape: BoxShape.circle),
+                      alignment: Alignment.center,
+                      child: const Icon(Icons.rate_review_outlined,
+                          color: UellowColors.darkBrown, size: 22),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Text(ar ? 'كن أول من يقيّم' : 'Be the first to review',
+                          style: const TextStyle(fontWeight: FontWeight.w900,
+                              fontSize: 13, color: UellowColors.ink)),
+                      const SizedBox(height: 2),
+                      Text(ar
+                          ? 'شارك تجربتك مع المنتج لتساعد المشترين الآخرين'
+                          : 'Share your experience to help other shoppers',
+                          style: const TextStyle(fontSize: 11.5,
+                              color: UellowColors.muted, height: 1.35)),
+                    ])),
+                  ]),
+                )
+              else for (final r in reviews.take(3)) _reviewCard(r as Map<String, dynamic>),
               if (reviews.length > 3) Padding(
                 padding: const EdgeInsets.only(top: 10),
                 child: SizedBox(width: double.infinity, child: ElevatedButton(
@@ -1926,6 +1979,46 @@ class _ReviewsBlockState extends State<_ReviewsBlock> {
   }
 }
 
+// v2.0.79 — single row in the rating-breakdown chart: ⭐n on the left,
+// a filled progress bar in the middle, and the absolute count on the
+// right. Width-fraction is count/total.
+class _RatingBar extends StatelessWidget {
+  const _RatingBar({required this.star, required this.count, required this.total});
+  final int star;
+  final int count;
+  final int total;
+  @override
+  Widget build(BuildContext context) {
+    final frac = total <= 0 ? 0.0 : (count / total).clamp(0.0, 1.0);
+    return Row(children: [
+      Text('$star', style: const TextStyle(
+          fontSize: 10.5, fontWeight: FontWeight.w900,
+          color: UellowColors.darkBrown)),
+      const SizedBox(width: 2),
+      const Icon(Icons.star_rounded, size: 10, color: UellowColors.yellow),
+      const SizedBox(width: 6),
+      Expanded(child: ClipRRect(
+        borderRadius: BorderRadius.circular(4),
+        child: SizedBox(
+          height: 6,
+          child: Stack(children: [
+            Container(color: Colors.white),
+            FractionallySizedBox(
+              widthFactor: frac,
+              child: Container(color: UellowColors.yellow),
+            ),
+          ]),
+        ),
+      )),
+      const SizedBox(width: 6),
+      SizedBox(width: 18, child: Text('$count',
+          textAlign: TextAlign.right,
+          style: const TextStyle(fontSize: 10,
+              color: UellowColors.muted, fontWeight: FontWeight.w800))),
+    ]);
+  }
+}
+
 // ─── Related products with infinite-load (3 auto rounds, then button) ─
 
 class _RelatedInfinite extends StatefulWidget {
@@ -1953,9 +2046,11 @@ class _RelatedInfiniteState extends State<_RelatedInfinite> {
     try {
       // Same-category only — that's what makes them "related". If the
       // product has no public category, fall back to the global list.
+      // v2.0.79 — larger pages (10 → 16) so the auto-load doesn't fire as
+      // aggressively while still feeling infinite.
       final page = await UellowApi.instance.products.list(
           categoryId: widget.categoryId,
-          page: _page, perPage: 10);
+          page: _page, perPage: 16);
       if (mounted) setState(() {
         _items.addAll(page.items.where((p) => p.id != widget.productId));
         _hasMore = page.hasNext;
