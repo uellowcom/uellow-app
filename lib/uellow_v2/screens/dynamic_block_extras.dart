@@ -417,6 +417,86 @@ class PromoPillsBlock extends StatelessWidget {
                 _PromoIconic(it: items[i], t: t, ar: ar, parentP: p, index: i),
             ]),
         );
+
+      // ── v2.0.64: slim single-line variants ──────────────────────────
+      case 'chip':
+        // Very slim 28px pills, icon + tiny text — horizontal scroll.
+        return SizedBox(height: 30, child: ListView.separated(
+          scrollDirection: Axis.horizontal,
+          physics: const ClampingScrollPhysics(),
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          itemCount: items.length,
+          separatorBuilder: (_, __) => SizedBox(width: gap.clamp(4, 10)),
+          itemBuilder: (_, i) => _PromoChip(
+              it: items[i], t: t, ar: ar, parentP: p, index: i),
+        ));
+
+      case 'trust_bar':
+        // Inline "icon · text" entries separated by dots — looks like
+        // Amazon's "FREE delivery · Returns · Help" header bar.
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          child: Wrap(
+            spacing: 8, runSpacing: 4,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              for (int i = 0; i < items.length; i++) ...[
+                _PromoInlineEntry(it: items[i], t: t, ar: ar,
+                    parentP: p, index: i),
+                if (i < items.length - 1)
+                  Text('·', style: TextStyle(
+                      color: t.dark.withValues(alpha: 0.4),
+                      fontSize: 14, fontWeight: FontWeight.w900)),
+              ],
+            ],
+          ),
+        );
+
+      case 'mini_bar':
+        // Full-width 24px pills stacked vertically — extreme compact.
+        return Padding(padding: pad, child: Column(
+          children: [
+            for (int i = 0; i < items.length; i++) ...[
+              _PromoMiniBar(it: items[i], t: t, ar: ar, parentP: p, index: i),
+              if (i < items.length - 1) SizedBox(height: gap.clamp(2, 6)),
+            ],
+          ],
+        ));
+
+      case 'inline_dots':
+        // No background, no border — icon + text inline with dot dividers.
+        return Padding(padding: const EdgeInsets.symmetric(
+            horizontal: 12, vertical: 6),
+          child: Wrap(
+            spacing: 10, runSpacing: 4,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              for (int i = 0; i < items.length; i++) ...[
+                Row(mainAxisSize: MainAxisSize.min, children: [
+                  Text((items[i]['icon'] as String?) ?? '🎁',
+                      style: const TextStyle(fontSize: 13)),
+                  const SizedBox(width: 4),
+                  Text(ar
+                      ? (items[i]['titleAr']?.toString()
+                          ?? items[i]['titleEn']?.toString() ?? '')
+                      : (items[i]['titleEn']?.toString() ?? ''),
+                      style: TextStyle(fontSize: 11.5,
+                          fontWeight: FontWeight.w700, color: t.dark)),
+                ]),
+                if (i < items.length - 1)
+                  Container(width: 3, height: 3,
+                      decoration: BoxDecoration(
+                          color: t.dark.withValues(alpha: 0.35),
+                          shape: BoxShape.circle)),
+              ],
+            ],
+          ),
+        );
+
+      case 'ticker_slim':
+        return SizedBox(height: 28, child: _PromoTickerSlim(
+            items: items, t: t, ar: ar, p: p));
+
       default: // row
         return Padding(padding: pad, child: Row(children: [
           for (int i = 0; i < items.length; i++) ...[
@@ -493,6 +573,161 @@ class _PromoCompact extends StatelessWidget {
         Text(title, style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700,
             color: BlockEnvelope._hex(it['text_color']) ?? t.dark)),
       ]),
+    );
+  }
+}
+
+// ── v2.0.64 slim single-line widgets ──────────────────────────────────
+
+class _PromoChip extends StatelessWidget {
+  const _PromoChip({required this.it, required this.t, required this.ar,
+      required this.parentP, required this.index});
+  final Map<String, dynamic> it;
+  final DynTheme t;
+  final bool ar;
+  final Map<String, dynamic> parentP;
+  final int index;
+  @override
+  Widget build(BuildContext context) {
+    final icon = (it['icon'] as String?) ?? '🎁';
+    final title = ar
+        ? (it['titleAr']?.toString() ?? it['titleEn']?.toString() ?? '')
+        : (it['titleEn']?.toString() ?? '');
+    final bg = BlockEnvelope._hex(it['color']) ?? const Color(0xFFFFF6E0);
+    final fg = BlockEnvelope._hex(it['text_color']) ?? t.dark;
+    return GestureDetector(
+      onTap: () => _openLink(context, (it['link'] as Map?)?.cast<String, dynamic>()),
+      child: Container(
+        height: 28,
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        decoration: BoxDecoration(color: bg,
+            borderRadius: BorderRadius.circular(14)),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Text(icon, style: const TextStyle(fontSize: 12)),
+          const SizedBox(width: 5),
+          Text(title, style: TextStyle(fontSize: 11,
+              fontWeight: FontWeight.w800, color: fg, letterSpacing: 0.1)),
+        ]),
+      ),
+    );
+  }
+}
+
+class _PromoInlineEntry extends StatelessWidget {
+  const _PromoInlineEntry({required this.it, required this.t,
+      required this.ar, required this.parentP, required this.index});
+  final Map<String, dynamic> it;
+  final DynTheme t;
+  final bool ar;
+  final Map<String, dynamic> parentP;
+  final int index;
+  @override
+  Widget build(BuildContext context) {
+    final icon = (it['icon'] as String?) ?? '🎁';
+    final title = ar
+        ? (it['titleAr']?.toString() ?? it['titleEn']?.toString() ?? '')
+        : (it['titleEn']?.toString() ?? '');
+    final iconColor = BlockEnvelope._hex(it['icon_color'])
+        ?? t.dark.withValues(alpha: 0.85);
+    return GestureDetector(
+      onTap: () => _openLink(context, (it['link'] as Map?)?.cast<String, dynamic>()),
+      child: Row(mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.center, children: [
+        Container(width: 18, height: 18, alignment: Alignment.center,
+            child: Text(icon,
+                style: TextStyle(fontSize: 13, color: iconColor))),
+        const SizedBox(width: 5),
+        Text(title, style: TextStyle(fontSize: 11.5,
+            fontWeight: FontWeight.w700, color: t.dark, height: 1.0)),
+      ]),
+    );
+  }
+}
+
+class _PromoMiniBar extends StatelessWidget {
+  const _PromoMiniBar({required this.it, required this.t, required this.ar,
+      required this.parentP, required this.index});
+  final Map<String, dynamic> it;
+  final DynTheme t;
+  final bool ar;
+  final Map<String, dynamic> parentP;
+  final int index;
+  @override
+  Widget build(BuildContext context) {
+    final icon = (it['icon'] as String?) ?? '🎁';
+    final title = ar
+        ? (it['titleAr']?.toString() ?? it['titleEn']?.toString() ?? '')
+        : (it['titleEn']?.toString() ?? '');
+    final sub = ar
+        ? (it['subtitleAr']?.toString() ?? it['subtitleEn']?.toString() ?? '')
+        : (it['subtitleEn']?.toString() ?? '');
+    final bg = BlockEnvelope._hex(it['color']) ?? const Color(0xFFFFF6E0);
+    final iconColor = BlockEnvelope._hex(it['icon_color']) ?? t.dark;
+    final fg = BlockEnvelope._hex(it['text_color']) ?? t.dark;
+    return GestureDetector(
+      onTap: () => _openLink(context, (it['link'] as Map?)?.cast<String, dynamic>()),
+      child: Container(
+        height: 26,
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        decoration: BoxDecoration(color: bg,
+            borderRadius: BorderRadius.circular(6)),
+        child: Row(children: [
+          Text(icon, style: TextStyle(fontSize: 13, color: iconColor)),
+          const SizedBox(width: 8),
+          Expanded(child: Text(title,
+              maxLines: 1, overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: 11,
+                  fontWeight: FontWeight.w800, color: fg))),
+          if (sub.isNotEmpty) ...[
+            const SizedBox(width: 6),
+            Text(sub, style: TextStyle(fontSize: 10,
+                fontWeight: FontWeight.w600,
+                color: fg.withValues(alpha: 0.65))),
+          ],
+        ]),
+      ),
+    );
+  }
+}
+
+class _PromoTickerSlim extends StatefulWidget {
+  const _PromoTickerSlim({required this.items, required this.t,
+      required this.ar, required this.p});
+  final List<Map<String, dynamic>> items;
+  final DynTheme t;
+  final bool ar;
+  final Map<String, dynamic> p;
+  @override State<_PromoTickerSlim> createState() => _PromoTickerSlimState();
+}
+class _PromoTickerSlimState extends State<_PromoTickerSlim> {
+  final _ctrl = ScrollController();
+  Timer? _timer;
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(const Duration(milliseconds: 50), (_) {
+      if (!_ctrl.hasClients) return;
+      final max = _ctrl.position.maxScrollExtent;
+      final off = _ctrl.offset + 0.6;
+      _ctrl.jumpTo(off >= max ? 0 : off);
+    });
+  }
+  @override void dispose() { _timer?.cancel(); _ctrl.dispose(); super.dispose(); }
+  @override
+  Widget build(BuildContext context) {
+    final doubled = [...widget.items, ...widget.items];
+    return ListView.separated(
+      controller: _ctrl,
+      scrollDirection: Axis.horizontal,
+      physics: const NeverScrollableScrollPhysics(),
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      itemCount: doubled.length,
+      separatorBuilder: (_, __) => Container(width: 1, height: 12,
+          margin: const EdgeInsets.symmetric(horizontal: 10),
+          color: widget.t.dark.withValues(alpha: 0.2)),
+      itemBuilder: (_, i) => _PromoInlineEntry(
+          it: doubled[i], t: widget.t, ar: widget.ar,
+          parentP: widget.p, index: i),
     );
   }
 }
