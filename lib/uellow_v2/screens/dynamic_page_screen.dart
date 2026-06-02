@@ -237,7 +237,12 @@ Widget _renderBlock(BuildContext c, Map<String, dynamic> b, DynTheme t) {
     case 'explore-more':   inner = ExploreMoreBlock(p: p, data: data, t: t, ar: ar); break;
     // v2.0.38 — Slider + 5 pro designs
     case 'slider':         inner = SliderBlock(p: p, t: t, ar: ar); break;
-    case 'tab-nav':        inner = TabNavBlock(p: p, t: t, ar: ar); break;
+    case 'tab-nav':
+      // v2.0.67 — tab-nav defaults to ZERO vertical padding so it sits
+      // flush beneath the search bar. Admin can still bump via pad_y.
+      if (p['pad_y'] == null) p['pad_y'] = 0;
+      inner = TabNavBlock(p: p, t: t, ar: ar);
+      break;
     case 'story-bubbles':  inner = StoryBubblesBlock(p: p, t: t, ar: ar); break;
     case 'lookbook':       inner = LookbookBlock(p: p, t: t, ar: ar); break;
     case 'sticky-cta':     inner = StickyCtaBlock(p: p, t: t, ar: ar); break;
@@ -446,7 +451,9 @@ class _SearchBarBlock extends StatelessWidget {
     return GestureDetector(
       onTap: () => Navigator.pushNamed(context, Routes.search),
       child: Container(
-        margin: const EdgeInsets.fromLTRB(14, 8, 14, 8),
+        // v2.0.67 — minimal bottom margin so a Tab-Nav block immediately
+        // below the search bar sits flush (the user wanted zero gap).
+        margin: const EdgeInsets.fromLTRB(14, 8, 14, 2),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         decoration: BoxDecoration(
           color: Colors.white,

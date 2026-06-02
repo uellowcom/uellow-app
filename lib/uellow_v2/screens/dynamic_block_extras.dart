@@ -1198,6 +1198,13 @@ class WelcomeDealBlock extends StatelessWidget {
 }
 
 // ─── DISCOUNT STRIP — horizontal of products with bold % badges ─────────────
+// ─── DISCOUNT STRIP — v2.0.67 PRO: 6 variants ────────────────────────────────
+//   compact   horizontal scroll of small cards (default)
+//   hero      one big featured deal + 2 stacked side cards
+//   mega      vertical list with image|name|price|save badge
+//   grid_2col 2-column non-scrolling grid
+//   ticker    auto-scrolling circular thumbnails
+//   countdown each card has its own mini timer (uses flash_end_datetime if any)
 class DiscountStripBlock extends StatelessWidget {
   const DiscountStripBlock({super.key, required this.p, required this.data, required this.t, required this.ar});
   final Map<String, dynamic> p;
@@ -1207,106 +1214,571 @@ class DiscountStripBlock extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Resolver returns `items` (matches resolve_products). Older alias
-    // `products` kept for forward compatibility with any seed data.
-    final products = (data['items'] as List? ?? data['products'] as List? ?? const []).cast<dynamic>();
-    if (products.isEmpty) return const SizedBox.shrink();
-    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      DynSectionHeader(props: p, theme: t, ar: ar, fallbackEn: 'Hot deals'),
-      SizedBox(
-        height: 180,
-        child: ListView.separated(
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          scrollDirection: Axis.horizontal,
-          physics: const ClampingScrollPhysics(),
-          itemCount: products.length,
-          separatorBuilder: (_, __) => const SizedBox(width: 8),
-          itemBuilder: (_, i) {
-            final pp = (products[i] as Map).cast<String, dynamic>();
-            return _DiscountCard(p: pp, t: t, ar: ar);
-          },
+    final items = (data['items'] as List? ?? data['products'] as List? ?? const []).cast<dynamic>();
+    if (items.isEmpty) return const SizedBox.shrink();
+    final variant = (p['variant'] as String?) ?? 'compact';
+    final bgStrip = _parseColor(p['bg_strip']);
+    final stripBg = (bgStrip != null && bgStrip != Colors.transparent)
+        ? Container(color: bgStrip)
+        : null;
+    Widget body;
+    switch (variant) {
+      case 'hero':      body = _hero(items); break;
+      case 'mega':      body = _mega(items); break;
+      case 'grid_2col': body = _grid2(items); break;
+      case 'ticker':    body = _ticker(items); break;
+      case 'countdown': body = _countdownRow(items); break;
+      default:          body = _compactRow(items);
+    }
+    return Stack(children: [
+      if (stripBg != null) Positioned.fill(child: stripBg),
+      Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        DynSectionHeader(props: p, theme: t, ar: ar, fallbackEn: 'Hot deals'),
+        body,
+      ]),
+    ]);
+  }
+
+  // ─── compact (default) ─────────────────────────────────────────────────────
+  Widget _compactRow(List items) {
+    return SizedBox(
+      height: 178,
+      child: ListView.separated(
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        scrollDirection: Axis.horizontal,
+        physics: const ClampingScrollPhysics(),
+        itemCount: items.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 8),
+        itemBuilder: (_, i) {
+          final pp = (items[i] as Map).cast<String, dynamic>();
+          return _DiscountCard(p: pp, props: this.p, t: t, ar: ar, width: 120);
+        },
+      ),
+    );
+  }
+
+  // ─── hero (1 big + 2 small) ────────────────────────────────────────────────
+  Widget _hero(List items) {
+    final big = (items.first as Map).cast<String, dynamic>();
+    final side = items.skip(1).take(2).map((e) => (e as Map).cast<String, dynamic>()).toList();
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      child: SizedBox(
+        height: 200,
+        child: Row(children: [
+          Expanded(flex: 14, child: _DiscountCard(p: big, props: this.p, t: t, ar: ar, fillHeight: true, big: true)),
+          const SizedBox(width: 8),
+          Expanded(flex: 10, child: Column(children: [
+            for (final s in side) ...[
+              Expanded(child: _DiscountHorizontalRow(p: s, props: this.p, t: t, ar: ar, small: true)),
+              if (s != side.last) const SizedBox(height: 6),
+            ],
+            if (side.isEmpty) const SizedBox.shrink(),
+          ])),
+        ]),
+      ),
+    );
+  }
+
+  // ─── mega list (vertical) ──────────────────────────────────────────────────
+  Widget _mega(List items) {
+    final list = items.take(8).toList();
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      child: Column(children: [
+        for (int i = 0; i < list.length; i++) ...[
+          _DiscountHorizontalRow(
+            p: (list[i] as Map).cast<String, dynamic>(),
+            props: this.p, t: t, ar: ar,
+          ),
+          if (i != list.length - 1) const SizedBox(height: 6),
+        ],
+      ]),
+    );
+  }
+
+  // ─── 2-col grid ────────────────────────────────────────────────────────────
+  Widget _grid2(List items) {
+    final list = items.take(8).toList();
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      child: GridView.builder(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 2, mainAxisSpacing: 6, crossAxisSpacing: 6,
+          childAspectRatio: 0.78,
+        ),
+        itemCount: list.length,
+        itemBuilder: (_, i) => _DiscountCard(
+          p: (list[i] as Map).cast<String, dynamic>(),
+          props: this.p, t: t, ar: ar, fillHeight: true, fillWidth: true,
         ),
       ),
-    ]);
+    );
+  }
+
+  // ─── ticker (auto-scrolling circular thumbs) ───────────────────────────────
+  Widget _ticker(List items) {
+    final speed = ((p['ticker_speed'] as num?)?.toInt() ?? 30).clamp(8, 240);
+    return SizedBox(
+      height: 80,
+      child: _MarqueeTicker(
+        speedSeconds: speed,
+        children: items.map((e) => _DiscountTickerThumb(
+          p: (e as Map).cast<String, dynamic>(),
+          props: this.p, t: t,
+        )).toList(),
+      ),
+    );
+  }
+
+  // ─── countdown row ─────────────────────────────────────────────────────────
+  Widget _countdownRow(List items) {
+    return SizedBox(
+      height: 184,
+      child: ListView.separated(
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        scrollDirection: Axis.horizontal,
+        physics: const ClampingScrollPhysics(),
+        itemCount: items.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 8),
+        itemBuilder: (_, i) {
+          final pp = (items[i] as Map).cast<String, dynamic>();
+          return _DiscountCard(p: pp, props: this.p, t: t, ar: ar, width: 128, showCountdown: true);
+        },
+      ),
+    );
   }
 }
 
+// ───── helpers ─────────────────────────────────────────────────────────────
+Color? _parseColor(dynamic v) {
+  if (v is! String) return null;
+  final s = v.trim();
+  if (s.isEmpty || s == 'transparent') return Colors.transparent;
+  final hex = s.startsWith('#') ? s.substring(1) : s;
+  if (RegExp(r'^[0-9a-fA-F]{6}$').hasMatch(hex)) {
+    return Color(int.parse('FF$hex', radix: 16));
+  }
+  return null;
+}
+
+double _num(dynamic v) => v is num ? v.toDouble() : 0.0;
+
+int _discountPct(Map<String, dynamic> p) {
+  final v = p['discount_pct'];
+  if (v is num) return v.toInt();
+  final priceVal = ((p['price'] as Map?)?.cast<String, dynamic>())?['amount'];
+  final compareVal = ((p['compare_price'] as Map?)?.cast<String, dynamic>())?['amount'];
+  if (priceVal is num && compareVal is num && compareVal > 0 && compareVal > priceVal) {
+    return ((1 - priceVal / compareVal) * 100).round();
+  }
+  return 0;
+}
+
+String _saveText(Map<String, dynamic> p) {
+  final priceMap = (p['price'] as Map?)?.cast<String, dynamic>();
+  final compareMap = (p['compare_price'] as Map?)?.cast<String, dynamic>();
+  if (priceMap == null || compareMap == null) return '';
+  final priceVal = _num(priceMap['amount']);
+  final compareVal = _num(compareMap['amount']);
+  if (compareVal <= priceVal) return '';
+  final save = compareVal - priceVal;
+  final digits = (priceMap['digits'] is num) ? (priceMap['digits'] as num).toInt() : 3;
+  return save.toStringAsFixed(digits);
+}
+
+String _currency(Map<String, dynamic> p) {
+  final priceMap = (p['price'] as Map?)?.cast<String, dynamic>();
+  return priceMap?['currency']?.toString() ?? 'KWD';
+}
+
+BoxDecoration _cardDecoration(Map<String, dynamic> props, {required double radius}) {
+  final style = (props['card_style'] as String?) ?? 'flat';
+  switch (style) {
+    case 'outlined':
+      return BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(radius),
+        border: Border.all(color: const Color(0xFFE5DBC0), width: 1),
+      );
+    case 'gradient':
+      return BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Colors.white, Color(0xFFFFF6E0)],
+          begin: Alignment.topLeft, end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(radius),
+      );
+    case 'glass':
+      return BoxDecoration(
+        color: Colors.white.withOpacity(0.78),
+        borderRadius: BorderRadius.circular(radius),
+        border: Border.all(color: Colors.white.withOpacity(0.6), width: 1),
+      );
+    case 'flat':
+    default:
+      return BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(radius),
+      );
+  }
+}
+
+// ───── card (compact / countdown / hero-big / grid-cell) ─────────────────────
 class _DiscountCard extends StatelessWidget {
-  const _DiscountCard({required this.p, required this.t, required this.ar});
+  const _DiscountCard({
+    required this.p,
+    required this.props,
+    required this.t,
+    required this.ar,
+    this.width,
+    this.fillHeight = false,
+    this.fillWidth = false,
+    this.showCountdown = false,
+    this.big = false,
+  });
   final Map<String, dynamic> p;
+  final Map<String, dynamic> props;
   final DynTheme t;
   final bool ar;
+  final double? width;
+  final bool fillHeight, fillWidth, showCountdown, big;
 
   @override
   Widget build(BuildContext context) {
     final img = (p['image'] as String?) ?? '';
     final price = ((p['price'] as Map?)?.cast<String, dynamic>())?['display']?.toString() ?? '';
     final compare = ((p['compare_price'] as Map?)?.cast<String, dynamic>())?['display']?.toString();
-    int discount = 0;
-    final priceVal = ((p['price'] as Map?)?.cast<String, dynamic>())?['amount'];
-    final compareVal = ((p['compare_price'] as Map?)?.cast<String, dynamic>())?['amount'];
-    if (priceVal is num && compareVal is num && compareVal > 0 && compareVal > priceVal) {
-      discount = ((1 - priceVal / compareVal) * 100).round();
-    }
+    final discount = _discountPct(p);
+    final accent = _parseColor(props['accent']) ?? const Color(0xFFE63946);
+    final radius = ((props['card_radius'] as num?)?.toDouble() ?? 10).clamp(0, 32).toDouble();
+    final showBadge = props['show_discount_badge'] != false;
+    final showSave = props['show_save_amount'] != false;
+    final showCompare = props['show_compare_price'] != false;
+    final showBrand = props['show_brand'] == true;
+    final showUrg = props['show_urgency'] == true;
+    final urgTh = (props['urgency_threshold'] as num?)?.toInt() ?? 30;
+    final saveAmt = _saveText(p);
+    final brand = ((p['vendor'] as Map?)?.cast<String, dynamic>())?['name']?.toString();
+    final endIso = p['flash_end_datetime']?.toString();
+    final nameMap = (p['name'] as Map?)?.cast<String, dynamic>();
+    final productName = ar ? (nameMap?['ar']?.toString() ?? '') : (nameMap?['en']?.toString() ?? '');
+
     return GestureDetector(
       onTap: () {
         final id = (p['id'] as num?)?.toInt();
         if (id != null && id > 0) UellowRouter.goProduct(context, id);
       },
       child: Container(
-        width: 134,
-        decoration: BoxDecoration(
-          color: Colors.white, borderRadius: BorderRadius.circular(10),
-        ),
+        width: fillWidth ? null : (width ?? 120),
+        decoration: _cardDecoration(props, radius: radius),
         clipBehavior: Clip.antiAlias,
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          AspectRatio(
-            aspectRatio: 1,
-            child: img.isNotEmpty
-                ? CachedNetworkImage(imageUrl: img, fit: BoxFit.cover)
-                : Container(color: const Color(0xFFF1EBDF)),
-          ),
+          // ─ image (square or aspect)
+          Stack(children: [
+            AspectRatio(
+              aspectRatio: 1,
+              child: img.isNotEmpty
+                  ? CachedNetworkImage(imageUrl: img, fit: BoxFit.cover)
+                  : Container(color: const Color(0xFFF1EBDF)),
+            ),
+            if (showBadge && discount > 0)
+              Positioned(top: 5, left: 5, child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                decoration: BoxDecoration(color: accent, borderRadius: BorderRadius.circular(4)),
+                child: Text('-$discount%',
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 10.5)),
+              )),
+            if (showUrg && discount >= urgTh)
+              Positioned(top: 5, right: 5, child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.6),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(ar ? 'تنفد بسرعة' : 'Selling fast',
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 9)),
+              )),
+            if (showCountdown && endIso != null && endIso.isNotEmpty)
+              Positioned(bottom: 5, right: 5, child: _MiniCountdown(endIso: endIso, accent: accent)),
+          ]),
+          // ─ info
           Padding(
             padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+              if (showBrand && brand != null && brand.isNotEmpty)
+                Padding(padding: const EdgeInsets.only(bottom: 2), child: Text(
+                  brand, maxLines: 1, overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: t.dark.withOpacity(0.55), fontWeight: FontWeight.w700, fontSize: 9),
+                )),
+              if (big && productName.isNotEmpty)
+                Padding(padding: const EdgeInsets.only(bottom: 2), child: Text(
+                  productName, maxLines: 1, overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: t.dark, fontWeight: FontWeight.w800, fontSize: 11),
+                )),
               Text(price,
+                  style: TextStyle(color: t.dark, fontWeight: FontWeight.w900, fontSize: 13)),
+              if (showCompare && compare != null && compare.isNotEmpty)
+                Padding(padding: const EdgeInsets.only(top: 1), child: Text(
+                  compare, maxLines: 1, overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    color: t.dark, fontWeight: FontWeight.w900, fontSize: 13,
-                  )),
-              const SizedBox(height: 3),
-              Row(children: [
-                if (discount > 0)
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFE63946),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: Text('-$discount%',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w900,
-                          fontSize: 10.5,
-                        )),
+                    color: t.dark.withOpacity(0.45), fontSize: 10,
+                    decoration: TextDecoration.lineThrough, fontWeight: FontWeight.w600,
                   ),
-                if (compare != null && compare.isNotEmpty) ...[
-                  const SizedBox(width: 5),
-                  Expanded(
-                    child: Text(compare,
-                        maxLines: 1, overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: t.dark.withOpacity(0.45),
-                          fontSize: 10.5,
-                          decoration: TextDecoration.lineThrough,
-                          fontWeight: FontWeight.w600,
-                        )),
+                )),
+              if (showSave && saveAmt.isNotEmpty)
+                Padding(padding: const EdgeInsets.only(top: 3), child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(colors: [Color(0xFFE6F7EF), Color(0xFFD4F0DD)]),
+                    borderRadius: BorderRadius.circular(3),
+                    border: Border.all(color: const Color(0xFF1F8A40).withOpacity(0.18), width: 0.6),
                   ),
-                ],
-              ]),
+                  child: Text(
+                    ar ? 'وفر $saveAmt ${_currency(p)}' : 'Save $saveAmt ${_currency(p)}',
+                    style: const TextStyle(color: Color(0xFF1F8A40), fontWeight: FontWeight.w900, fontSize: 9.5),
+                  ),
+                )),
             ]),
           ),
         ]),
       ),
+    );
+  }
+}
+
+// ───── horizontal row card (mega list + hero side cards) ─────────────────────
+class _DiscountHorizontalRow extends StatelessWidget {
+  const _DiscountHorizontalRow({
+    required this.p, required this.props, required this.t, required this.ar, this.small = false,
+  });
+  final Map<String, dynamic> p;
+  final Map<String, dynamic> props;
+  final DynTheme t;
+  final bool ar;
+  final bool small;
+
+  @override
+  Widget build(BuildContext context) {
+    final img = (p['image'] as String?) ?? '';
+    final price = ((p['price'] as Map?)?.cast<String, dynamic>())?['display']?.toString() ?? '';
+    final compare = ((p['compare_price'] as Map?)?.cast<String, dynamic>())?['display']?.toString();
+    final discount = _discountPct(p);
+    final accent = _parseColor(props['accent']) ?? const Color(0xFFE63946);
+    final radius = ((props['card_radius'] as num?)?.toDouble() ?? 10).clamp(0, 32).toDouble();
+    final showBadge = props['show_discount_badge'] != false;
+    final showSave = props['show_save_amount'] != false;
+    final showCompare = props['show_compare_price'] != false;
+    final saveAmt = _saveText(p);
+    final nameMap = (p['name'] as Map?)?.cast<String, dynamic>();
+    final name = ar ? (nameMap?['ar']?.toString() ?? '') : (nameMap?['en']?.toString() ?? '');
+    final imgSize = small ? 56.0 : 72.0;
+
+    return GestureDetector(
+      onTap: () {
+        final id = (p['id'] as num?)?.toInt();
+        if (id != null && id > 0) UellowRouter.goProduct(context, id);
+      },
+      child: Container(
+        decoration: _cardDecoration(props, radius: radius),
+        clipBehavior: Clip.antiAlias,
+        child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          SizedBox(
+            width: imgSize, height: imgSize,
+            child: img.isNotEmpty
+                ? CachedNetworkImage(imageUrl: img, fit: BoxFit.cover)
+                : Container(color: const Color(0xFFF1EBDF)),
+          ),
+          Expanded(child: Padding(
+            padding: EdgeInsets.symmetric(horizontal: 8, vertical: small ? 5 : 6),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.center, children: [
+              if (name.isNotEmpty)
+                Text(name, maxLines: small ? 1 : 2, overflow: TextOverflow.ellipsis,
+                    style: TextStyle(color: t.dark, fontWeight: FontWeight.w800, fontSize: small ? 10.5 : 11.5)),
+              SizedBox(height: small ? 2 : 4),
+              Row(children: [
+                Text(price, style: TextStyle(color: t.dark, fontWeight: FontWeight.w900, fontSize: small ? 11 : 13)),
+                if (showCompare && compare != null && compare.isNotEmpty) ...[
+                  const SizedBox(width: 6),
+                  Flexible(child: Text(compare, maxLines: 1, overflow: TextOverflow.ellipsis,
+                      style: TextStyle(color: t.dark.withOpacity(0.45),
+                          fontSize: small ? 9 : 10.5,
+                          decoration: TextDecoration.lineThrough,
+                          fontWeight: FontWeight.w600))),
+                ],
+                if (showBadge && discount > 0) ...[
+                  const SizedBox(width: 6),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                    decoration: BoxDecoration(color: accent, borderRadius: BorderRadius.circular(4)),
+                    child: Text('-$discount%',
+                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 9.5)),
+                  ),
+                ],
+              ]),
+              if (showSave && saveAmt.isNotEmpty && !small)
+                Padding(padding: const EdgeInsets.only(top: 3), child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(colors: [Color(0xFFE6F7EF), Color(0xFFD4F0DD)]),
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(color: const Color(0xFF1F8A40).withOpacity(0.18), width: 0.6),
+                  ),
+                  child: Text(
+                    ar ? 'وفر $saveAmt ${_currency(p)}' : 'Save $saveAmt ${_currency(p)}',
+                    style: const TextStyle(color: Color(0xFF1F8A40), fontWeight: FontWeight.w900, fontSize: 10),
+                  ),
+                )),
+            ]),
+          )),
+        ]),
+      ),
+    );
+  }
+}
+
+// ───── ticker thumbnail (circular) ───────────────────────────────────────────
+class _DiscountTickerThumb extends StatelessWidget {
+  const _DiscountTickerThumb({required this.p, required this.props, required this.t});
+  final Map<String, dynamic> p;
+  final Map<String, dynamic> props;
+  final DynTheme t;
+
+  @override
+  Widget build(BuildContext context) {
+    final img = (p['image'] as String?) ?? '';
+    final discount = _discountPct(p);
+    final accent = _parseColor(props['accent']) ?? const Color(0xFFE63946);
+    final showBadge = props['show_discount_badge'] != false;
+    return GestureDetector(
+      onTap: () {
+        final id = (p['id'] as num?)?.toInt();
+        if (id != null && id > 0) UellowRouter.goProduct(context, id);
+      },
+      child: SizedBox(width: 64, child: Column(mainAxisSize: MainAxisSize.min, children: [
+        Container(
+          width: 52, height: 52,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle, color: Colors.white,
+            border: Border.all(color: accent, width: 2),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: img.isNotEmpty
+              ? CachedNetworkImage(imageUrl: img, fit: BoxFit.cover)
+              : const ColoredBox(color: Color(0xFFF1EBDF)),
+        ),
+        const SizedBox(height: 3),
+        if (showBadge && discount > 0)
+          Text('-$discount%',
+              style: TextStyle(color: accent, fontWeight: FontWeight.w900, fontSize: 10)),
+      ])),
+    );
+  }
+}
+
+// ───── auto-scrolling ticker (loops smoothly) ───────────────────────────────
+class _MarqueeTicker extends StatefulWidget {
+  const _MarqueeTicker({required this.children, required this.speedSeconds});
+  final List<Widget> children;
+  final int speedSeconds;
+  @override
+  State<_MarqueeTicker> createState() => _MarqueeTickerState();
+}
+
+class _MarqueeTickerState extends State<_MarqueeTicker> with SingleTickerProviderStateMixin {
+  late final ScrollController _ctrl;
+  late final AnimationController _anim;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = ScrollController();
+    _anim = AnimationController(vsync: this, duration: Duration(seconds: widget.speedSeconds))..repeat();
+    _anim.addListener(_tick);
+  }
+
+  void _tick() {
+    if (!_ctrl.hasClients) return;
+    final max = _ctrl.position.maxScrollExtent;
+    if (max <= 0) return;
+    final pos = (_anim.value * max) % max;
+    _ctrl.jumpTo(pos);
+  }
+
+  @override
+  void dispose() {
+    _anim.removeListener(_tick);
+    _anim.dispose();
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Duplicate the list so scrolling loops seamlessly.
+    final loop = [...widget.children, ...widget.children];
+    return ListView.separated(
+      controller: _ctrl,
+      scrollDirection: Axis.horizontal,
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: loop.length,
+      separatorBuilder: (_, __) => const SizedBox(width: 10),
+      itemBuilder: (_, i) => loop[i],
+    );
+  }
+}
+
+// ───── mini countdown for per-card timer ────────────────────────────────────
+class _MiniCountdown extends StatefulWidget {
+  const _MiniCountdown({required this.endIso, required this.accent});
+  final String endIso;
+  final Color accent;
+  @override
+  State<_MiniCountdown> createState() => _MiniCountdownState();
+}
+
+class _MiniCountdownState extends State<_MiniCountdown> {
+  DateTime? _end;
+  Duration _left = Duration.zero;
+  Stream<DateTime>? _ticker;
+
+  @override
+  void initState() {
+    super.initState();
+    try { _end = DateTime.parse(widget.endIso); } catch (_) { _end = null; }
+    _recalc();
+    _ticker = Stream.periodic(const Duration(seconds: 1), (_) => DateTime.now());
+  }
+
+  void _recalc() {
+    if (_end == null) { _left = Duration.zero; return; }
+    final diff = _end!.difference(DateTime.now());
+    _left = diff.isNegative ? Duration.zero : diff;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<DateTime>(
+      stream: _ticker,
+      builder: (_, __) {
+        _recalc();
+        if (_left == Duration.zero) return const SizedBox.shrink();
+        final h = _left.inHours.toString().padLeft(2, '0');
+        final m = (_left.inMinutes % 60).toString().padLeft(2, '0');
+        final s = (_left.inSeconds % 60).toString().padLeft(2, '0');
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+          decoration: BoxDecoration(
+            color: Colors.black.withOpacity(0.7),
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: Text('$h:$m:$s',
+              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 10)),
+        );
+      },
     );
   }
 }
@@ -2719,7 +3191,9 @@ class _TabNavBlockState extends State<TabNavBlock> {
           : null,
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        // v2.0.67 — zero vertical padding so the tab strip sits flush
+        // beneath the search bar; let block envelope's pad_y handle spacing.
+        padding: const EdgeInsets.symmetric(horizontal: 12),
         physics: const ClampingScrollPhysics(),
         child: Row(children: [
           for (int i = 0; i < tabs.length; i++) _tab(tabs[i] as Map, i, style, t),
@@ -2739,8 +3213,8 @@ class _TabNavBlockState extends State<TabNavBlock> {
       child: Container(
         margin: EdgeInsets.only(right: style == 'underline' ? 18 : 6),
         padding: style == 'underline'
-            ? const EdgeInsets.symmetric(vertical: 6)
-            : const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+            ? const EdgeInsets.symmetric(vertical: 4)
+            : const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
         decoration: BoxDecoration(
           color: style == 'underline' ? null
               : active ? (style == 'pill' ? t.dark : UellowColors.yellowSoft)
