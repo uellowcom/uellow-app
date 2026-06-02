@@ -8,6 +8,7 @@
 // Then renders 3 selectable sections (address, shipping, payment) plus a
 // summary block and a GREEN "Place order" CTA.
 // =============================================================================
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:cached_network_image/cached_network_image.dart';
@@ -44,6 +45,12 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   }
 
   Future<_CheckoutData> _bootstrap() async {
+    // v2.0.81 — defensive bootstrap. Every HTTP call is wrapped with a
+    // timeout + try/catch so a single dead endpoint never takes down the
+    // whole checkout screen. IDs are coerced through `_asInt()` because
+    // Odoo sometimes returns them as String/num and the bare `as int?`
+    // throws on a TypeError that's invisible to the user (just shows
+    // "Could not load checkout").
     final base = UellowApi.instance.baseUrl;
     final token = await UellowApi.instance.tokenStore.readToken();
     final cartToken = await UellowApi.instance.tokenStore.readCartToken();
@@ -53,8 +60,6 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       if (cartToken != null) 'X-Cart-Token': cartToken,
     };
 
-    // Resolve the country so the payment-methods endpoint returns the
-    // right list (KNET for KW, Mada for SA, Fawry for EG, etc.).
     String? country;
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -64,48 +69,73 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         ? '$base/api/mobile/v2/orders/payment-methods?country=$country'
         : '$base/api/mobile/v2/orders/payment-methods';
 
-    final results = await Future.wait([
-      http.get(Uri.parse('$base/api/mobile/v2/orders/checkout/summary'),
-          headers: hdrs(true)),
-      http.get(Uri.parse('$base/api/mobile/v2/orders/shipping-methods'),
-          headers: hdrs(false)),
-      http.get(Uri.parse(pmUrl), headers: hdrs(false)),
-      http.get(Uri.parse('$base/api/mobile/v2/orders/checkout/geoip'),
-          headers: hdrs(true)),
-    ]);
-    Map<String, dynamic> body(http.Response r) =>
-        jsonDecode(utf8.decode(r.bodyBytes)) as Map<String, dynamic>;
+    Future<Map<String, dynamic>> safeGet(String url, {required bool needAuth}) async {
+      try {
+        final r = await http.get(Uri.parse(url), headers: hdrs(needAuth))
+            .timeout(const Duration(seconds: 15));
+        final text = utf8.decode(r.bodyBytes);
+        // Some proxies return HTML error pages on 5xx; jsonDecode would throw.
+        if (text.isEmpty || !text.trimLeft().startsWith('{')) {
+          return {'success': false, 'error': 'Bad response (${r.statusCode})'};
+        }
+        return jsonDecode(text) as Map<String, dynamic>;
+      } on TimeoutException {
+        return {'success': false, 'error': 'Request timed out'};
+      } catch (e) {
+        return {'success': false, 'error': '$e'};
+      }
+    }
 
-    final summary = body(results[0]);
-    final shipping = body(results[1]);
-    final payment = body(results[2]);
-    final geoip = body(results[3]);
+    final results = await Future.wait([
+      safeGet('$base/api/mobile/v2/orders/checkout/summary', needAuth: true),
+      safeGet('$base/api/mobile/v2/orders/shipping-methods', needAuth: false),
+      safeGet(pmUrl, needAuth: false),
+      safeGet('$base/api/mobile/v2/orders/checkout/geoip', needAuth: true),
+    ]);
+    final summary = results[0];
+    final shipping = results[1];
+    final payment = results[2];
+    final geoip = results[3];
+
+    Map<String, dynamic>? asMap(dynamic d) =>
+        d is Map ? d.cast<String, dynamic>() : null;
+    List<Map<String, dynamic>> asList(dynamic d) => d is List
+        ? d.map((e) => (e is Map ? e.cast<String, dynamic>() : <String, dynamic>{}))
+            .toList()
+        : <Map<String, dynamic>>[];
 
     final out = _CheckoutData(
-      summary: summary['success'] == true ? summary['data'] as Map<String, dynamic> : null,
-      shippingMethods: shipping['success'] == true
-          ? (shipping['data'] as List).cast<Map<String, dynamic>>() : [],
-      paymentMethods: payment['success'] == true
-          ? (payment['data'] as List).cast<Map<String, dynamic>>() : [],
-      geoip: geoip['success'] == true ? geoip['data'] as Map<String, dynamic> : null,
+      summary: summary['success'] == true ? asMap(summary['data']) : null,
+      shippingMethods: shipping['success'] == true ? asList(shipping['data']) : [],
+      paymentMethods: payment['success'] == true ? asList(payment['data']) : [],
+      geoip: geoip['success'] == true ? asMap(geoip['data']) : null,
     );
-    // Initial selections — prefer the persisted choice, then GeoIP match,
-    // then first available.
+    // The summary endpoint is the load-bearing one — surface its failure
+    // as the screen-level error so the user sees a friendly message.
+    if (out.summary == null) {
+      final reason = summary['error']?.toString() ?? 'Could not load checkout';
+      throw Exception(reason);
+    }
+
+    // Initial selections — defensive ID coercion across the board.
+    int? asInt(dynamic v) =>
+        v is int ? v : (v is num ? v.toInt() : int.tryParse('$v'));
+
     final addrs = (out.summary?['addresses'] as List?) ?? [];
     if (addrs.isNotEmpty) {
       final stored = await UellowApi.instance.tokenStore.readAddressId();
       final hasStored = stored != null
-          && addrs.any((a) => (a as Map)['id'] == stored);
+          && addrs.any((a) => asInt((a as Map)['id']) == stored);
       final geoMatch = out.geoip?['matched_address'] as Map?;
       _selectedAddressId = hasStored
           ? stored
-          : ((geoMatch?['id'] as int?) ?? addrs.first['id'] as int?);
+          : (asInt(geoMatch?['id']) ?? asInt((addrs.first as Map)['id']));
     }
     if (out.shippingMethods.isNotEmpty) {
-      _selectedCarrierId = out.shippingMethods.first['id'] as int?;
+      _selectedCarrierId = asInt(out.shippingMethods.first['id']);
     }
     if (out.paymentMethods.isNotEmpty) {
-      _selectedPaymentId = out.paymentMethods.first['id'] as int?;
+      _selectedPaymentId = asInt(out.paymentMethods.first['id']);
     }
     return out;
   }
@@ -162,13 +192,39 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                 color: UellowColors.darkBrown));
           }
           if (snap.hasError || snap.data?.summary == null) {
+            // v2.0.81 — friendlier error state with a Retry button. The
+            // bootstrap throws when the summary endpoint can't be fetched,
+            // and previously the user just saw a stack trace and had to
+            // close the screen to try again.
+            final ar = UellowApi.instance.lang == 'ar';
+            final rawMsg = snap.hasError ? snap.error.toString() : 'no_summary';
+            final friendly = ar
+                ? 'تعذّر تحميل صفحة الإتمام — تحقق من اتصالك وحاول مرة أخرى'
+                : 'Could not load checkout — check your connection and try again';
             return Center(child: Padding(
               padding: const EdgeInsets.all(30),
               child: Column(mainAxisSize: MainAxisSize.min, children: [
-                const Icon(Icons.error_outline, size: 48, color: UellowColors.muted),
-                const SizedBox(height: 12),
-                Text(snap.hasError ? snap.error.toString() : 'Could not load checkout',
-                    textAlign: TextAlign.center, style: UT.body),
+                const Icon(Icons.cloud_off_outlined, size: 56, color: UellowColors.muted),
+                const SizedBox(height: 14),
+                Text(friendly, textAlign: TextAlign.center, style: UT.body),
+                const SizedBox(height: 6),
+                // Show the raw error in a small dim line so we can debug
+                // if the user reports the problem with a screenshot.
+                Text(rawMsg, textAlign: TextAlign.center,
+                    maxLines: 2, overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 10.5,
+                        color: UellowColors.muted)),
+                const SizedBox(height: 18),
+                ElevatedButton.icon(
+                  onPressed: () => setState(() => _data = _bootstrap()),
+                  icon: const Icon(Icons.refresh, size: 16),
+                  label: Text(ar ? 'إعادة المحاولة' : 'Retry'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: UellowColors.yellow,
+                    foregroundColor: UellowColors.darkBrown,
+                    padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
+                  ),
+                ),
               ]),
             ));
           }
