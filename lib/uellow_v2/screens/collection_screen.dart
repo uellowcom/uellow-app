@@ -47,6 +47,10 @@ class _CollectionScreenState extends State<CollectionScreen> {
   final _scroll = ScrollController();
   // Selected filter value IDs across attributes
   final Set<int> _selectedValueIds = {};
+  // v2.0.80 — extra filters from the redesigned dialog
+  double? _minPrice;
+  double? _maxPrice;
+  int _minRating = 0;
 
   @override
   void initState() {
@@ -91,13 +95,17 @@ class _CollectionScreenState extends State<CollectionScreen> {
               brandId: widget.brandValueId,
               page: _page, perPage: 20, sort: _sort);
       } else {
-        // Use the v2 products list with value_ids filter (if any)
+        // v2.0.80 — value_ids + new optional filters (min/max price,
+        // min rating) flowing through to the products controller.
         final uri = Uri.parse('${UellowApi.instance.baseUrl}/api/mobile/v2/products')
             .replace(queryParameters: {
               if (widget.categoryId != null) 'category_id': '${widget.categoryId}',
               'page': '$_page', 'per_page': '20', 'sort': _sort,
               if (_selectedValueIds.isNotEmpty)
                 'value_ids': _selectedValueIds.join(','),
+              if (_minPrice != null) 'min_price': '${_minPrice!.toStringAsFixed(2)}',
+              if (_maxPrice != null) 'max_price': '${_maxPrice!.toStringAsFixed(2)}',
+              if (_minRating > 0) 'min_rating': '$_minRating',
             });
         final r = await http.get(uri, headers: {'Accept': 'application/json'});
         final body = jsonDecode(utf8.decode(r.bodyBytes)) as Map<String, dynamic>;
@@ -147,16 +155,26 @@ class _CollectionScreenState extends State<CollectionScreen> {
       if (body['success'] == true) data = body['data'] as Map<String, dynamic>;
     } catch (_) {}
     if (data == null || !mounted) return;
-    final result = await showModalBottomSheet<Set<int>>(
+    final result = await showModalBottomSheet<FilterResult>(
       context: context, isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (_) => _FilterSheet(
-        spec: data!, initial: Set<int>.from(_selectedValueIds)),
+        spec: data!,
+        initial: Set<int>.from(_selectedValueIds),
+        initialMinPrice: _minPrice,
+        initialMaxPrice: _maxPrice,
+        initialMinRating: _minRating,
+        initialSort: _sort,
+      ),
     );
     if (result != null) {
       _selectedValueIds
         ..clear()
-        ..addAll(result);
+        ..addAll(result.valueIds);
+      _minPrice = result.minPrice;
+      _maxPrice = result.maxPrice;
+      _minRating = result.minRating;
+      if (result.sortOverride != null) _sort = result.sortOverride!;
       _resetAndReload();
     }
   }
@@ -366,20 +384,59 @@ class _SortBar extends StatelessWidget {
 
 // ─── Filter bottom sheet ──────────────────────────────────────────
 
+// v2.0.80 — return type for the redesigned filter sheet so the screen
+// can pull every choice out (was just a Set<int> of attribute values).
+class FilterResult {
+  FilterResult({
+    required this.valueIds,
+    this.minPrice, this.maxPrice,
+    this.minRating = 0,
+    this.sortOverride,
+  });
+  final Set<int> valueIds;
+  final double? minPrice;
+  final double? maxPrice;
+  final int minRating;
+  final String? sortOverride;
+}
+
 class _FilterSheet extends StatefulWidget {
-  const _FilterSheet({required this.spec, required this.initial});
+  const _FilterSheet({
+    required this.spec, required this.initial,
+    this.initialMinPrice, this.initialMaxPrice,
+    this.initialMinRating = 0, this.initialSort,
+  });
   final Map<String, dynamic> spec;
   final Set<int> initial;
+  final double? initialMinPrice;
+  final double? initialMaxPrice;
+  final int initialMinRating;
+  final String? initialSort;
   @override
   State<_FilterSheet> createState() => _FilterSheetState();
 }
 
 class _FilterSheetState extends State<_FilterSheet> {
   late Set<int> _selected;
+  RangeValues? _priceRange;
+  late double _priceMin, _priceMax;
+  late int _minRating;
+  late String _sort;
   @override
   void initState() {
     super.initState();
     _selected = Set<int>.from(widget.initial);
+    final price = widget.spec['price'] as Map<String, dynamic>?;
+    _priceMin = ((price?['min'] as num?)?.toDouble()) ?? 0;
+    _priceMax = ((price?['max'] as num?)?.toDouble()) ?? 1000;
+    if (_priceMax <= _priceMin) _priceMax = _priceMin + 100;
+    final lo = widget.initialMinPrice ?? _priceMin;
+    final hi = widget.initialMaxPrice ?? _priceMax;
+    _priceRange = RangeValues(
+        lo.clamp(_priceMin, _priceMax),
+        hi.clamp(_priceMin, _priceMax));
+    _minRating = widget.initialMinRating;
+    _sort = widget.initialSort ?? 'newest';
   }
 
   @override
@@ -424,9 +481,17 @@ class _FilterSheetState extends State<_FilterSheet> {
           ]),
         ),
         // ── Filter list ────────────────────────────────────
-        Flexible(child: ListView(padding: const EdgeInsets.fromLTRB(20, 18, 20, 8),
+        // v2.0.80 — sectioned layout: Sort, Price slider, Rating, then
+        // the attribute groups. Each is in its own card with a divider
+        // between for clear visual grouping.
+        Flexible(child: ListView(padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
             children: [
-          if (price != null) _priceCard(price, ar),
+          _sortCard(ar),
+          const SizedBox(height: 12),
+          if (price != null) _priceSliderCard(price, ar),
+          if (price != null) const SizedBox(height: 12),
+          _ratingCard(ar),
+          const SizedBox(height: 18),
           for (final a in attrs) _attrGroup(a),
         ])),
         // ── Footer CTAs ────────────────────────────────────
@@ -451,7 +516,16 @@ class _FilterSheetState extends State<_FilterSheet> {
             )),
             const SizedBox(width: 10),
             Expanded(flex: 2, child: ElevatedButton.icon(
-              onPressed: () => Navigator.pop(context, _selected),
+              onPressed: () {
+                final r = _priceRange;
+                Navigator.pop(context, FilterResult(
+                  valueIds: _selected,
+                  minPrice: (r != null && r.start > _priceMin) ? r.start : null,
+                  maxPrice: (r != null && r.end < _priceMax) ? r.end : null,
+                  minRating: _minRating,
+                  sortOverride: _sort,
+                ));
+              },
               icon: const Icon(Icons.check, size: 16, color: UellowColors.darkBrown),
               label: Text(ar
                   ? 'تطبيق ${_selected.isNotEmpty ? "(${_selected.length})" : ""}'.trim()
@@ -472,40 +546,170 @@ class _FilterSheetState extends State<_FilterSheet> {
     );
   }
 
-  Widget _priceCard(Map<String, dynamic> p, bool ar) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 22),
-      child: Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            begin: Alignment.topLeft, end: Alignment.bottomRight,
-            colors: [UellowColors.yellowFaint, UellowColors.yellowSoft],
-          ),
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: UellowColors.yellow),
-        ),
-        child: Row(children: [
-          Container(
-            width: 40, height: 40,
-            decoration: const BoxDecoration(
-                color: UellowColors.yellow, shape: BoxShape.circle),
-            alignment: Alignment.center,
-            child: const Icon(Icons.local_offer_outlined, size: 18,
-                color: UellowColors.darkBrown),
-          ),
-          const SizedBox(width: 12),
-          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(ar ? 'نطاق السعر' : 'Price range',
-                style: const TextStyle(fontSize: 11, color: UellowColors.muted,
-                    fontWeight: FontWeight.w800, letterSpacing: 0.5)),
-            const SizedBox(height: 2),
-            Text('${p['min']} – ${p['max']} ${p['currency']}',
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900,
-                    color: UellowColors.ink)),
-          ])),
-        ]),
+  // v2.0.80 — interactive price range slider replacing the static card.
+  Widget _priceSliderCard(Map<String, dynamic> p, bool ar) {
+    final currency = (p['currency'] as String?) ?? '';
+    final r = _priceRange ?? RangeValues(_priceMin, _priceMax);
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: UellowColors.border),
       ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          const Icon(Icons.local_offer_outlined, size: 16,
+              color: UellowColors.darkBrown),
+          const SizedBox(width: 6),
+          Text(ar ? 'نطاق السعر' : 'Price range',
+              style: const TextStyle(fontSize: 12.5,
+                  fontWeight: FontWeight.w900, color: UellowColors.ink,
+                  letterSpacing: 0.2)),
+          const Spacer(),
+          Text('${r.start.toStringAsFixed(0)} – ${r.end.toStringAsFixed(0)} $currency',
+              style: const TextStyle(fontSize: 11.5,
+                  color: UellowColors.darkBrown, fontWeight: FontWeight.w900)),
+        ]),
+        SliderTheme(
+          data: SliderTheme.of(context).copyWith(
+            activeTrackColor: UellowColors.yellow,
+            inactiveTrackColor: UellowColors.bg,
+            thumbColor: UellowColors.darkBrown,
+            overlayColor: UellowColors.yellow.withValues(alpha: 0.2),
+            valueIndicatorColor: UellowColors.darkBrown,
+            trackHeight: 3,
+          ),
+          child: RangeSlider(
+            min: _priceMin, max: _priceMax,
+            divisions: ((_priceMax - _priceMin).clamp(1, 200)).toInt(),
+            values: r,
+            labels: RangeLabels(
+                r.start.toStringAsFixed(0), r.end.toStringAsFixed(0)),
+            onChanged: (v) => setState(() => _priceRange = v),
+          ),
+        ),
+      ]),
+    );
+  }
+
+  // v2.0.80 — minimum-rating chips (Any · 4★+ · 3★+ · 2★+).
+  Widget _ratingCard(bool ar) {
+    Widget chip(int v, String label) {
+      final on = _minRating == v;
+      return GestureDetector(
+        onTap: () => setState(() => _minRating = v),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+          decoration: BoxDecoration(
+            color: on ? UellowColors.yellow : Colors.white,
+            border: Border.all(
+                color: on ? UellowColors.yellow : UellowColors.border,
+                width: on ? 0 : 1),
+            borderRadius: BorderRadius.circular(999),
+          ),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            if (v > 0) ...[
+              const Icon(Icons.star_rounded, size: 13,
+                  color: UellowColors.darkBrown),
+              const SizedBox(width: 2),
+            ],
+            Text(label,
+                style: TextStyle(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w800,
+                  color: on ? UellowColors.darkBrown : UellowColors.ink,
+                )),
+          ]),
+        ),
+      );
+    }
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: UellowColors.border),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          const Icon(Icons.star_outline_rounded, size: 16,
+              color: UellowColors.darkBrown),
+          const SizedBox(width: 6),
+          Text(ar ? 'الحد الأدنى للتقييم' : 'Minimum rating',
+              style: const TextStyle(fontSize: 12.5,
+                  fontWeight: FontWeight.w900, color: UellowColors.ink,
+                  letterSpacing: 0.2)),
+        ]),
+        const SizedBox(height: 10),
+        Wrap(spacing: 6, runSpacing: 6, children: [
+          chip(0, ar ? 'الكل' : 'Any'),
+          chip(4, '4+'),
+          chip(3, '3+'),
+          chip(2, '2+'),
+        ]),
+      ]),
+    );
+  }
+
+  // v2.0.80 — in-dialog sort chips so the user can re-order without
+  // leaving the sheet (was only outside in the SortBar).
+  Widget _sortCard(bool ar) {
+    final sorts = ar
+      ? const [
+          ['popular',    '🏆 الأكثر مبيعاً'],
+          ['newest',     '✨ الأحدث'],
+          ['top_rated',  '⭐ الأعلى تقييماً'],
+          ['price_asc',  '⬆️ السعر تصاعدي'],
+          ['price_desc', '⬇️ السعر تنازلي'],
+        ]
+      : const [
+          ['popular',    '🏆 Bestsellers'],
+          ['newest',     '✨ Newest'],
+          ['top_rated',  '⭐ Top rated'],
+          ['price_asc',  '⬆️ Price low–high'],
+          ['price_desc', '⬇️ Price high–low'],
+        ];
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: UellowColors.border),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          const Icon(Icons.sort, size: 16, color: UellowColors.darkBrown),
+          const SizedBox(width: 6),
+          Text(ar ? 'الترتيب' : 'Sort by',
+              style: const TextStyle(fontSize: 12.5,
+                  fontWeight: FontWeight.w900, color: UellowColors.ink,
+                  letterSpacing: 0.2)),
+        ]),
+        const SizedBox(height: 10),
+        Wrap(spacing: 6, runSpacing: 6, children: [
+          for (final s in sorts)
+            GestureDetector(
+              onTap: () => setState(() => _sort = s[0]),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                decoration: BoxDecoration(
+                  color: _sort == s[0] ? UellowColors.yellow : Colors.white,
+                  border: Border.all(
+                      color: _sort == s[0] ? UellowColors.yellow : UellowColors.border,
+                      width: _sort == s[0] ? 0 : 1),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text(s[1],
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w800,
+                      color: _sort == s[0] ? UellowColors.darkBrown : UellowColors.ink,
+                    )),
+              ),
+            ),
+        ]),
+      ]),
     );
   }
 
