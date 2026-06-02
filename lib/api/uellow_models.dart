@@ -467,6 +467,10 @@ class UellowProductFull extends UellowProductCard {
   final int viewCount;
   final UellowCategoryRef? brand;
   final List<UellowBulkTier> bulkPricing;
+  /// v2.0.58 — effective max purchasable quantity from the backend
+  /// (product override → category override → global default). Caps the
+  /// +/- quantity selector on the product page.
+  final int maxQtyBuyable;
   // allowOutOfStockOrder is inherited from UellowProductCard now
   final DateTime? flashEndsAt;
   final UellowText? flashTitle;
@@ -485,6 +489,7 @@ class UellowProductFull extends UellowProductCard {
     required this.warrantyMonths, required this.shippingInfoLabel,
     this.soldCount = 0, this.viewCount = 0, this.brand,
     this.bulkPricing = const [],
+    this.maxQtyBuyable = 10,
     bool allowOutOfStockOrder = true,
     bool hasVideo = false,
     this.flashEndsAt, this.flashTitle,
@@ -538,6 +543,9 @@ class UellowProductFull extends UellowProductCard {
         bulkPricing: ((j['bulk_pricing'] as List?) ?? const [])
             .map((e) => UellowBulkTier.fromJson(e as Map<String, dynamic>))
             .toList(),
+        maxQtyBuyable: (j['max_qty_buyable'] ?? 10) is int
+            ? (j['max_qty_buyable'] ?? 10) as int
+            : int.tryParse('${j['max_qty_buyable'] ?? 10}') ?? 10,
         allowOutOfStockOrder: (j['allow_out_of_stock_order'] ?? true) as bool,
         flashEndsAt: (j['flash_sale'] as Map?)?['end_date'] != null
             ? DateTime.tryParse((j['flash_sale'] as Map)['end_date'] as String)?.toLocal()

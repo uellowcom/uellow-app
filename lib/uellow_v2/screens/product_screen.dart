@@ -1326,6 +1326,45 @@ class _BulkPricing extends StatelessWidget {
   }
 }
 
+// ─── Subtotal widget that reflects the active bulk tier ──────────────
+//
+// Given the product and the currently-selected quantity, returns the
+// effective unit price (highest min_qty tier still <= qty) × qty.
+// Always falls back to the original price when no tier matches.
+class _Subtotal extends StatelessWidget {
+  const _Subtotal({required this.product, required this.qty, required this.lang});
+  final UellowProductFull product;
+  final int qty;
+  final String lang;
+
+  double get _effectiveUnitPrice {
+    final tiers = product.bulkPricing
+        .where((t) => t.minQty <= qty)
+        .toList()
+      ..sort((a, b) => b.minQty.compareTo(a.minQty));
+    if (tiers.isEmpty) return product.price.amount;
+    return tiers.first.price;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final unit = _effectiveUnitPrice;
+    final total = unit * qty;
+    final hasDiscount = unit < product.price.amount;
+    return Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+      Text('${total.toStringAsFixed(3)} ${product.price.displaySymbol(lang)}',
+          style: const TextStyle(fontSize: 16,
+              fontWeight: FontWeight.w900, color: UellowColors.ink)),
+      if (hasDiscount)
+        Text(
+          '${(unit).toStringAsFixed(3)} ${product.price.displaySymbol(lang)} '
+          '${lang == "ar" ? "/ قطعة" : "/ pc"}',
+          style: const TextStyle(fontSize: 10.5,
+              color: UellowColors.success, fontWeight: FontWeight.w700)),
+    ]);
+  }
+}
+
 // ─── Description ──────────────────────────────────────────────────
 
 class _DescriptionBlock extends StatelessWidget {
@@ -2296,17 +2335,23 @@ class _BuySheetState extends State<_BuySheet> {
                   SizedBox(width: 36, child: Text('$_qty',
                       textAlign: TextAlign.center,
                       style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 15))),
-                  _qtyBtn('+', () => setState(() => _qty++)),
+                  _qtyBtn('+', () => _qty < p.maxQtyBuyable
+                      ? setState(() => _qty++) : null),
                 ]),
               ),
+              const SizedBox(width: 6),
+              Text(ar ? '/ ${p.maxQtyBuyable} كحد أقصى'
+                     : '/ ${p.maxQtyBuyable} max',
+                  style: const TextStyle(fontSize: 10.5,
+                      color: UellowColors.muted, fontWeight: FontWeight.w600)),
               const Spacer(),
               Text(ar ? 'الإجمالي' : 'Subtotal',
                   style: const TextStyle(fontSize: 11, color: UellowColors.muted,
                       fontWeight: FontWeight.w700)),
               const SizedBox(width: 8),
-              Text('${(p.price.amount * _qty).toStringAsFixed(3)} ${p.price.displaySymbol(lang)}',
-                  style: const TextStyle(fontSize: 16,
-                      fontWeight: FontWeight.w900, color: UellowColors.ink)),
+              // Subtotal reflects the active bulk-pricing tier if the
+              // selected qty crosses any tier threshold.
+              _Subtotal(product: p, qty: _qty, lang: lang),
             ]),
             ])),    // close horizontal-padding Column+Padding for variants
           ],
