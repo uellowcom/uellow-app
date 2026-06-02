@@ -13,7 +13,9 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:http/http.dart' as http;
 
 import '../../api/uellow_api.dart';
@@ -21,6 +23,31 @@ import '../router/uellow_router.dart';
 import '../screens/dynamic_page_screen.dart';
 import '../theme/uellow_l10n.dart';
 import '../theme/uellow_theme.dart';
+
+// v2.0.39 — Render either an emoji or an uploaded PNG/SVG icon.
+// The admin can paste any emoji OR upload a custom image; we detect by
+// looking at the leading characters of the icon string.
+Widget _renderNavIcon(String raw, {required Color color, double size = 22}) {
+  if (raw.isEmpty) return Icon(Icons.circle_outlined, size: size, color: color);
+  if (raw.startsWith('http') || raw.startsWith('/web/')) {
+    final isSvg = raw.toLowerCase().contains('.svg') || raw.toLowerCase().contains('svg+xml');
+    if (isSvg) {
+      return SvgPicture.network(
+        raw, width: size, height: size, fit: BoxFit.contain,
+        colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
+        placeholderBuilder: (_) => SizedBox(width: size, height: size),
+      );
+    }
+    return CachedNetworkImage(
+      imageUrl: raw, width: size, height: size, fit: BoxFit.contain,
+      color: color,            // tint PNG/JPG to the active/inactive color
+      colorBlendMode: BlendMode.srcIn,
+      placeholder: (_, __) => SizedBox(width: size, height: size),
+      errorWidget: (_, __, ___) => Icon(Icons.broken_image_outlined, size: size, color: color),
+    );
+  }
+  return Text(raw, style: TextStyle(fontSize: size * 0.95, color: color, height: 1));
+}
 
 enum UNavTab { home, shop, beena, cart, account }
 
@@ -241,9 +268,11 @@ class _UellowBottomNavState extends State<UellowBottomNav> {
               onTap: () => _gotoDyn(context, it),
               child: Stack(alignment: Alignment.center, children: [
                 Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                  Text(it.icon, style: TextStyle(
-                      fontSize: 20,
-                      color: on ? UellowColors.darkBrown : const Color(0xFF3F3F3F))),
+                  _renderNavIcon(
+                    it.icon,
+                    color: on ? UellowColors.darkBrown : const Color(0xFF3F3F3F),
+                    size: 22,
+                  ),
                   const SizedBox(height: 2),
                   Text(it.label, maxLines: 1, overflow: TextOverflow.ellipsis,
                       style: TextStyle(

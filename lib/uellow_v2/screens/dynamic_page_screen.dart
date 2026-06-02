@@ -233,6 +233,14 @@ Widget _renderBlock(BuildContext c, Map<String, dynamic> b, DynTheme t) {
     case 'welcome-deal':   inner = WelcomeDealBlock(p: p, data: data, t: t, ar: ar); break;
     case 'discount-strip': inner = DiscountStripBlock(p: p, data: data, t: t, ar: ar); break;
     case 'pill-filter':    inner = PillFilterBlock(p: p, t: t, ar: ar); break;
+    // v2.0.36 — Explore More
+    case 'explore-more':   inner = ExploreMoreBlock(p: p, data: data, t: t, ar: ar); break;
+    // v2.0.38 — Slider + 5 pro designs
+    case 'slider':         inner = SliderBlock(p: p, t: t, ar: ar); break;
+    case 'tab-nav':        inner = TabNavBlock(p: p, t: t, ar: ar); break;
+    case 'story-bubbles':  inner = StoryBubblesBlock(p: p, t: t, ar: ar); break;
+    case 'lookbook':       inner = LookbookBlock(p: p, t: t, ar: ar); break;
+    case 'sticky-cta':     inner = StickyCtaBlock(p: p, t: t, ar: ar); break;
     default:               return const SizedBox.shrink();
   }
   return BlockEnvelope(props: p, theme: t, child: inner);
@@ -598,7 +606,9 @@ class _ProductsBlock extends StatelessWidget {
               child: Text(ar ? 'الكل ←' : 'See all →'),
             ),
           ])),
-        SizedBox(height: 198,
+        // v2.0.38 — Tightened card height to match content + richer card layout
+        // so there's no gray empty space after the last product.
+        SizedBox(height: 250,
           child: ListView.separated(
             physics: const ClampingScrollPhysics(),
             padding: const EdgeInsets.symmetric(horizontal: 14),
@@ -611,14 +621,24 @@ class _ProductsBlock extends StatelessWidget {
               final compare = prod['compare_price'];
               final discount = (prod['discount_pct'] as num?)?.toInt() ?? 0;
               final url = (prod['image'] as String?) ?? '';
+              final badges = ((prod['badges'] as List?) ?? const []).cast<dynamic>();
+              final rating = (prod['rating'] as Map?)?.cast<String, dynamic>();
+              final ratingAvg = (rating?['avg'] as num?)?.toDouble() ?? 0.0;
+              final ratingCount = (rating?['count'] as num?)?.toInt() ?? 0;
+              final priceAmt = (price?['amount'] as num?)?.toDouble() ?? 0;
+              final compareAmt = (compare is Map ? compare['amount'] : compare) as num?;
+              double saving = 0;
+              if (compareAmt != null && compareAmt > priceAmt) saving = compareAmt - priceAmt;
               return GestureDetector(
                 onTap: () => UellowRouter.goProduct(context, (prod['id'] as num).toInt()),
                 child: Container(
-                  width: 138,
+                  width: 152,
                   decoration: BoxDecoration(
                     color: Colors.white,
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: t.dark.withValues(alpha: 0.08)),
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: [BoxShadow(
+                      color: t.dark.withValues(alpha: 0.06),
+                      blurRadius: 6, offset: const Offset(0, 2))],
                   ),
                   clipBehavior: Clip.antiAlias,
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -634,8 +654,9 @@ class _ProductsBlock extends StatelessWidget {
                             : Container(color: t.primary.withValues(alpha: 0.08),
                                 child: Icon(Icons.shopping_bag_outlined,
                                     color: t.dark.withValues(alpha: 0.4)))),
+                      // Discount % top-left
                       if (discount > 0) Positioned(
-                        top: 4, left: 4,
+                        top: 6, left: 6,
                         child: Container(
                           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                           decoration: BoxDecoration(
@@ -644,30 +665,87 @@ class _ProductsBlock extends StatelessWidget {
                           ),
                           child: Text('-$discount%',
                               style: const TextStyle(color: Colors.white,
-                                  fontSize: 9, fontWeight: FontWeight.w900)),
+                                  fontSize: 10, fontWeight: FontWeight.w900)),
+                        ),
+                      ),
+                      // Smart badges top-right (🔥 ✨ 🚚 💯)
+                      if (badges.isNotEmpty) Positioned(
+                        top: 6, right: 6,
+                        child: Wrap(spacing: 3, direction: Axis.vertical, children: [
+                          for (final b in badges.take(2))
+                            if (b is Map) Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(4),
+                                boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 2)],
+                              ),
+                              child: Text((b['label_en']?.toString() ?? '').split(' ').first,
+                                  style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w900)),
+                            ),
+                        ]),
+                      ),
+                      // Wishlist heart bottom-right of image
+                      Positioned(
+                        bottom: 6, right: 6,
+                        child: Container(
+                          width: 28, height: 28,
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            shape: BoxShape.circle,
+                            boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 3)],
+                          ),
+                          child: Icon(Icons.favorite_border, size: 15, color: t.dark),
                         ),
                       ),
                     ]),
                     Padding(
-                      padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
+                      padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
                       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                         Text(prod['name']?.toString() ?? '',
                             maxLines: 2, overflow: TextOverflow.ellipsis,
-                            style: TextStyle(color: t.dark, fontSize: 11,
-                                height: 1.25, fontWeight: FontWeight.w600)),
+                            style: TextStyle(color: t.dark, fontSize: 11.5,
+                                height: 1.2, fontWeight: FontWeight.w600)),
                         const SizedBox(height: 4),
                         Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
-                          Text('${(price?['amount'] as num? ?? 0).toStringAsFixed(price?['digits'] ?? 3)} ${price?['symbol'] ?? ''}',
-                              style: TextStyle(color: t.dark, fontSize: 13,
-                                  fontWeight: FontWeight.w900)),
-                          if (compare != null) ...[
+                          Flexible(
+                            child: Text(
+                                '${priceAmt.toStringAsFixed(price?['digits'] ?? 3)} ${price?['symbol'] ?? ''}',
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(color: t.dark, fontSize: 14,
+                                    fontWeight: FontWeight.w900)),
+                          ),
+                          if (compareAmt != null) ...[
                             const SizedBox(width: 4),
-                            Text('${(compare as num).toStringAsFixed(price?['digits'] ?? 3)}',
+                            Text('${compareAmt.toStringAsFixed(price?['digits'] ?? 3)}',
                                 style: TextStyle(color: t.dark.withValues(alpha: 0.45),
                                     fontSize: 10, fontWeight: FontWeight.w600,
                                     decoration: TextDecoration.lineThrough)),
                           ],
                         ]),
+                        if (saving > 0) Padding(
+                          padding: const EdgeInsets.only(top: 2),
+                          child: Text('${ar ? 'وفر' : 'Save'} ${saving.toStringAsFixed(price?['digits'] ?? 3)}',
+                              style: const TextStyle(color: Color(0xFF1F8A40), fontSize: 9.5,
+                                  fontWeight: FontWeight.w800)),
+                        ),
+                        // Rating + sold count footer
+                        if (ratingAvg > 0 || ratingCount > 0) Padding(
+                          padding: const EdgeInsets.only(top: 3),
+                          child: Row(children: [
+                            const Icon(Icons.star, size: 10.5, color: Color(0xFFFFC107)),
+                            const SizedBox(width: 2),
+                            Text(ratingAvg > 0 ? ratingAvg.toStringAsFixed(1) : '—',
+                                style: TextStyle(fontSize: 10,
+                                    color: t.dark, fontWeight: FontWeight.w700)),
+                            if (ratingCount > 0) ...[
+                              const SizedBox(width: 3),
+                              Text('($ratingCount)',
+                                  style: TextStyle(fontSize: 9.5,
+                                      color: t.dark.withValues(alpha: 0.5))),
+                            ],
+                          ]),
+                        ),
                       ]),
                     ),
                   ]),

@@ -1223,6 +1223,8 @@ class _BulkPricing extends StatelessWidget {
             ),
         ]),
         const SizedBox(height: 14),
+        // Render up to 4 tiers in a tight row. Spacing is 6px so 4 columns
+        // still breathe on small phones.
         Row(children: List.generate(tiers.length, (i) {
           final t = tiers[i];
           final nextMin = i < tiers.length - 1 ? tiers[i + 1].minQty - 1 : null;
@@ -1230,19 +1232,36 @@ class _BulkPricing extends StatelessWidget {
               ? '${t.minQty}–$nextMin'
               : '${t.minQty}+';
           return Expanded(child: Padding(
-            padding: EdgeInsets.only(right: i < tiers.length - 1 ? 8 : 0),
+            padding: EdgeInsets.only(right: i < tiers.length - 1 ? 6 : 0),
             child: _tier(qtyLabel: qtyLabel, price: t.price, sym: t.currency,
-                save: t.savePct, best: i == bestIdx && tiers.length > 1, ar: ar),
+                save: t.savePct, best: i == bestIdx && tiers.length > 1,
+                capped: t.capped, ar: ar),
           ));
         })),
+        // Tier-floor protection legend (only shows if ANY tier was capped)
+        if (tiers.any((t) => t.capped)) ...[
+          const SizedBox(height: 10),
+          Row(children: [
+            Icon(Icons.shield_outlined, size: 13,
+                color: UellowColors.darkBrown.withValues(alpha: 0.55)),
+            const SizedBox(width: 4),
+            Expanded(child: Text(
+              ar
+                ? 'بعض الخصومات مُحسَّنة لضمان جودة المنتج'
+                : 'Some discounts adjusted to protect product quality',
+              style: TextStyle(fontSize: 10.5,
+                  color: UellowColors.darkBrown.withValues(alpha: 0.55),
+                  fontWeight: FontWeight.w600))),
+          ]),
+        ],
       ]),
     );
   }
   Widget _tier({required String qtyLabel, required double price, required String sym,
-      required int save, bool best = false, required bool ar}) {
+      required int save, bool best = false, bool capped = false, required bool ar}) {
     return Stack(clipBehavior: Clip.none, children: [
       Container(
-        padding: EdgeInsets.fromLTRB(8, best ? 18 : 12, 8, 12),
+        padding: EdgeInsets.fromLTRB(6, best ? 18 : 12, 6, 12),
         decoration: BoxDecoration(
           color: best ? UellowColors.darkBrown : Colors.white,
           border: Border.all(

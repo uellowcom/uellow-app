@@ -384,15 +384,21 @@ class UellowBulkTier {
   final double price;
   final String currency;
   final int savePct;
+  /// True when the backend's cost-floor protection kicked in for this tier,
+  /// i.e. the original discount would have caused a loss so the price was
+  /// raised to the safety floor. Used to show a subtle indicator.
+  final bool capped;
   const UellowBulkTier({
     required this.minQty, required this.price,
     required this.currency, required this.savePct,
+    this.capped = false,
   });
   factory UellowBulkTier.fromJson(Map<String, dynamic> j) => UellowBulkTier(
         minQty: (j['min_qty'] ?? 1) as int,
         price: (j['price'] ?? 0).toDouble(),
         currency: (j['currency'] ?? 'KD').toString(),
         savePct: (j['save_pct'] ?? 0) as int,
+        capped: (j['capped'] ?? false) == true,
       );
 }
 

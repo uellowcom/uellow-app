@@ -1,17 +1,25 @@
 // =============================================================================
 // Dynamic block extras — block envelope (bg + pattern + title + spacing) and
-// the new block variants introduced in v2.0.34 (Quick Pills, Themed Promo,
-// Mini Category Cards, Welcome Deal, Discount Strip, Promo Pills).
+// the new block variants introduced in v2.0.34/v2.0.36 (Quick Pills, Themed
+// Promo, Mini Category Cards, Welcome Deal, Discount Strip, Promo Pills,
+// Explore More).
 //
 // Each new widget is keyed by a `kind` string the builder writes into
 // blocks_json. The dispatcher in dynamic_page_screen.dart fans out here.
 // =============================================================================
+import 'dart:async';
+import 'dart:convert';
 import 'dart:math' as math;
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 
+import '../../api/uellow_api.dart';
+import '../../api/uellow_models.dart';
 import '../router/uellow_router.dart';
+import '../theme/uellow_theme.dart';
+import '../widgets/product_card.dart';
 import 'dynamic_page_screen.dart' show DynTheme, renderDynamicBlock;
 
 // ─── BLOCK ENVELOPE ─────────────────────────────────────────────────────────
@@ -582,7 +590,10 @@ class DiscountStripBlock extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final products = (data['products'] as List? ?? const []).cast<dynamic>();
+    // Resolver returns `items` (matches resolve_products). Older alias
+    // `products` kept for forward compatibility with any seed data.
+    final products = (data['items'] as List? ?? data['products'] as List? ?? const []).cast<dynamic>();
+    if (products.isEmpty) return const SizedBox.shrink();
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       DynSectionHeader(props: p, theme: t, ar: ar, fallbackEn: 'Hot deals'),
       SizedBox(
@@ -853,4 +864,1130 @@ void _openLink(BuildContext c, Map<String, dynamic>? link) {
       UellowRouter.goDynPage(c, value);
       break;
   }
+}
+
+// ─── EXPLORE MORE v2.0.37 — full discovery suite ─────────────────────────────
+//
+// Top-tier e-commerce discovery block:
+//   • Category chip filter strip (server-computed top 6 categories)
+//   • Sort bar (Best / Newest / Price ↑↓ / Top rated)
+//   • Skeleton shimmer while loading
+//   • "Why you see this" + trending stat captions
+//   • Smart badges per product (🔥 Hot · ✨ New · 🚚 Free ship · 💯 Best deal)
+//   • Sponsored slots (designer's picks) every Nth item with "AD" tag
+//   • Optional Deal-of-the-Hour pinned banner with countdown
+//   • Optional live activity ticker (anonymized "Sara from Salmiya bought…")
+//   • Variants: standard / compact / hero
+//   • Bilingual (EN/AR)
+
+class ExploreMoreBlock extends StatefulWidget {
+  const ExploreMoreBlock({super.key, required this.p, required this.data, required this.t, required this.ar});
+  final Map<String, dynamic> p;
+  final Map<String, dynamic> data;
+  final DynTheme t;
+  final bool ar;
+  @override
+  State<ExploreMoreBlock> createState() => _ExploreMoreBlockState();
+}
+
+class _ExploreMoreBlockState extends State<ExploreMoreBlock> {
+  final List<UellowProductCard> _items = [];
+  final List<Map<String, dynamic>> _itemMeta = [];  // badges + sponsored flag per item
+  List<UellowProductCard> _sponsored = [];
+  List<Map<String, dynamic>> _sponsoredMeta = [];
+  List<Map<String, dynamic>> _chips = [];
+  int? _activeChipId;
+  late int _seed;
+  int _page = 2;
+  int _autoRounds = 0;
+  bool _loading = false;
+  bool _hasMore = true;
+  late String _sort;
+  Timer? _activityTimer;
+  int _activityIdx = 0;
+
+  // Hard-coded plausible activity ticker entries (privacy-safe — no real names
+  // exposed). Could fetch from server in v2.0.38.
+  static const _activityFeed = [
+    {'en':'Sara from Salmiya bought 2 minutes ago', 'ar':'سارة من السالمية اشترت قبل دقيقتين'},
+    {'en':'Ahmed in Kuwait City just added to cart', 'ar':'أحمد في مدينة الكويت أضافه للسلة الآن'},
+    {'en':'Layla from Hawalli is viewing this',     'ar':'ليلى من حولي تشاهد هذا المنتج'},
+    {'en':'5 people bought this in the last hour',  'ar':'٥ أشخاص اشتروا هذا في الساعة الأخيرة'},
+    {'en':'Trending #1 in Phones today',            'ar':'الأكثر رواجاً #1 في الهواتف اليوم'},
+  ];
+
+  int  get _perPage     => (widget.p['per_page']   as num?)?.toInt() ?? 12;
+  int  get _autoLimit   => (widget.p['auto_pages'] as num?)?.toInt() ?? 3;
+  int  get _sponsoredEvery => (widget.p['sponsored_every'] as num?)?.toInt() ?? 5;
+  int  get _columns     {
+    final c = widget.p['columns'];
+    if (c is num) return c.toInt();
+    return int.tryParse(c?.toString() ?? '2') ?? 2;
+  }
+  String get _variant   => (widget.p['variant'] as String?) ?? 'standard';
+  bool get _showShuffle   => widget.p['show_shuffle']      != false;
+  bool get _showEndMarker => widget.p['show_end_marker']   != false;
+  bool get _showChips     => widget.p['show_chips']        != false;
+  bool get _showSortBar   => widget.p['show_sort_bar']     != false;
+  bool get _showBadges    => widget.p['show_badges']       != false;
+  bool get _showSkeleton  => widget.p['show_skeleton']     != false;
+  bool get _showWhy       => widget.p['show_why_caption']  != false;
+  bool get _showTrending  => widget.p['show_trending_stat']!= false;
+  bool get _showActivity  => widget.p['show_live_activity']== true;
+
+  @override
+  void initState() {
+    super.initState();
+    _seed = (widget.data['seed'] as num?)?.toInt() ?? DateTime.now().millisecondsSinceEpoch & 0x7FFFFFFF;
+    _sort = (widget.p['sort'] as String?) ?? 'best_match';
+    _chips = ((widget.data['category_chips'] as List?) ?? const [])
+        .map((e) => (e as Map).cast<String, dynamic>()).toList();
+
+    // Seed initial items from resolver
+    final initial = (widget.data['items'] as List? ?? const []);
+    for (final raw in initial) {
+      try {
+        final m = (raw as Map).cast<String, dynamic>();
+        _items.add(UellowProductCard.fromJson(m));
+        _itemMeta.add({'badges': m['badges'] ?? const []});
+      } catch (_) {/* skip malformed */}
+    }
+
+    // Sponsored items
+    final sp = (widget.data['sponsored'] as List? ?? const []);
+    for (final raw in sp) {
+      try {
+        final m = (raw as Map).cast<String, dynamic>();
+        _sponsored.add(UellowProductCard.fromJson(m));
+        _sponsoredMeta.add({'badges': m['badges'] ?? const [], 'sponsored': true});
+      } catch (_) {}
+    }
+
+    _hasMore = (widget.data['has_more'] as bool?) ?? _items.length >= _perPage;
+    _page = (widget.data['next_page'] as num?)?.toInt() ?? 2;
+
+    if (_showActivity) {
+      _activityTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+        if (!mounted) return;
+        setState(() => _activityIdx = (_activityIdx + 1) % _activityFeed.length);
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _activityTimer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _loadMore() async {
+    if (_loading || !_hasMore) return;
+    setState(() => _loading = true);
+    try {
+      final api = UellowApi.instance;
+      final params = <String, String>{
+        'seed': _seed.toString(),
+        'page': _page.toString(),
+        'per_page': _perPage.toString(),
+        'sort': _sort,
+        if (_activeChipId != null) 'category_id': _activeChipId.toString(),
+      };
+      final url = Uri.parse('${api.baseUrl}/api/mobile/v2/products/explore')
+          .replace(queryParameters: params);
+      final res = await http.get(url, headers: {'Accept': 'application/json', 'X-Lang': api.lang})
+          .timeout(const Duration(seconds: 8));
+      if (res.statusCode != 200) {
+        setState(() { _loading = false; _hasMore = false; });
+        return;
+      }
+      final j = jsonDecode(res.body) as Map<String, dynamic>;
+      final items = (j['data'] as List? ?? const []);
+      final meta = (j['meta'] as Map?)?.cast<String, dynamic>() ?? {};
+      if (!mounted) return;
+      setState(() {
+        for (final raw in items) {
+          try {
+            final m = (raw as Map).cast<String, dynamic>();
+            _items.add(UellowProductCard.fromJson(m));
+            _itemMeta.add({'badges': m['badges'] ?? const []});
+          } catch (_) {}
+        }
+        _page++;
+        _autoRounds++;
+        _hasMore = (meta['has_next'] as bool?) ?? items.isNotEmpty;
+        _loading = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() { _loading = false; _hasMore = false; });
+    }
+  }
+
+  void _shuffle() {
+    setState(() {
+      _items.clear(); _itemMeta.clear();
+      _seed = DateTime.now().millisecondsSinceEpoch & 0x7FFFFFFF;
+      _page = 1; _autoRounds = 0; _hasMore = true; _loading = false;
+    });
+    _loadMore();
+  }
+
+  void _changeChip(int? newId) {
+    if (_activeChipId == newId) return;
+    setState(() {
+      _activeChipId = newId;
+      _items.clear(); _itemMeta.clear();
+      _page = 1; _autoRounds = 0; _hasMore = true; _loading = false;
+    });
+    _loadMore();
+  }
+
+  void _changeSort(String newSort) {
+    if (_sort == newSort) return;
+    setState(() {
+      _sort = newSort;
+      _items.clear(); _itemMeta.clear();
+      _page = 1; _autoRounds = 0; _hasMore = true; _loading = false;
+    });
+    _loadMore();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = widget.t;
+    final ar = widget.ar;
+    final title = (ar
+        ? (widget.p['titleAr'] ?? widget.p['titleEn'])
+        : (widget.p['titleEn'] ?? widget.p['titleAr']))?.toString() ?? 'Explore More';
+    final sub = (ar
+        ? (widget.p['subAr'] ?? widget.p['subEn'])
+        : (widget.p['subEn'] ?? widget.p['subAr']))?.toString() ?? '';
+    final whyMap = (widget.data['why_caption'] as Map?)?.cast<String, dynamic>();
+    final trendingMap = (widget.data['trending_stat'] as Map?)?.cast<String, dynamic>();
+    final showLoadMoreBtn = _hasMore && !_loading && _autoRounds >= _autoLimit;
+
+    return Stack(children: [
+      Padding(
+        padding: const EdgeInsets.fromLTRB(10, 4, 10, 10),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          // ─── Header row ────────────────────────────────────────────────────
+          if ((widget.p['show_title'] != false) && title.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(6, 4, 6, 8),
+              child: Row(children: [
+                Icon(Icons.explore_outlined, size: 18, color: t.dark),
+                const SizedBox(width: 6),
+                Flexible(
+                  child: Text(title, overflow: TextOverflow.ellipsis,
+                      style: TextStyle(color: t.dark, fontSize: 16, fontWeight: FontWeight.w900)),
+                ),
+                if (sub.isNotEmpty) ...[
+                  const SizedBox(width: 8),
+                  Flexible(
+                    child: Text(sub, overflow: TextOverflow.ellipsis,
+                        style: TextStyle(color: t.dark.withOpacity(0.55), fontSize: 12)),
+                  ),
+                ],
+                if (_showShuffle) ...[
+                  const Spacer(),
+                  InkWell(
+                    onTap: _shuffle, borderRadius: BorderRadius.circular(14),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: UellowColors.yellowSoft,
+                        border: Border.all(color: UellowColors.yellow),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: const Row(mainAxisSize: MainAxisSize.min, children: [
+                        Icon(Icons.shuffle, size: 13, color: UellowColors.darkBrown),
+                        SizedBox(width: 4),
+                        Text('Shuffle', style: TextStyle(
+                            color: UellowColors.darkBrown, fontSize: 11, fontWeight: FontWeight.w800)),
+                      ]),
+                    ),
+                  ),
+                ],
+              ]),
+            ),
+          // ─── Trending stat + Why caption ───────────────────────────────────
+          if (_showTrending && trendingMap != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(6, 0, 6, 4),
+              child: Text((ar ? trendingMap['ar'] : trendingMap['en'])?.toString() ?? '',
+                  style: const TextStyle(color: Color(0xFFE63946), fontSize: 11.5, fontWeight: FontWeight.w800)),
+            ),
+          if (_showWhy && whyMap != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(6, 0, 6, 8),
+              child: Row(children: [
+                const Text('💬 ', style: TextStyle(fontSize: 11)),
+                Flexible(
+                  child: Text((ar ? whyMap['ar'] : whyMap['en'])?.toString() ?? '',
+                      style: TextStyle(color: t.dark.withOpacity(0.6), fontSize: 11.5, fontStyle: FontStyle.italic)),
+                ),
+              ]),
+            ),
+          // ─── Category chips ────────────────────────────────────────────────
+          if (_showChips && _chips.isNotEmpty)
+            _ChipsBar(
+              chips: _chips, active: _activeChipId, dark: t.dark,
+              ar: ar, onTap: _changeChip,
+            ),
+          // ─── Sort bar ──────────────────────────────────────────────────────
+          if (_showSortBar)
+            _SortBar(active: _sort, dark: t.dark, ar: ar, onTap: _changeSort),
+          // ─── Skeleton OR grid ──────────────────────────────────────────────
+          if (_items.isEmpty && _loading && _showSkeleton)
+            _SkeletonGrid(columns: _columns)
+          else if (_items.isEmpty && !_loading)
+            Padding(
+              padding: const EdgeInsets.all(20),
+              child: Center(child: Text(ar ? 'لا توجد منتجات' : 'No products yet',
+                  style: TextStyle(color: t.dark.withOpacity(0.6)))),
+            )
+          else
+            _renderGrid(),
+          // ─── Load more / spinner / end marker ──────────────────────────────
+          if (_loading && _items.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.all(18),
+              child: Center(child: SizedBox(
+                width: 22, height: 22,
+                child: CircularProgressIndicator(color: t.dark, strokeWidth: 2.5),
+              )),
+            ),
+          if (showLoadMoreBtn)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(40, 12, 40, 6),
+              child: ElevatedButton.icon(
+                onPressed: _loadMore,
+                icon: const Icon(Icons.arrow_downward, size: 16),
+                label: Text(ar ? 'تحميل المزيد' : 'Load more',
+                    style: const TextStyle(fontWeight: FontWeight.w800)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: UellowColors.yellowSoft,
+                  foregroundColor: UellowColors.darkBrown,
+                  elevation: 0,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                ),
+              ),
+            ),
+          if (_showEndMarker && !_hasMore && _items.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.all(20),
+              child: Center(child: Text(ar ? '— نهاية النتائج —' : '— end of feed —',
+                  style: TextStyle(color: t.dark.withOpacity(0.5), fontSize: 11.5))),
+            ),
+        ]),
+      ),
+      // ─── Live activity ticker (overlay above content) ───────────────────────
+      if (_showActivity && _activityFeed.isNotEmpty)
+        Positioned(
+          left: 12, right: 12, bottom: 10,
+          child: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 400),
+            child: Container(
+              key: ValueKey(_activityIdx),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: const Color(0xFF0E5E2E),
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 6, offset: Offset(0, 2))],
+              ),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                const Text('🎉', style: TextStyle(fontSize: 12)),
+                const SizedBox(width: 6),
+                Flexible(
+                  child: Text(
+                    (ar ? _activityFeed[_activityIdx]['ar'] : _activityFeed[_activityIdx]['en'])!,
+                    style: const TextStyle(color: Colors.white, fontSize: 11.5, fontWeight: FontWeight.w700),
+                  ),
+                ),
+              ]),
+            ),
+          ),
+        ),
+    ]);
+  }
+
+  Widget _renderGrid() {
+    // Hero variant: first item is full-width, the rest in normal grid.
+    final hero = _variant == 'hero';
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      if (hero && _items.isNotEmpty)
+        Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: AspectRatio(
+            aspectRatio: 16 / 9,
+            child: _ProductTile(
+              product: _items[0],
+              meta: _itemMeta.isNotEmpty ? _itemMeta[0] : const {},
+              showBadges: _showBadges,
+              isHero: true,
+            ),
+          ),
+        ),
+      GridView.builder(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        padding: EdgeInsets.zero,
+        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: _columns,
+          crossAxisSpacing: 8, mainAxisSpacing: 8,
+          childAspectRatio: _columns == 2 ? 0.58 : 0.52,
+        ),
+        itemCount: _gridLength(),
+        itemBuilder: (_, i) {
+          // Auto-load trigger
+          if (_autoRounds < _autoLimit && _hasMore && !_loading
+              && i >= _gridLength() - (_columns * 2)) {
+            WidgetsBinding.instance.addPostFrameCallback((_) => _loadMore());
+          }
+          // Resolve which underlying item this slot represents (with sponsored insertions)
+          final res = _resolveSlot(i);
+          if (res == null) return const SizedBox.shrink();
+          return _ProductTile(
+            product: res.product, meta: res.meta,
+            showBadges: _showBadges, isHero: false,
+          );
+        },
+      ),
+    ]);
+  }
+
+  // Returns the grid item count, factoring in sponsored insertions.
+  int _gridLength() {
+    final base = _variant == 'hero' && _items.isNotEmpty ? _items.length - 1 : _items.length;
+    if (_sponsoredEvery <= 0 || _sponsored.isEmpty) return base;
+    final inserts = base ~/ _sponsoredEvery;
+    return base + inserts;
+  }
+
+  _SlotResult? _resolveSlot(int i) {
+    // Hero offset: index 0 was the hero, so shift the rest by 1.
+    final heroOffset = (_variant == 'hero' && _items.isNotEmpty) ? 1 : 0;
+    if (_sponsoredEvery <= 0 || _sponsored.isEmpty) {
+      final idx = i + heroOffset;
+      if (idx < _items.length) {
+        return _SlotResult(_items[idx], _itemMeta.length > idx ? _itemMeta[idx] : const {});
+      }
+      return null;
+    }
+    // Every `_sponsoredEvery`-th slot is sponsored
+    int orgIdx = 0, slot = 0, spCursor = 0;
+    while (slot <= i) {
+      slot++;
+      if (slot % _sponsoredEvery == 0 && spCursor < _sponsored.length) {
+        if (slot - 1 == i) {
+          return _SlotResult(_sponsored[spCursor], _sponsoredMeta[spCursor]);
+        }
+        spCursor++;
+      } else {
+        if (slot - 1 == i) {
+          final realIdx = orgIdx + heroOffset;
+          if (realIdx >= _items.length) return null;
+          return _SlotResult(
+              _items[realIdx],
+              _itemMeta.length > realIdx ? _itemMeta[realIdx] : const {});
+        }
+        orgIdx++;
+      }
+    }
+    return null;
+  }
+}
+
+class _SlotResult {
+  _SlotResult(this.product, this.meta);
+  final UellowProductCard product;
+  final Map<String, dynamic> meta;
+}
+
+// ─── Tile with badges + sponsored overlay ───────────────────────────────────
+class _ProductTile extends StatelessWidget {
+  const _ProductTile({required this.product, required this.meta,
+      required this.showBadges, required this.isHero});
+  final UellowProductCard product;
+  final Map<String, dynamic> meta;
+  final bool showBadges;
+  final bool isHero;
+
+  @override
+  Widget build(BuildContext context) {
+    final badges = ((meta['badges'] as List?) ?? const []).cast<dynamic>();
+    final isSponsored = meta['sponsored'] == true;
+    return Stack(children: [
+      ProductCard(product: product),
+      if (showBadges && badges.isNotEmpty)
+        Positioned(
+          top: 4, right: 4,
+          child: Wrap(spacing: 3, runSpacing: 3, children: [
+            for (final raw in badges.take(2))
+              if (raw is Map) Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(4),
+                  boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 3, offset: Offset(0,1))],
+                ),
+                child: Text(
+                  (raw['label_en']?.toString() ?? '').split(' ').first,  // emoji only for compactness
+                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w900),
+                ),
+              ),
+          ]),
+        ),
+      if (isSponsored)
+        Positioned(
+          top: 4, left: 4,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+            decoration: BoxDecoration(
+              color: const Color(0xFF6E4AB0),
+              borderRadius: BorderRadius.circular(3),
+            ),
+            child: const Text('AD',
+                style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w900)),
+          ),
+        ),
+    ]);
+  }
+}
+
+// ─── Chips bar (category filter) ────────────────────────────────────────────
+class _ChipsBar extends StatelessWidget {
+  const _ChipsBar({required this.chips, required this.active,
+    required this.dark, required this.ar, required this.onTap});
+  final List<Map<String, dynamic>> chips;
+  final int? active;
+  final Color dark;
+  final bool ar;
+  final void Function(int? id) onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 36,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.fromLTRB(6, 4, 6, 4),
+        physics: const ClampingScrollPhysics(),
+        children: [
+          _chip(label: ar ? 'الكل' : 'All', selected: active == null, onTap: () => onTap(null)),
+          for (final c in chips)
+            _chip(
+              label: c['name']?.toString() ?? '',
+              selected: active == (c['id'] as num?)?.toInt(),
+              onTap: () => onTap((c['id'] as num?)?.toInt()),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _chip({required String label, required bool selected, required VoidCallback onTap}) {
+    return Padding(
+      padding: const EdgeInsets.only(right: 5),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+          decoration: BoxDecoration(
+            color: selected ? dark : Colors.white,
+            border: Border.all(color: selected ? dark : const Color(0xFFE5DCC2)),
+            borderRadius: BorderRadius.circular(14),
+          ),
+          child: Text(label, style: TextStyle(
+              color: selected ? Colors.white : dark,
+              fontSize: 11.5, fontWeight: FontWeight.w800)),
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Sort bar ───────────────────────────────────────────────────────────────
+class _SortBar extends StatelessWidget {
+  const _SortBar({required this.active, required this.dark, required this.ar, required this.onTap});
+  final String active;
+  final Color dark;
+  final bool ar;
+  final void Function(String key) onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final options = [
+      ('best_match', ar ? '✨ الأنسب' : '✨ Best'),
+      ('newest',     ar ? '🆕 الأحدث' : '🆕 New'),
+      ('price_asc',  ar ? '💰 السعر ↑' : '💰 Price ↑'),
+      ('price_desc', ar ? '💎 السعر ↓' : '💎 Price ↓'),
+      ('top_rated',  ar ? '⭐ تقييم' : '⭐ Rated'),
+    ];
+    return SizedBox(
+      height: 32,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.fromLTRB(6, 2, 6, 6),
+        physics: const ClampingScrollPhysics(),
+        children: [
+          for (final o in options)
+            Padding(
+              padding: const EdgeInsets.only(right: 4),
+              child: InkWell(
+                onTap: () => onTap(o.$1),
+                borderRadius: BorderRadius.circular(12),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: active == o.$1 ? UellowColors.yellowSoft : Colors.white,
+                    border: Border.all(color: active == o.$1 ? UellowColors.yellow : const Color(0xFFE5DCC2)),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(o.$2,
+                    style: TextStyle(
+                      color: active == o.$1 ? const Color(0xFF7A4A00) : dark,
+                      fontSize: 10.5, fontWeight: FontWeight.w800)),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── Skeleton shimmer placeholder grid ──────────────────────────────────────
+class _SkeletonGrid extends StatefulWidget {
+  const _SkeletonGrid({required this.columns});
+  final int columns;
+  @override
+  State<_SkeletonGrid> createState() => _SkeletonGridState();
+}
+
+class _SkeletonGridState extends State<_SkeletonGrid>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _c = AnimationController(
+    vsync: this, duration: const Duration(milliseconds: 1100),
+  )..repeat();
+
+  @override
+  void dispose() { _c.dispose(); super.dispose(); }
+
+  @override
+  Widget build(BuildContext context) {
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      padding: EdgeInsets.zero,
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: widget.columns,
+        crossAxisSpacing: 8, mainAxisSpacing: 8,
+        childAspectRatio: widget.columns == 2 ? 0.58 : 0.52,
+      ),
+      itemCount: widget.columns * 3,
+      itemBuilder: (_, __) => AnimatedBuilder(
+        animation: _c,
+        builder: (_, __) {
+          final t = (math.sin(_c.value * math.pi * 2) + 1) / 2;
+          final c = Color.lerp(const Color(0xFFEEE6D6), const Color(0xFFF8F1E1), t)!;
+          return Container(
+            decoration: BoxDecoration(
+              color: c,
+              borderRadius: BorderRadius.circular(10),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+// =============================================================================
+// v2.0.38 — Slider + 5 pro design blocks
+// =============================================================================
+
+// ─── SLIDER — multi-slide hero with image/video/text + overlay ──────────────
+class SliderBlock extends StatefulWidget {
+  const SliderBlock({super.key, required this.p, required this.t, required this.ar});
+  final Map<String, dynamic> p;
+  final DynTheme t;
+  final bool ar;
+  @override
+  State<SliderBlock> createState() => _SliderBlockState();
+}
+
+class _SliderBlockState extends State<SliderBlock> {
+  final _ctrl = PageController();
+  Timer? _autoTimer;
+  int _index = 0;
+  List<dynamic> get _slides => (widget.p['slides'] as List?) ?? const [];
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.p['autoplay'] != false && _slides.length > 1) {
+      final secs = ((widget.p['duration'] as num?)?.toInt() ?? 4).clamp(2, 20);
+      _autoTimer = Timer.periodic(Duration(seconds: secs), (_) {
+        if (!mounted || !_ctrl.hasClients) return;
+        final next = (_index + 1) % _slides.length;
+        _ctrl.animateToPage(next,
+            duration: const Duration(milliseconds: 450), curve: Curves.easeInOut);
+      });
+    }
+  }
+  @override
+  void dispose() { _autoTimer?.cancel(); _ctrl.dispose(); super.dispose(); }
+
+  double _ratio() {
+    switch ((widget.p['aspect'] as String?) ?? '16_9') {
+      case '4_3':  return 4 / 3;
+      case '1_1':  return 1;
+      case '3_4':  return 3 / 4;
+      case 'full': return 16 / 6;
+      default:     return 16 / 9;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_slides.isEmpty) return const SizedBox.shrink();
+    final radius = ((widget.p['radius'] as num?)?.toDouble() ?? 12);
+    final fullBleed = widget.p['full_bleed'] == true;
+    final ar = widget.ar;
+    return Padding(
+      padding: EdgeInsets.symmetric(horizontal: fullBleed ? 0 : 12),
+      child: AspectRatio(
+        aspectRatio: _ratio(),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(radius),
+          child: Stack(children: [
+            PageView.builder(
+              controller: _ctrl,
+              itemCount: _slides.length,
+              onPageChanged: (i) => setState(() => _index = i),
+              itemBuilder: (_, i) {
+                final s = (_slides[i] as Map).cast<String, dynamic>();
+                return _Slide(slide: s, ar: ar,
+                    onTap: () => _openLink(context, (s['link'] as Map?)?.cast<String, dynamic>()));
+              },
+            ),
+            if (widget.p['show_arrows'] == true && _slides.length > 1) ...[
+              Positioned(left: 8, top: 0, bottom: 0,
+                  child: Align(alignment: Alignment.center, child: _arrow(false))),
+              Positioned(right: 8, top: 0, bottom: 0,
+                  child: Align(alignment: Alignment.center, child: _arrow(true))),
+            ],
+            if (widget.p['show_dots'] != false && _slides.length > 1)
+              Positioned(left: 0, right: 0, bottom: 10,
+                child: Center(child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  for (int i = 0; i < _slides.length; i++) AnimatedContainer(
+                    duration: const Duration(milliseconds: 220),
+                    width: i == _index ? 18 : 6, height: 6,
+                    margin: const EdgeInsets.symmetric(horizontal: 2),
+                    decoration: BoxDecoration(
+                      color: i == _index ? Colors.white : Colors.white.withValues(alpha: 0.5),
+                      borderRadius: BorderRadius.circular(3),
+                    ),
+                  ),
+                ])),
+              ),
+          ]),
+        ),
+      ),
+    );
+  }
+
+  Widget _arrow(bool next) {
+    return InkWell(
+      onTap: () {
+        final target = next ? _index + 1 : _index - 1;
+        if (target < 0 || target >= _slides.length) return;
+        _ctrl.animateToPage(target, duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
+      },
+      child: Container(
+        width: 32, height: 32,
+        decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.4), shape: BoxShape.circle),
+        child: Icon(next ? Icons.chevron_right : Icons.chevron_left, color: Colors.white, size: 20),
+      ),
+    );
+  }
+}
+
+class _Slide extends StatelessWidget {
+  const _Slide({required this.slide, required this.ar, required this.onTap});
+  final Map<String, dynamic> slide;
+  final bool ar;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final kind = (slide['kind'] as String?) ?? 'image';
+    final img = (slide['image_url'] as String?) ?? '';
+    final overlayColor = _hexColor(slide['overlay_color'], const Color(0xFF000000));
+    final overlayOpacity = ((slide['overlay_opacity'] as num?)?.toInt() ?? 30).clamp(0, 100) / 100.0;
+    final textColor = _hexColor(slide['text_color'], Colors.white);
+    final align = (slide['text_align'] as String?) ?? 'center';
+    final title = (ar ? slide['titleAr'] : slide['titleEn'])?.toString() ?? '';
+    final sub   = (ar ? slide['subtitleAr'] : slide['subtitleEn'])?.toString() ?? '';
+    final cta   = (ar ? slide['ctaAr'] : slide['ctaEn'])?.toString() ?? '';
+    return GestureDetector(
+      onTap: onTap,
+      child: Stack(fit: StackFit.expand, children: [
+        if (kind == 'image' || kind == 'video')
+          img.isEmpty
+            ? Container(decoration: const BoxDecoration(
+                gradient: LinearGradient(colors: [Color(0xFF412402), Color(0xFFF5C320)],
+                  begin: Alignment.topLeft, end: Alignment.bottomRight)))
+            : CachedNetworkImage(imageUrl: img, fit: BoxFit.cover,
+                placeholder: (_, __) => Container(color: const Color(0xFFEEE6D6))),
+        if (kind == 'video')
+          const Center(child: Icon(Icons.play_circle_fill, color: Colors.white70, size: 56)),
+        Container(color: overlayColor.withValues(alpha: overlayOpacity)),
+        Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: align == 'left' ? CrossAxisAlignment.start
+                : align == 'right' ? CrossAxisAlignment.end
+                : CrossAxisAlignment.center,
+            children: [
+              if (title.isNotEmpty) Text(title,
+                  textAlign: align == 'left' ? TextAlign.start : align == 'right' ? TextAlign.end : TextAlign.center,
+                  style: TextStyle(color: textColor, fontSize: 22, fontWeight: FontWeight.w900, height: 1.1)),
+              if (sub.isNotEmpty) ...[
+                const SizedBox(height: 6),
+                Text(sub,
+                    textAlign: align == 'left' ? TextAlign.start : align == 'right' ? TextAlign.end : TextAlign.center,
+                    style: TextStyle(color: textColor.withValues(alpha: 0.92), fontSize: 13, fontWeight: FontWeight.w500)),
+              ],
+              if (cta.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 9),
+                  decoration: BoxDecoration(color: textColor, borderRadius: BorderRadius.circular(20)),
+                  child: Text(cta,
+                      style: const TextStyle(color: Color(0xFF412402), fontWeight: FontWeight.w900, fontSize: 13)),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ]),
+    );
+  }
+}
+
+// ─── TAB NAV — horizontal SHEIN-style tabs ──────────────────────────────────
+class TabNavBlock extends StatefulWidget {
+  const TabNavBlock({super.key, required this.p, required this.t, required this.ar});
+  final Map<String, dynamic> p;
+  final DynTheme t;
+  final bool ar;
+  @override
+  State<TabNavBlock> createState() => _TabNavBlockState();
+}
+class _TabNavBlockState extends State<TabNavBlock> {
+  int _active = 0;
+  @override
+  Widget build(BuildContext context) {
+    final tabs = (widget.p['tabs'] as List? ?? const []);
+    if (tabs.isEmpty) return const SizedBox.shrink();
+    final style = (widget.p['style'] as String?) ?? 'underline';
+    final t = widget.t;
+    return Container(
+      decoration: widget.p['sticky'] == true
+          ? BoxDecoration(color: Colors.white,
+              boxShadow: [BoxShadow(color: t.dark.withValues(alpha: 0.06), blurRadius: 6, offset: const Offset(0,2))])
+          : null,
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        physics: const ClampingScrollPhysics(),
+        child: Row(children: [
+          for (int i = 0; i < tabs.length; i++) _tab(tabs[i] as Map, i, style, t),
+        ]),
+      ),
+    );
+  }
+  Widget _tab(Map raw, int i, String style, DynTheme t) {
+    final m = raw.cast<String, dynamic>();
+    final label = (widget.ar ? m['labelAr'] : m['labelEn'])?.toString() ?? '';
+    final active = i == _active;
+    return GestureDetector(
+      onTap: () {
+        setState(() => _active = i);
+        _openLink(context, (m['link'] as Map?)?.cast<String, dynamic>());
+      },
+      child: Container(
+        margin: EdgeInsets.only(right: style == 'underline' ? 18 : 6),
+        padding: style == 'underline'
+            ? const EdgeInsets.symmetric(vertical: 6)
+            : const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+        decoration: BoxDecoration(
+          color: style == 'underline' ? null
+              : active ? (style == 'pill' ? t.dark : UellowColors.yellowSoft)
+                       : Colors.white,
+          border: style == 'underline'
+              ? Border(bottom: BorderSide(color: active ? t.primary : Colors.transparent, width: 2.5))
+              : Border.all(color: active ? (style == 'pill' ? t.dark : UellowColors.yellow) : const Color(0xFFE5DCC2)),
+          borderRadius: style == 'underline' ? null : BorderRadius.circular(16),
+        ),
+        child: Text(label, style: TextStyle(
+            color: style == 'pill' && active ? Colors.white : t.dark,
+            fontSize: 12.5, fontWeight: active ? FontWeight.w900 : FontWeight.w600)),
+      ),
+    );
+  }
+}
+
+// ─── STORY BUBBLES — Instagram-style circular row with optional autoplay ────
+class StoryBubblesBlock extends StatefulWidget {
+  const StoryBubblesBlock({super.key, required this.p, required this.t, required this.ar});
+  final Map<String, dynamic> p;
+  final DynTheme t;
+  final bool ar;
+  @override
+  State<StoryBubblesBlock> createState() => _StoryBubblesBlockState();
+}
+class _StoryBubblesBlockState extends State<StoryBubblesBlock> {
+  final _ctrl = ScrollController();
+  Timer? _autoTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.p['autoplay'] == true) {
+      final secs = ((widget.p['autoplay_speed'] as num?)?.toInt() ?? 3).clamp(2, 10);
+      _autoTimer = Timer.periodic(Duration(seconds: secs), (_) {
+        if (!_ctrl.hasClients || !mounted) return;
+        final next = _ctrl.offset + 80;
+        if (next > _ctrl.position.maxScrollExtent) {
+          _ctrl.animateTo(0, duration: const Duration(milliseconds: 600), curve: Curves.easeInOut);
+        } else {
+          _ctrl.animateTo(next, duration: const Duration(milliseconds: 600), curve: Curves.easeInOut);
+        }
+      });
+    }
+  }
+  @override
+  void dispose() { _autoTimer?.cancel(); _ctrl.dispose(); super.dispose(); }
+
+  @override
+  Widget build(BuildContext context) {
+    final bubbles = (widget.p['bubbles'] as List? ?? const []);
+    if (bubbles.isEmpty) return const SizedBox.shrink();
+    final t = widget.t;
+    final sz = ((widget.p['size'] as num?)?.toDouble() ?? 60).clamp(40.0, 100.0);
+    final showRings = widget.p['show_rings'] != false;
+    final ringColor = _hexColor(widget.p['ring_color'], t.primary);
+    final title = (widget.ar ? widget.p['titleAr'] : widget.p['titleEn'])?.toString() ?? '';
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      if (title.isNotEmpty) Padding(
+        padding: const EdgeInsets.fromLTRB(14, 4, 14, 6),
+        child: Text(title, style: TextStyle(color: t.dark, fontSize: 14, fontWeight: FontWeight.w900)),
+      ),
+      SizedBox(
+        height: sz + 26,
+        child: ListView.separated(
+          controller: _ctrl,
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          scrollDirection: Axis.horizontal,
+          physics: const ClampingScrollPhysics(),
+          itemCount: bubbles.length,
+          separatorBuilder: (_, __) => const SizedBox(width: 12),
+          itemBuilder: (_, i) {
+            final b = (bubbles[i] as Map).cast<String, dynamic>();
+            final label = (widget.ar ? b['labelAr'] : b['labelEn'])?.toString() ?? '';
+            final img = (b['image_url'] as String?) ?? '';
+            final icon = (b['icon'] as String?) ?? '⭐';
+            return GestureDetector(
+              onTap: () => _openLink(context, (b['link'] as Map?)?.cast<String, dynamic>()),
+              child: Column(children: [
+                Container(
+                  width: sz, height: sz,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFE5E5),
+                    shape: BoxShape.circle,
+                    image: img.isNotEmpty
+                        ? DecorationImage(image: CachedNetworkImageProvider(img), fit: BoxFit.cover)
+                        : null,
+                    boxShadow: showRings ? [
+                      BoxShadow(color: ringColor, blurRadius: 0, spreadRadius: 2.5),
+                      const BoxShadow(color: Colors.white, blurRadius: 0, spreadRadius: 4.5),
+                    ] : null,
+                  ),
+                  alignment: Alignment.center,
+                  child: img.isEmpty ? Text(icon, style: TextStyle(fontSize: sz * 0.4)) : null,
+                ),
+                const SizedBox(height: 5),
+                SizedBox(
+                  width: sz + 6,
+                  child: Text(label, textAlign: TextAlign.center, overflow: TextOverflow.ellipsis,
+                      style: TextStyle(color: t.dark, fontSize: 10.5, fontWeight: FontWeight.w700)),
+                ),
+              ]),
+            );
+          },
+        ),
+      ),
+    ]);
+  }
+}
+
+// ─── LOOKBOOK — asymmetric collage with CTA ─────────────────────────────────
+class LookbookBlock extends StatelessWidget {
+  const LookbookBlock({super.key, required this.p, required this.t, required this.ar});
+  final Map<String, dynamic> p;
+  final DynTheme t;
+  final bool ar;
+
+  @override
+  Widget build(BuildContext context) {
+    final images = (p['images'] as List? ?? const []);
+    if (images.isEmpty) return const SizedBox.shrink();
+    final title = (ar ? p['titleAr'] : p['titleEn'])?.toString() ?? '';
+    final sub = (ar ? p['subAr'] : p['subEn'])?.toString() ?? '';
+    final cta = (ar ? p['ctaAr'] : p['ctaEn'])?.toString() ?? '';
+    final layout = (p['layout'] as String?) ?? 'mosaic';
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 14),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        if (title.isNotEmpty)
+          Text(title, style: TextStyle(color: t.dark, fontSize: 16, fontWeight: FontWeight.w900)),
+        if (sub.isNotEmpty) Padding(
+          padding: const EdgeInsets.only(top: 2, bottom: 8),
+          child: Text(sub, style: TextStyle(color: t.dark.withValues(alpha: 0.6), fontSize: 12)),
+        ),
+        if (title.isNotEmpty || sub.isNotEmpty) const SizedBox(height: 6),
+        if (layout == 'mosaic') _mosaic(context, images) else _grid(context, images),
+        if (cta.isNotEmpty) Padding(
+          padding: const EdgeInsets.only(top: 10),
+          child: GestureDetector(
+            onTap: () => _openLink(context, (p['cta_link'] as Map?)?.cast<String, dynamic>()),
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              alignment: Alignment.center,
+              decoration: BoxDecoration(color: t.dark, borderRadius: BorderRadius.circular(8)),
+              child: Text('$cta →',
+                  style: TextStyle(color: t.primary, fontWeight: FontWeight.w900, fontSize: 13)),
+            ),
+          ),
+        ),
+      ]),
+    );
+  }
+
+  Widget _mosaic(BuildContext c, List images) {
+    return AspectRatio(
+      aspectRatio: 1.4,
+      child: Row(children: [
+        Expanded(flex: 2, child: _img(c, images.isNotEmpty ? images[0] : null)),
+        const SizedBox(width: 4),
+        Expanded(child: Column(children: [
+          Expanded(child: _img(c, images.length > 1 ? images[1] : null)),
+          const SizedBox(height: 4),
+          Expanded(child: _img(c, images.length > 2 ? images[2] : null)),
+        ])),
+      ]),
+    );
+  }
+  Widget _grid(BuildContext c, List images) {
+    return GridView.count(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      crossAxisCount: 2,
+      mainAxisSpacing: 4, crossAxisSpacing: 4,
+      childAspectRatio: 1,
+      children: [for (final i in images.take(4)) _img(c, i)],
+    );
+  }
+  Widget _img(BuildContext c, dynamic raw) {
+    if (raw == null) return Container(color: const Color(0xFFEEE6D6));
+    final m = (raw as Map).cast<String, dynamic>();
+    final url = (m['image_url'] as String?) ?? '';
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(8),
+      child: GestureDetector(
+        onTap: () => _openLink(c, (m['link'] as Map?)?.cast<String, dynamic>()),
+        child: url.isEmpty
+            ? Container(decoration: const BoxDecoration(
+                gradient: LinearGradient(colors: [Color(0xFFFFE9D6), Color(0xFFF5C320)],
+                  begin: Alignment.topLeft, end: Alignment.bottomRight)))
+            : CachedNetworkImage(imageUrl: url, fit: BoxFit.cover,
+                placeholder: (_, __) => Container(color: const Color(0xFFEEE6D6))),
+      ),
+    );
+  }
+}
+
+// ─── STICKY CTA — promo bar (inline placement) ──────────────────────────────
+class StickyCtaBlock extends StatefulWidget {
+  const StickyCtaBlock({super.key, required this.p, required this.t, required this.ar});
+  final Map<String, dynamic> p;
+  final DynTheme t;
+  final bool ar;
+  @override
+  State<StickyCtaBlock> createState() => _StickyCtaBlockState();
+}
+class _StickyCtaBlockState extends State<StickyCtaBlock> {
+  bool _closed = false;
+  @override
+  Widget build(BuildContext context) {
+    if (_closed) return const SizedBox.shrink();
+    final p = widget.p;
+    final ar = widget.ar;
+    final bg = _hexColor(p['bg_color'], const Color(0xFF412402));
+    final fg = _hexColor(p['text_color'], Colors.white);
+    final label = (ar ? p['labelAr'] : p['labelEn'])?.toString() ?? '';
+    final cta = (ar ? p['ctaAr'] : p['ctaEn'])?.toString() ?? '';
+    final icon = (p['icon'] as String?) ?? '🎁';
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      child: Material(
+        color: bg,
+        borderRadius: BorderRadius.circular(10),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(10),
+          onTap: () => _openLink(context, (p['cta_link'] as Map?)?.cast<String, dynamic>()),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            child: Row(children: [
+              Text(icon, style: const TextStyle(fontSize: 22)),
+              const SizedBox(width: 10),
+              Expanded(child: Text(label,
+                  style: TextStyle(color: fg, fontSize: 12.5, fontWeight: FontWeight.w700))),
+              const SizedBox(width: 10),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: fg.withValues(alpha: 0.18),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Text(cta,
+                    style: TextStyle(color: fg, fontSize: 11, fontWeight: FontWeight.w900)),
+              ),
+              if (p['show_close'] != false) ...[
+                const SizedBox(width: 6),
+                InkWell(
+                  onTap: () => setState(() => _closed = true),
+                  child: Icon(Icons.close, size: 18, color: fg.withValues(alpha: 0.7)),
+                ),
+              ],
+            ]),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+Color _hexColor(dynamic v, Color fb) {
+  if (v == null) return fb;
+  final s = v.toString();
+  final m = RegExp(r'#?([0-9A-Fa-f]{3,6})').firstMatch(s);
+  if (m == null) return fb;
+  var h = m.group(1)!;
+  if (h.length == 3) h = h.split('').map((c) => '$c$c').join();
+  return Color(int.parse('FF$h', radix: 16));
 }
