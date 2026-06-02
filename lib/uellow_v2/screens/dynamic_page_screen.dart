@@ -514,61 +514,246 @@ class _CountdownBlockState extends State<_CountdownBlock> {
   }
 }
 
+// ─── Categories Block — v2.0.61 PRO: 4 layouts, 4 shapes, spacing options ─
+//
+// Layouts:
+//   strip        — original single-row horizontal scroll
+//   grid         — fixed N-column grid, no scroll, all fits
+//   grid_2row    — 2-row horizontal scroll (great for 10+ categories)
+//   staggered    — mixed sizes (every 3rd item is larger)
+//
+// Per-item soft colors cycle through a friendly palette when `colored_bg`
+// is on. Product-count badges read from cat['product_count'] if present.
 class _CategoriesBlock extends StatelessWidget {
   const _CategoriesBlock({required this.p, required this.data, required this.t, required this.ar});
   final Map<String, dynamic> p;
   final Map<String, dynamic> data;
   final DynTheme t;
   final bool ar;
+
+  static const _palette = [
+    Color(0xFFFFE9D6), Color(0xFFD6F5E2), Color(0xFFD8E8F5),
+    Color(0xFFF5D8E8), Color(0xFFEEE8D8), Color(0xFFFFE5D6),
+    Color(0xFFE0F2EA), Color(0xFFFFE9F3),
+  ];
+
   @override
   Widget build(BuildContext context) {
     final title = _tx(p, ar, 'title', ar ? 'تسوّق حسب الفئة' : 'Shop by category');
     final items = ((data['items'] as List?) ?? const []).cast<dynamic>()
         .map((e) => (e as Map).cast<String, dynamic>()).toList();
     if (items.isEmpty) return const SizedBox.shrink();
+
+    final layout = (p['layout'] as String?) ?? 'strip';
+    final columns = int.tryParse((p['columns'] ?? '4').toString()) ?? 4;
+    final iconSize = ((p['icon_size'] as num?)?.toDouble() ?? 56).clamp(36, 100).toDouble();
+    final gap = ((p['gap'] as num?)?.toDouble() ?? 10).clamp(4, 24).toDouble();
+    final showLabel = p['show_label'] != false;
+    final labelPos = (p['label_position'] as String?) ?? 'below';
+    final coloredBg = p['colored_bg'] == true;
+    final showRing = p['show_ring'] != false;
+    final showCount = p['show_count'] == true;
+    final shape = (p['shape'] as String?) ?? 'circle';
+    final showArrows = p['show_arrows'] == true;
+    final scrollSnap = p['scroll_snap'] == true;
+    final animateIn = p['animate_in'] == true;
+    final showTitle = (p['show_title'] != false) && title.isNotEmpty;
+
+    Widget itemTile(Map<String, dynamic> cat, int idx) {
+      final url = (cat['icon_url'] as String?) ?? '';
+      final name = cat['name']?.toString() ?? '';
+      final count = (cat['product_count'] as num?)?.toInt() ?? 0;
+      final bg = coloredBg
+          ? _palette[idx % _palette.length]
+          : t.primary.withValues(alpha: 0.12);
+      final borderC = showRing
+          ? t.primary.withValues(alpha: 0.30)
+          : Colors.transparent;
+
+      BoxDecoration deco;
+      double iconRadius;
+      switch (shape) {
+        case 'square':
+          deco = BoxDecoration(color: bg,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: borderC));
+          iconRadius = 8;
+          break;
+        case 'rounded':
+          deco = BoxDecoration(color: bg,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: borderC));
+          iconRadius = 16;
+          break;
+        case 'capsule':
+          deco = BoxDecoration(color: bg,
+              borderRadius: BorderRadius.circular(iconSize / 2),
+              border: Border.all(color: borderC));
+          iconRadius = iconSize / 2;
+          break;
+        default: // circle
+          deco = BoxDecoration(color: bg, shape: BoxShape.circle,
+              border: Border.all(color: borderC));
+          iconRadius = iconSize / 2;
+      }
+      final iconWidth = shape == 'capsule' ? iconSize * 0.72 : iconSize;
+      final iconHeight = shape == 'capsule' ? iconSize * 1.1 : iconSize;
+
+      Widget icon = Container(
+        width: iconWidth, height: iconHeight,
+        decoration: deco,
+        clipBehavior: Clip.antiAlias,
+        child: Stack(fit: StackFit.expand, children: [
+          if (url.isNotEmpty)
+            CachedNetworkImage(imageUrl: url, fit: BoxFit.cover,
+              errorWidget: (_, __, ___) => Icon(Icons.category,
+                  color: t.dark.withValues(alpha: 0.5)))
+          else
+            Icon(Icons.category, color: t.dark.withValues(alpha: 0.5)),
+          if (labelPos == 'overlay')
+            Container(decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(iconRadius),
+              gradient: LinearGradient(begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [Colors.transparent, Colors.black.withValues(alpha: 0.55)]))),
+          if (labelPos == 'overlay' && showLabel)
+            Positioned(left: 4, right: 4, bottom: 4, child: Text(name,
+                textAlign: TextAlign.center, maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: Colors.white, fontSize: 10,
+                    fontWeight: FontWeight.w800, height: 1.1))),
+          if (showCount && count > 0)
+            Positioned(top: -2, right: -2, child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+              decoration: BoxDecoration(color: t.dark,
+                  borderRadius: BorderRadius.circular(8)),
+              child: Text('$count',
+                  style: const TextStyle(color: Colors.white, fontSize: 9,
+                      fontWeight: FontWeight.w900)),
+            )),
+        ]),
+      );
+
+      final tile = GestureDetector(
+        onTap: () => UellowRouter.goCollection(context, (cat['id'] as num).toInt()),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          icon,
+          if (showLabel && labelPos != 'overlay') ...[
+            const SizedBox(height: 4),
+            Text(name, textAlign: TextAlign.center,
+                maxLines: 2, overflow: TextOverflow.ellipsis,
+                style: TextStyle(color: t.dark, fontSize: 10.5, height: 1.15,
+                    fontWeight: FontWeight.w600)),
+          ],
+        ]),
+      );
+      // Subtle stagger fade-in
+      if (!animateIn) return tile;
+      return TweenAnimationBuilder<double>(
+        tween: Tween(begin: 0, end: 1),
+        duration: Duration(milliseconds: 250 + (idx * 60).clamp(0, 1200)),
+        curve: Curves.easeOut,
+        builder: (_, v, child) => Opacity(opacity: v,
+            child: Transform.translate(offset: Offset(0, (1 - v) * 6), child: child)),
+        child: tile,
+      );
+    }
+
+    Widget body;
+    switch (layout) {
+      case 'grid': {
+        body = Padding(padding: EdgeInsets.symmetric(horizontal: gap),
+          child: GridView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: columns,
+                crossAxisSpacing: gap, mainAxisSpacing: gap,
+                childAspectRatio: showLabel ? 0.78 : 1.0),
+            itemCount: items.length,
+            itemBuilder: (_, i) => itemTile(items[i], i),
+          ));
+        break;
+      }
+      case 'grid_2row': {
+        // Two-row horizontal scroll: split items pairwise into columns.
+        final pairs = <List<Map<String, dynamic>>>[];
+        for (int i = 0; i < items.length; i += 2) {
+          pairs.add([items[i], if (i + 1 < items.length) items[i + 1]]);
+        }
+        body = SizedBox(
+          height: (iconSize * 2) + (showLabel ? 50 : 14) + gap,
+          child: ListView.separated(
+            physics: scrollSnap
+                ? const PageScrollPhysics()
+                : const ClampingScrollPhysics(),
+            scrollDirection: Axis.horizontal,
+            padding: EdgeInsets.symmetric(horizontal: gap + 4),
+            itemCount: pairs.length,
+            separatorBuilder: (_, __) => SizedBox(width: gap),
+            itemBuilder: (_, col) {
+              final pair = pairs[col];
+              return Column(mainAxisAlignment: MainAxisAlignment.start,
+                children: [
+                  itemTile(pair[0], col * 2),
+                  SizedBox(height: gap),
+                  if (pair.length > 1) itemTile(pair[1], col * 2 + 1),
+                ]);
+            },
+          ));
+        break;
+      }
+      case 'staggered': {
+        body = Padding(padding: EdgeInsets.symmetric(horizontal: gap),
+          child: Wrap(spacing: gap, runSpacing: gap, children: [
+            for (int i = 0; i < items.length; i++)
+              SizedBox(width: (i % 5 == 0) ? iconSize + 28 : iconSize + 10,
+                  child: itemTile(items[i], i)),
+          ]));
+        break;
+      }
+      default: { // strip — original horizontal scroll
+        body = SizedBox(
+          height: iconSize + (showLabel ? 32 : 4),
+          child: ListView.separated(
+            physics: scrollSnap
+                ? const PageScrollPhysics()
+                : const ClampingScrollPhysics(),
+            scrollDirection: Axis.horizontal,
+            padding: EdgeInsets.symmetric(horizontal: gap + 4),
+            itemCount: items.length,
+            separatorBuilder: (_, __) => SizedBox(width: gap),
+            itemBuilder: (_, i) => SizedBox(width: iconSize + 14,
+                child: itemTile(items[i], i)),
+          ));
+      }
+    }
+
     return Container(
       margin: const EdgeInsets.fromLTRB(0, 8, 0, 8),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Padding(padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-          child: Text(title, style: TextStyle(
-              color: t.dark, fontSize: 14, fontWeight: FontWeight.w900))),
-        SizedBox(height: 86,
-          child: ListView.separated(
-            physics: const ClampingScrollPhysics(),
-            padding: const EdgeInsets.symmetric(horizontal: 14),
-            scrollDirection: Axis.horizontal,
-            itemCount: items.length,
-            separatorBuilder: (_, __) => const SizedBox(width: 10),
-            itemBuilder: (_, i) {
-              final cat = items[i];
-              final url = (cat['icon_url'] as String?) ?? '';
-              return GestureDetector(
-                onTap: () => UellowRouter.goCollection(context, (cat['id'] as num).toInt()),
-                child: SizedBox(width: 70,
-                  child: Column(children: [
-                    Container(width: 56, height: 56,
-                      decoration: BoxDecoration(
-                        color: t.primary.withValues(alpha: 0.12),
-                        shape: BoxShape.circle,
-                        border: Border.all(color: t.primary.withValues(alpha: 0.30)),
-                      ),
-                      clipBehavior: Clip.antiAlias,
-                      child: url.isNotEmpty
-                          ? CachedNetworkImage(imageUrl: url, fit: BoxFit.cover,
-                              errorWidget: (_, __, ___) => Icon(Icons.category, color: t.dark.withValues(alpha: 0.5)))
-                          : Icon(Icons.category, color: t.dark.withValues(alpha: 0.5))),
-                    const SizedBox(height: 4),
-                    Text(cat['name']?.toString() ?? '',
-                        textAlign: TextAlign.center,
-                        maxLines: 2, overflow: TextOverflow.ellipsis,
-                        style: TextStyle(color: t.dark, fontSize: 10.5,
-                            height: 1.15, fontWeight: FontWeight.w600)),
-                  ]),
-                ),
-              );
-            },
-          ),
-        ),
+        if (showTitle)
+          Padding(padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+            child: Row(children: [
+              Expanded(child: Text(title, style: TextStyle(
+                  color: t.dark, fontSize: 14, fontWeight: FontWeight.w900))),
+              if (showArrows && layout != 'grid') ...[
+                Container(width: 28, height: 28,
+                    decoration: BoxDecoration(
+                        color: t.primary.withValues(alpha: 0.15),
+                        shape: BoxShape.circle),
+                    child: Icon(ar ? Icons.chevron_right : Icons.chevron_left,
+                        color: t.dark, size: 18)),
+                const SizedBox(width: 6),
+                Container(width: 28, height: 28,
+                    decoration: BoxDecoration(
+                        color: t.primary.withValues(alpha: 0.15),
+                        shape: BoxShape.circle),
+                    child: Icon(ar ? Icons.chevron_left : Icons.chevron_right,
+                        color: t.dark, size: 18)),
+              ],
+            ])),
+        body,
       ]),
     );
   }

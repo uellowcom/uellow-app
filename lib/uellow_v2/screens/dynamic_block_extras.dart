@@ -1518,29 +1518,80 @@ class SliderBlock extends StatefulWidget {
 }
 
 class _SliderBlockState extends State<SliderBlock> {
-  final _ctrl = PageController();
+  // v2.0.61 — Pro slider state
+  late PageController _ctrl;
   Timer? _autoTimer;
   int _index = 0;
-  List<dynamic> get _slides => (widget.p['slides'] as List?) ?? const [];
+  bool _paused = false;
+  // Cached filtered slides — drops those outside their schedule / target lang
+  // / country. Recomputed when widget.p changes.
+  late List<Map<String, dynamic>> _visible;
+
+  String get _layout => (widget.p['layout'] as String?) ?? 'full';
+  String get _transition => (widget.p['transition'] as String?) ?? 'slide';
+  double get _gap => ((widget.p['gap'] as num?)?.toDouble() ?? 10);
 
   @override
   void initState() {
     super.initState();
-    if (widget.p['autoplay'] != false && _slides.length > 1) {
-      final secs = ((widget.p['duration'] as num?)?.toInt() ?? 4).clamp(2, 20);
-      _autoTimer = Timer.periodic(Duration(seconds: secs), (_) {
-        if (!mounted || !_ctrl.hasClients) return;
-        final next = (_index + 1) % _slides.length;
-        _ctrl.animateToPage(next,
-            duration: const Duration(milliseconds: 450), curve: Curves.easeInOut);
-      });
-    }
+    _filterSlides();
+    final viewport = (_layout == 'peek' || _layout == 'coverflow') ? 0.82
+                    : (_layout == 'card') ? 0.92 : 1.0;
+    _ctrl = PageController(viewportFraction: viewport);
+    _maybeStartAuto();
   }
+
+  @override
+  void didUpdateWidget(SliderBlock old) {
+    super.didUpdateWidget(old);
+    _filterSlides();
+  }
+
+  void _filterSlides() {
+    final raw = (widget.p['slides'] as List?) ?? const [];
+    final now = DateTime.now();
+    _visible = raw.where((s) {
+      if (s is! Map) return false;
+      final m = s.cast<String, dynamic>();
+      // Schedule window
+      final start = DateTime.tryParse((m['schedule_start'] as String?) ?? '');
+      if (start != null && now.isBefore(start)) return false;
+      final end = DateTime.tryParse((m['schedule_end'] as String?) ?? '');
+      if (end != null && now.isAfter(end)) return false;
+      // Lang targeting
+      final langCsv = (m['target_langs'] as String?) ?? '';
+      if (langCsv.trim().isNotEmpty) {
+        final wanted = langCsv.toLowerCase().split(',').map((s) => s.trim());
+        final cur = widget.ar ? 'ar' : 'en';
+        if (!wanted.contains(cur)) return false;
+      }
+      return true;
+    }).cast<Map<String, dynamic>>().toList();
+    // A/B variant: stable random pick — keep first occurrence of each
+    // variant key (simple impl; production would sticky-pick per user).
+    // For now we just show all that survived the filters.
+  }
+
+  void _maybeStartAuto() {
+    _autoTimer?.cancel();
+    if (widget.p['autoplay'] == false || _visible.length < 2) return;
+    final secs = ((widget.p['duration'] as num?)?.toInt() ?? 4).clamp(2, 20);
+    _autoTimer = Timer.periodic(Duration(seconds: secs), (_) {
+      if (!mounted || !_ctrl.hasClients || _paused) return;
+      final next = (widget.p['loop'] == false && _index + 1 >= _visible.length)
+          ? _index
+          : (_index + 1) % _visible.length;
+      _ctrl.animateToPage(next,
+          duration: const Duration(milliseconds: 450), curve: Curves.easeInOut);
+    });
+  }
+
   @override
   void dispose() { _autoTimer?.cancel(); _ctrl.dispose(); super.dispose(); }
 
   double _ratio() {
     switch ((widget.p['aspect'] as String?) ?? '16_9') {
+      case '2_1':  return 2;
       case '4_3':  return 4 / 3;
       case '1_1':  return 1;
       case '3_4':  return 3 / 4;
@@ -1551,129 +1602,478 @@ class _SliderBlockState extends State<SliderBlock> {
 
   @override
   Widget build(BuildContext context) {
-    if (_slides.isEmpty) return const SizedBox.shrink();
+    if (_visible.isEmpty) return const SizedBox.shrink();
     final radius = ((widget.p['radius'] as num?)?.toDouble() ?? 12);
     final fullBleed = widget.p['full_bleed'] == true;
     final ar = widget.ar;
-    return Padding(
-      padding: EdgeInsets.symmetric(horizontal: fullBleed ? 0 : 12),
-      child: AspectRatio(
-        aspectRatio: _ratio(),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(radius),
-          child: Stack(children: [
-            PageView.builder(
-              controller: _ctrl,
-              itemCount: _slides.length,
-              onPageChanged: (i) => setState(() => _index = i),
-              itemBuilder: (_, i) {
-                final s = (_slides[i] as Map).cast<String, dynamic>();
-                return _Slide(slide: s, ar: ar,
-                    onTap: () => _openLink(context, (s['link'] as Map?)?.cast<String, dynamic>()));
-              },
-            ),
-            if (widget.p['show_arrows'] == true && _slides.length > 1) ...[
-              Positioned(left: 8, top: 0, bottom: 0,
-                  child: Align(alignment: Alignment.center, child: _arrow(false))),
-              Positioned(right: 8, top: 0, bottom: 0,
-                  child: Align(alignment: Alignment.center, child: _arrow(true))),
-            ],
-            if (widget.p['show_dots'] != false && _slides.length > 1)
-              Positioned(left: 0, right: 0, bottom: 10,
-                child: Center(child: Row(mainAxisSize: MainAxisSize.min, children: [
-                  for (int i = 0; i < _slides.length; i++) AnimatedContainer(
-                    duration: const Duration(milliseconds: 220),
-                    width: i == _index ? 18 : 6, height: 6,
-                    margin: const EdgeInsets.symmetric(horizontal: 2),
-                    decoration: BoxDecoration(
-                      color: i == _index ? Colors.white : Colors.white.withValues(alpha: 0.5),
-                      borderRadius: BorderRadius.circular(3),
-                    ),
-                  ),
-                ])),
+    final accent = _hexColor(widget.p['accent_color'], const Color(0xFFF5C320));
+    final pauseOnTouch = widget.p['pause_on_touch'] != false;
+    final dotsPos = (widget.p['dots_position'] as String?) ?? 'bottom';
+    final outerPadH = fullBleed ? 0.0 : 12.0;
+    // Wrap in Listener to pause autoplay while user touches.
+    return Listener(
+      onPointerDown: pauseOnTouch ? (_) => _paused = true : null,
+      onPointerUp:   pauseOnTouch ? (_) => _paused = false : null,
+      child: Padding(
+        padding: EdgeInsets.symmetric(horizontal: outerPadH),
+        child: AspectRatio(
+          aspectRatio: _ratio(),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(radius),
+            child: Stack(children: [
+              if (dotsPos == 'top' && widget.p['show_dots'] != false && _visible.length > 1)
+                const SizedBox.shrink(),
+              PageView.builder(
+                controller: _ctrl,
+                itemCount: _visible.length,
+                onPageChanged: (i) => setState(() => _index = i),
+                itemBuilder: (_, i) {
+                  final s = _visible[i];
+                  final eager = i == 0 && widget.p['eager_first'] != false;
+                  return _Slide(slide: s, ar: ar, eager: eager,
+                      transition: _transition, current: i == _index,
+                      kenBurnsGlobal: widget.p['kenburns_default'] == true,
+                      onTap: () => _openLink(context, (s['link'] as Map?)?.cast<String, dynamic>()),
+                      onTap2: () => _openLink(context, (s['cta2_link'] as Map?)?.cast<String, dynamic>()),
+                      gap: (_layout == 'peek' || _layout == 'card') ? _gap : 0);
+                },
               ),
-          ]),
+              if (widget.p['show_arrows'] == true && _visible.length > 1) ...[
+                Positioned(left: 8, top: 0, bottom: 0,
+                    child: Align(alignment: Alignment.center, child: _arrow(false))),
+                Positioned(right: 8, top: 0, bottom: 0,
+                    child: Align(alignment: Alignment.center, child: _arrow(true))),
+              ],
+              if (widget.p['show_dots'] != false && _visible.length > 1)
+                Positioned(
+                  left: 0, right: 0,
+                  bottom: dotsPos == 'top' ? null : 10,
+                  top: dotsPos == 'top' ? 10 : null,
+                  child: Center(child: _Indicator(
+                    style: (widget.p['dots_style'] as String?) ?? 'dots',
+                    count: _visible.length, index: _index, accent: accent,
+                    duration: ((widget.p['duration'] as num?)?.toDouble() ?? 4),
+                    autoplay: widget.p['autoplay'] != false,
+                  )),
+                ),
+            ]),
+          ),
         ),
       ),
     );
   }
 
   Widget _arrow(bool next) {
+    final style = (widget.p['arrows_style'] as String?) ?? 'round';
+    final iconSize = style == 'minimal' ? 24.0 : 20.0;
+    final boxSize = style == 'minimal' ? 28.0 : 32.0;
+    final bg = style == 'minimal'
+        ? Colors.transparent
+        : Colors.black.withValues(alpha: 0.4);
+    final shape = style == 'square' ? BoxShape.rectangle : BoxShape.circle;
     return InkWell(
       onTap: () {
         final target = next ? _index + 1 : _index - 1;
-        if (target < 0 || target >= _slides.length) return;
-        _ctrl.animateToPage(target, duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
+        if (target < 0 || target >= _visible.length) return;
+        _ctrl.animateToPage(target,
+            duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
       },
       child: Container(
-        width: 32, height: 32,
-        decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.4), shape: BoxShape.circle),
-        child: Icon(next ? Icons.chevron_right : Icons.chevron_left, color: Colors.white, size: 20),
+        width: boxSize, height: boxSize,
+        decoration: BoxDecoration(
+          color: bg, shape: shape,
+          borderRadius: shape == BoxShape.rectangle ? BorderRadius.circular(8) : null,
+        ),
+        child: Icon(next ? Icons.chevron_right : Icons.chevron_left,
+            color: style == 'minimal' ? Colors.white.withValues(alpha: 0.7) : Colors.white,
+            size: iconSize),
       ),
     );
   }
 }
 
+// ─── Indicator (dots / bars / numbers / fraction / progress) ──────────
+class _Indicator extends StatelessWidget {
+  const _Indicator({required this.style, required this.count,
+      required this.index, required this.accent, required this.duration,
+      required this.autoplay});
+  final String style;
+  final int count;
+  final int index;
+  final Color accent;
+  final double duration;
+  final bool autoplay;
+
+  @override
+  Widget build(BuildContext context) {
+    switch (style) {
+      case 'numbers':
+        return _pill(child: Text('${index + 1} / $count',
+          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900,
+              fontSize: 11)));
+      case 'fraction':
+        return _pill(child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Text('${index + 1}', style: TextStyle(
+              color: accent, fontWeight: FontWeight.w900, fontSize: 14)),
+          const Text('/', style: TextStyle(color: Colors.white70, fontSize: 11)),
+          Text('$count', style: const TextStyle(
+              color: Colors.white70, fontWeight: FontWeight.w700, fontSize: 11)),
+        ]));
+      case 'progress':
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(2),
+            child: TweenAnimationBuilder<double>(
+              tween: Tween(begin: 0, end: autoplay ? 1.0 : (index + 1) / count),
+              duration: Duration(seconds: autoplay ? duration.round() : 1),
+              curve: Curves.linear,
+              builder: (_, v, __) => LinearProgressIndicator(
+                  value: v,
+                  backgroundColor: Colors.white.withValues(alpha: 0.3),
+                  valueColor: AlwaysStoppedAnimation(accent),
+                  minHeight: 3),
+            ),
+          ),
+        );
+      case 'bars':
+        return Row(mainAxisSize: MainAxisSize.min, children: [
+          for (int i = 0; i < count; i++) AnimatedContainer(
+            duration: const Duration(milliseconds: 250),
+            width: i == index ? 24 : 12, height: 4,
+            margin: const EdgeInsets.symmetric(horizontal: 2),
+            decoration: BoxDecoration(
+              color: i == index ? accent : Colors.white.withValues(alpha: 0.4),
+              borderRadius: BorderRadius.circular(2)),
+          ),
+        ]);
+      default: // dots
+        return Row(mainAxisSize: MainAxisSize.min, children: [
+          for (int i = 0; i < count; i++) AnimatedContainer(
+            duration: const Duration(milliseconds: 220),
+            width: i == index ? 18 : 6, height: 6,
+            margin: const EdgeInsets.symmetric(horizontal: 2),
+            decoration: BoxDecoration(
+              color: i == index ? accent : Colors.white.withValues(alpha: 0.5),
+              borderRadius: BorderRadius.circular(3)),
+          ),
+        ]);
+    }
+  }
+
+  Widget _pill({required Widget child}) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+    decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.45),
+        borderRadius: BorderRadius.circular(12)),
+    child: child,
+  );
+}
+
 class _Slide extends StatelessWidget {
-  const _Slide({required this.slide, required this.ar, required this.onTap});
+  const _Slide({required this.slide, required this.ar, required this.onTap,
+      this.onTap2, this.eager = false, this.transition = 'slide',
+      this.current = false, this.kenBurnsGlobal = false, this.gap = 0});
   final Map<String, dynamic> slide;
   final bool ar;
   final VoidCallback onTap;
+  final VoidCallback? onTap2;
+  final bool eager;
+  final String transition;
+  final bool current;
+  final bool kenBurnsGlobal;
+  final double gap;
 
   @override
   Widget build(BuildContext context) {
     final kind = (slide['kind'] as String?) ?? 'image';
     final img = (slide['image_url'] as String?) ?? '';
-    final overlayColor = _hexColor(slide['overlay_color'], const Color(0xFF000000));
+    final overlayKind = (slide['overlay_kind'] as String?) ?? 'solid';
+    final c1 = _hexColor(slide['overlay_color'], const Color(0xFF000000));
+    final c2 = _hexColor(slide['overlay_color2'], c1);
     final overlayOpacity = ((slide['overlay_opacity'] as num?)?.toInt() ?? 30).clamp(0, 100) / 100.0;
     final textColor = _hexColor(slide['text_color'], Colors.white);
-    final align = (slide['text_align'] as String?) ?? 'center';
+    final ctaColor = _hexColor(slide['cta_color'], textColor);
+    final position = (slide['text_position'] as String?) ?? 'mc';
+    final textAlignRaw = (slide['text_align'] as String?) ?? 'center';
+    final align = (textAlignRaw == 'left' || textAlignRaw == 'start')
+        ? CrossAxisAlignment.start
+        : (textAlignRaw == 'right' || textAlignRaw == 'end')
+            ? CrossAxisAlignment.end
+            : CrossAxisAlignment.center;
+    final textAlign = (textAlignRaw == 'left' || textAlignRaw == 'start')
+        ? TextAlign.start
+        : (textAlignRaw == 'right' || textAlignRaw == 'end')
+            ? TextAlign.end
+            : TextAlign.center;
+    final maxWidthPct = ((slide['text_max_width'] as num?)?.toDouble() ?? 80) / 100;
+    final eyebrow = (ar ? slide['eyebrowAr'] : slide['eyebrowEn'])?.toString() ?? '';
     final title = (ar ? slide['titleAr'] : slide['titleEn'])?.toString() ?? '';
     final sub   = (ar ? slide['subtitleAr'] : slide['subtitleEn'])?.toString() ?? '';
-    final cta   = (ar ? slide['ctaAr'] : slide['ctaEn'])?.toString() ?? '';
+    final cta   = (ar ? slide['ctaAr']      : slide['ctaEn'])?.toString() ?? '';
+    final cta2  = (ar ? slide['cta2Ar']     : slide['cta2En'])?.toString() ?? '';
+    final ctaShape = (slide['cta_shape'] as String?) ?? 'pill';
+    final titleSize = (slide['title_size'] as String?) ?? 'md';
+    final titleFontSize = {'sm': 16.0, 'md': 22.0, 'lg': 28.0, 'xl': 34.0}[titleSize] ?? 22.0;
+    final badgeText = (ar ? slide['badge_textAr'] : slide['badge_textEn'])?.toString() ?? '';
+    final badgeColor = _hexColor(slide['badge_color'], const Color(0xFFE63946));
+    final badgePos = (slide['badge_position'] as String?) ?? 'tl';
+    final kenBurnsSetting = (slide['kenburns'] as String?) ?? 'auto';
+    final kenBurns = kenBurnsSetting == 'on'
+        || (kenBurnsSetting == 'auto' && kenBurnsGlobal);
+
+    // 9-anchor → Alignment
+    final anchor = {
+      'tl': Alignment.topLeft,     'tc': Alignment.topCenter,    'tr': Alignment.topRight,
+      'ml': Alignment.centerLeft,  'mc': Alignment.center,       'mr': Alignment.centerRight,
+      'bl': Alignment.bottomLeft,  'bc': Alignment.bottomCenter, 'br': Alignment.bottomRight,
+    }[position] ?? Alignment.center;
+
+    Widget media() {
+      if (kind == 'product' || kind == 'countdown' || kind == 'text') {
+        return Container(decoration: const BoxDecoration(
+            gradient: LinearGradient(colors: [Color(0xFF412402), Color(0xFFF5C320)],
+                begin: Alignment.topLeft, end: Alignment.bottomRight)));
+      }
+      if (img.isEmpty) {
+        return Container(decoration: const BoxDecoration(
+            gradient: LinearGradient(colors: [Color(0xFF412402), Color(0xFFF5C320)],
+                begin: Alignment.topLeft, end: Alignment.bottomRight)));
+      }
+      return CachedNetworkImage(imageUrl: img, fit: BoxFit.cover,
+          // eager-load first slide via no placeholder — LCP win
+          placeholder: eager ? null : (_, __) => Container(color: const Color(0xFFEEE6D6)));
+    }
+
+    Widget overlay() {
+      if (overlayOpacity == 0) return const SizedBox.shrink();
+      switch (overlayKind) {
+        case 'gradient_v':
+          return Container(decoration: BoxDecoration(
+              gradient: LinearGradient(
+                  begin: Alignment.topCenter, end: Alignment.bottomCenter,
+                  colors: [c1.withValues(alpha: overlayOpacity),
+                           c2.withValues(alpha: overlayOpacity)])));
+        case 'gradient_h':
+          return Container(decoration: BoxDecoration(
+              gradient: LinearGradient(
+                  begin: Alignment.centerLeft, end: Alignment.centerRight,
+                  colors: [c1.withValues(alpha: overlayOpacity),
+                           c2.withValues(alpha: overlayOpacity)])));
+        case 'gradient_diag':
+          return Container(decoration: BoxDecoration(
+              gradient: LinearGradient(
+                  begin: Alignment.topLeft, end: Alignment.bottomRight,
+                  colors: [c1.withValues(alpha: overlayOpacity),
+                           c2.withValues(alpha: overlayOpacity)])));
+        case 'vignette':
+          return Container(decoration: BoxDecoration(
+              gradient: RadialGradient(radius: 1.0,
+                  colors: [Colors.transparent,
+                           c1.withValues(alpha: overlayOpacity)])));
+        default:
+          return Container(color: c1.withValues(alpha: overlayOpacity));
+      }
+    }
+
+    Widget ctaButton(String label, VoidCallback action, {bool secondary = false}) {
+      if (label.isEmpty) return const SizedBox.shrink();
+      final bg = secondary ? Colors.transparent : ctaColor;
+      final fg = secondary ? ctaColor : const Color(0xFF412402);
+      switch (ctaShape) {
+        case 'rect':
+          return GestureDetector(onTap: action, child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 9),
+              decoration: BoxDecoration(color: bg,
+                  borderRadius: BorderRadius.circular(6),
+                  border: secondary ? Border.all(color: ctaColor, width: 1.5) : null),
+              child: Text(label, style: TextStyle(color: fg,
+                  fontWeight: FontWeight.w900, fontSize: 13))));
+        case 'ghost':
+          return GestureDetector(onTap: action, child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 9),
+              decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: ctaColor, width: 1.5)),
+              child: Text(label, style: TextStyle(color: ctaColor,
+                  fontWeight: FontWeight.w900, fontSize: 13))));
+        case 'underline':
+          return GestureDetector(onTap: action, child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 6),
+              child: Text(label, style: TextStyle(
+                  color: ctaColor, fontWeight: FontWeight.w900, fontSize: 13,
+                  decoration: TextDecoration.underline,
+                  decorationColor: ctaColor, decorationThickness: 2))));
+        default: // pill
+          return GestureDetector(onTap: action, child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 9),
+              decoration: BoxDecoration(color: bg,
+                  borderRadius: BorderRadius.circular(20),
+                  border: secondary ? Border.all(color: ctaColor, width: 1.5) : null),
+              child: Text(label, style: TextStyle(color: fg,
+                  fontWeight: FontWeight.w900, fontSize: 13))));
+      }
+    }
+
+    Widget badge() {
+      if (badgeText.isEmpty) return const SizedBox.shrink();
+      final p = badgePos == 'tl' ? const EdgeInsets.only(top: 10, left: 10)
+              : badgePos == 'tr' ? const EdgeInsets.only(top: 10, right: 10)
+              : badgePos == 'bl' ? const EdgeInsets.only(bottom: 10, left: 10)
+              : const EdgeInsets.only(bottom: 10, right: 10);
+      return Align(
+        alignment: badgePos == 'tl' ? Alignment.topLeft
+                : badgePos == 'tr' ? Alignment.topRight
+                : badgePos == 'bl' ? Alignment.bottomLeft
+                : Alignment.bottomRight,
+        child: Padding(padding: p, child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(color: badgeColor,
+                borderRadius: BorderRadius.circular(4)),
+            child: Text(badgeText, style: const TextStyle(
+                color: Colors.white, fontWeight: FontWeight.w900,
+                fontSize: 10, letterSpacing: 0.6)))),
+      );
+    }
+
+    // Countdown slide content
+    Widget countdownContent() {
+      if (kind != 'countdown') return const SizedBox.shrink();
+      final iso = (slide['countdown_to'] as String?) ?? '';
+      final end = DateTime.tryParse(iso);
+      if (end == null) return const SizedBox.shrink();
+      return TweenAnimationBuilder<int>(
+        duration: const Duration(seconds: 1),
+        tween: IntTween(begin: 0, end: 1),
+        builder: (_, __, ___) {
+          final diff = end.difference(DateTime.now());
+          if (diff.isNegative) return Text(
+              ar ? 'انتهى' : 'ENDED',
+              style: TextStyle(color: textColor, fontSize: 24,
+                  fontWeight: FontWeight.w900));
+          final h = diff.inHours.toString().padLeft(2, '0');
+          final m = (diff.inMinutes % 60).toString().padLeft(2, '0');
+          final s = (diff.inSeconds % 60).toString().padLeft(2, '0');
+          return Text('$h : $m : $s', style: TextStyle(
+              color: textColor, fontSize: titleFontSize,
+              fontWeight: FontWeight.w900, fontFeatures: const [
+                FontFeature.tabularFigures()
+              ]));
+        },
+      );
+    }
+
     return GestureDetector(
       onTap: onTap,
-      child: Stack(fit: StackFit.expand, children: [
-        if (kind == 'image' || kind == 'video')
-          img.isEmpty
-            ? Container(decoration: const BoxDecoration(
-                gradient: LinearGradient(colors: [Color(0xFF412402), Color(0xFFF5C320)],
-                  begin: Alignment.topLeft, end: Alignment.bottomRight)))
-            : CachedNetworkImage(imageUrl: img, fit: BoxFit.cover,
-                placeholder: (_, __) => Container(color: const Color(0xFFEEE6D6))),
-        if (kind == 'video')
-          const Center(child: Icon(Icons.play_circle_fill, color: Colors.white70, size: 56)),
-        Container(color: overlayColor.withValues(alpha: overlayOpacity)),
-        Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: align == 'left' ? CrossAxisAlignment.start
-                : align == 'right' ? CrossAxisAlignment.end
-                : CrossAxisAlignment.center,
-            children: [
-              if (title.isNotEmpty) Text(title,
-                  textAlign: align == 'left' ? TextAlign.start : align == 'right' ? TextAlign.end : TextAlign.center,
-                  style: TextStyle(color: textColor, fontSize: 22, fontWeight: FontWeight.w900, height: 1.1)),
-              if (sub.isNotEmpty) ...[
-                const SizedBox(height: 6),
-                Text(sub,
-                    textAlign: align == 'left' ? TextAlign.start : align == 'right' ? TextAlign.end : TextAlign.center,
-                    style: TextStyle(color: textColor.withValues(alpha: 0.92), fontSize: 13, fontWeight: FontWeight.w500)),
-              ],
-              if (cta.isNotEmpty) ...[
-                const SizedBox(height: 12),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 9),
-                  decoration: BoxDecoration(color: textColor, borderRadius: BorderRadius.circular(20)),
-                  child: Text(cta,
-                      style: const TextStyle(color: Color(0xFF412402), fontWeight: FontWeight.w900, fontSize: 13)),
+      child: Padding(
+        padding: EdgeInsets.symmetric(horizontal: gap / 2),
+        child: Stack(fit: StackFit.expand, children: [
+          // Media + optional Ken Burns slow zoom
+          kenBurns
+            ? _KenBurns(active: current, child: media())
+            : media(),
+          if (kind == 'video')
+            const Center(child: Icon(Icons.play_circle_fill,
+                color: Colors.white70, size: 56)),
+          overlay(),
+          // Anchored content
+          Align(
+            alignment: anchor,
+            child: FractionallySizedBox(
+              widthFactor: maxWidthPct,
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: align,
+                  children: [
+                    if (eyebrow.isNotEmpty) Text(eyebrow,
+                        textAlign: textAlign,
+                        style: TextStyle(color: ctaColor,
+                            fontWeight: FontWeight.w900, fontSize: 11,
+                            letterSpacing: 1.2)),
+                    if (eyebrow.isNotEmpty) const SizedBox(height: 6),
+                    if (kind == 'countdown') countdownContent()
+                    else if (title.isNotEmpty) Text(title,
+                        textAlign: textAlign,
+                        style: TextStyle(color: textColor,
+                            fontSize: titleFontSize,
+                            fontWeight: FontWeight.w900, height: 1.1)),
+                    if (sub.isNotEmpty) ...[
+                      const SizedBox(height: 6),
+                      Text(sub, textAlign: textAlign,
+                          style: TextStyle(
+                              color: textColor.withValues(alpha: 0.92),
+                              fontSize: 13, fontWeight: FontWeight.w500)),
+                    ],
+                    if (cta.isNotEmpty || cta2.isNotEmpty) ...[
+                      const SizedBox(height: 12),
+                      Wrap(spacing: 10, runSpacing: 6,
+                        alignment: textAlignRaw == 'start'
+                            ? WrapAlignment.start
+                            : textAlignRaw == 'end'
+                                ? WrapAlignment.end
+                                : WrapAlignment.center,
+                        children: [
+                          if (cta.isNotEmpty) ctaButton(cta, onTap),
+                          if (cta2.isNotEmpty)
+                            ctaButton(cta2, onTap2 ?? onTap, secondary: true),
+                        ]),
+                    ],
+                  ],
                 ),
-              ],
-            ],
+              ),
+            ),
           ),
-        ),
-      ]),
+          badge(),
+        ]),
+      ),
+    );
+  }
+}
+
+// ─── Ken Burns: slow zoom + pan for the slide background ─────────────
+class _KenBurns extends StatefulWidget {
+  const _KenBurns({required this.child, required this.active});
+  final Widget child;
+  final bool active;
+  @override
+  State<_KenBurns> createState() => _KenBurnsState();
+}
+
+class _KenBurnsState extends State<_KenBurns>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _c;
+  @override
+  void initState() {
+    super.initState();
+    _c = AnimationController(vsync: this,
+        duration: const Duration(seconds: 12));
+    if (widget.active) _c.repeat(reverse: true);
+  }
+  @override
+  void didUpdateWidget(_KenBurns old) {
+    super.didUpdateWidget(old);
+    if (widget.active && !_c.isAnimating) _c.repeat(reverse: true);
+    if (!widget.active && _c.isAnimating) _c.stop();
+  }
+  @override
+  void dispose() { _c.dispose(); super.dispose(); }
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _c,
+      child: widget.child,
+      builder: (_, child) {
+        final v = _c.value;
+        return Transform.scale(
+          scale: 1.0 + v * 0.12,
+          child: Transform.translate(
+            offset: Offset(-v * 8, -v * 6),
+            child: child,
+          ),
+        );
+      },
     );
   }
 }
