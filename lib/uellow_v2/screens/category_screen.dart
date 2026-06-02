@@ -455,21 +455,9 @@ class _LatestSlider extends StatelessWidget {
             Text(ar ? 'وصل حديثاً' : 'Recently arrived',
                 style: const TextStyle(fontSize: 13,
                     fontWeight: FontWeight.w900, color: UellowColors.ink)),
-            const SizedBox(width: 6),
-            // Category-name pill — small, distinct, doesn't crowd the title
-            Flexible(child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-              decoration: BoxDecoration(
-                color: UellowColors.yellowSoft,
-                borderRadius: BorderRadius.circular(999),
-                border: Border.all(color: UellowColors.yellow, width: 1),
-              ),
-              child: Text(category.name.current(lang),
-                  maxLines: 1, overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 10.5,
-                      fontWeight: FontWeight.w800,
-                      color: UellowColors.darkBrown)),
-            )),
+            // v2.0.76 — category-name pill removed per user request; the
+            // category name was already in the screen's app bar so it was
+            // redundant noise in the section title.
             const Spacer(),
             GestureDetector(
               onTap: () => Navigator.pushNamed(context, '/collection',

@@ -165,7 +165,16 @@ class _AuthScreenState extends State<AuthScreen> {
   Widget _tabBtn(String label, int idx) {
     final on = _tab == idx;
     return GestureDetector(
-      onTap: () => setState(() => _tab = idx),
+      onTap: () => setState(() {
+        // v2.0.76 — when switching to sign-up tab, clear pre-filled fields
+        // so the user starts fresh (was leaking the sign-in email).
+        if (idx == 1 && _tab != 1) {
+          _email.clear(); _password.clear();
+          _name.clear(); _phone.clear();
+          _err = null;
+        }
+        _tab = idx;
+      }),
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 10),
         decoration: BoxDecoration(

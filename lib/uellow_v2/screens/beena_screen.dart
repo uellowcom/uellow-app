@@ -114,7 +114,10 @@ class _Header extends StatelessWidget {
               Navigator.pushReplacementNamed(context, '/home');
             }
           },
-          icon: const Icon(Icons.arrow_back, color: UellowColors.yellowLight),
+          icon: Icon(
+              UellowApi.instance.lang.toLowerCase().startsWith('ar')
+                  ? Icons.arrow_forward : Icons.arrow_back,
+              color: UellowColors.yellowLight),
           padding: EdgeInsets.zero, constraints: const BoxConstraints(),
         ),
         const SizedBox(width: 8),

@@ -155,7 +155,12 @@ class _CartScreenState extends State<CartScreen> {
         backgroundColor: Colors.white,
         elevation: 0.5,
         leading: IconButton(
-          icon: Icon(_selectMode ? Icons.close : Icons.arrow_back,
+          // v2.0.76 — flip back arrow in AR so it points the natural way.
+          icon: Icon(_selectMode
+              ? Icons.close
+              : (UellowApi.instance.lang.toLowerCase().startsWith('ar')
+                  ? Icons.arrow_forward
+                  : Icons.arrow_back),
               color: UellowColors.darkBrown),
           onPressed: () {
             if (_selectMode) {
@@ -593,7 +598,9 @@ class _CouponRow extends StatelessWidget {
         Expanded(child: TextField(
           controller: controller,
           decoration: InputDecoration(
-            hintText: 'Got a promo code?',
+            // v2.0.76 — localized placeholder (was English-only)
+            hintText: UellowApi.instance.lang.toLowerCase().startsWith('ar')
+                ? 'عندك كود خصم؟' : 'Got a promo code?',
             hintStyle: const TextStyle(color: UellowColors.muted),
             fillColor: Colors.white,
             filled: true,

@@ -2437,38 +2437,51 @@ class _ExploreMoreBlockState extends State<ExploreMoreBlock> {
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           // ─── Header row ────────────────────────────────────────────────────
           if ((widget.p['show_title'] != false) && title.isNotEmpty)
+            // v2.0.76 — Arabic titles were ellipsis'd because the row split
+            // space between title + sub + Shuffle. Now the title gets
+            // Expanded (max width), the subtitle drops in AR / sits as a
+            // smaller line beside in EN, and the shuffle button is icon-only
+            // when the language is Arabic so it doesn't eat horizontal room.
             Padding(
               padding: const EdgeInsets.fromLTRB(6, 4, 6, 8),
               child: Row(children: [
-                Icon(Icons.explore_outlined, size: 18, color: t.dark),
+                Icon(Icons.explore_outlined, size: 17, color: t.dark),
                 const SizedBox(width: 6),
-                Flexible(
-                  child: Text(title, overflow: TextOverflow.ellipsis,
-                      style: TextStyle(color: t.dark, fontSize: 16, fontWeight: FontWeight.w900)),
-                ),
-                if (sub.isNotEmpty) ...[
-                  const SizedBox(width: 8),
-                  Flexible(
-                    child: Text(sub, overflow: TextOverflow.ellipsis,
-                        style: TextStyle(color: t.dark.withOpacity(0.55), fontSize: 12)),
-                  ),
-                ],
+                Expanded(child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(title, maxLines: 1, overflow: TextOverflow.ellipsis,
+                        style: TextStyle(color: t.dark, fontSize: 14.5,
+                            fontWeight: FontWeight.w900, letterSpacing: -0.2)),
+                    if (sub.isNotEmpty)
+                      Padding(padding: const EdgeInsets.only(top: 1),
+                        child: Text(sub, maxLines: 1, overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: t.dark.withOpacity(0.55), fontSize: 11,
+                              fontWeight: FontWeight.w600)),
+                      ),
+                  ],
+                )),
                 if (_showShuffle) ...[
-                  const Spacer(),
+                  const SizedBox(width: 6),
                   InkWell(
                     onTap: _shuffle, borderRadius: BorderRadius.circular(14),
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      padding: EdgeInsets.symmetric(
+                          horizontal: widget.ar ? 8 : 10, vertical: 6),
                       decoration: BoxDecoration(
                         color: UellowColors.yellowSoft,
                         border: Border.all(color: UellowColors.yellow),
                         borderRadius: BorderRadius.circular(14),
                       ),
-                      child: const Row(mainAxisSize: MainAxisSize.min, children: [
-                        Icon(Icons.shuffle, size: 13, color: UellowColors.darkBrown),
-                        SizedBox(width: 4),
-                        Text('Shuffle', style: TextStyle(
-                            color: UellowColors.darkBrown, fontSize: 11, fontWeight: FontWeight.w800)),
+                      child: Row(mainAxisSize: MainAxisSize.min, children: [
+                        const Icon(Icons.shuffle, size: 13, color: UellowColors.darkBrown),
+                        const SizedBox(width: 4),
+                        Text(widget.ar ? 'تبديل' : 'Shuffle',
+                            style: const TextStyle(
+                                color: UellowColors.darkBrown, fontSize: 10.5,
+                                fontWeight: FontWeight.w800)),
                       ]),
                     ),
                   ),

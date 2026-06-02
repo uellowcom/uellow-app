@@ -50,7 +50,7 @@ class T {
                                 'ar': 'متجرك الموثوق في الشرق الأوسط'},
     // Brand
     'brand.official':          {'en': 'OFFICIAL BRAND',            'ar': 'علامة رسمية'},
-    'brand.visit_store':       {'en': 'Visit store →',             'ar': 'زيارة المتجر ←'},
+    'brand.visit_store':       {'en': 'Browse more →',             'ar': 'تصفح المزيد ←'},
     // Account
     'account.sign_in':         {'en': 'Sign in',                   'ar': 'تسجيل الدخول'},
     'account.sign_out':        {'en': 'Sign out',                  'ar': 'تسجيل الخروج'},

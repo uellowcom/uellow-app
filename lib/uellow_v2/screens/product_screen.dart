@@ -244,8 +244,12 @@ class _Gallery extends StatelessWidget {
                       fontWeight: FontWeight.w900, letterSpacing: 0.3)),
             ]),
           ))),
+        // v2.0.76 — flip back-arrow icon in AR. Position stays on the
+        // left so the wishlist/cart buttons keep their right-side row.
         Positioned(top: 14, left: 14, child: _btn(
-            icon: Icons.arrow_back_ios_new, color: UellowColors.darkBrown,
+            icon: UellowApi.instance.lang.toLowerCase().startsWith('ar')
+                ? Icons.arrow_forward_ios : Icons.arrow_back_ios_new,
+            color: UellowColors.darkBrown,
             onTap: () => Navigator.maybePop(context))),
         Positioned(top: 14, right: 14, child: Row(children: [
           _btn(icon: inWishlist ? Icons.favorite : Icons.favorite_border,

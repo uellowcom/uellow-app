@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 
 import '../../api/uellow_api.dart';
 import '../../api/uellow_models.dart';
+import '../router/uellow_router.dart';
 import '../theme/uellow_theme.dart';
 
 class WishlistScreen extends StatefulWidget {
@@ -35,9 +36,25 @@ class _WishlistScreenState extends State<WishlistScreen> {
             border: Border(bottom: BorderSide(color: UellowColors.border)),
           ),
           child: Row(children: [
-            IconButton(onPressed: () => Navigator.maybePop(context),
-                icon: const Icon(Icons.arrow_back, color: UellowColors.darkBrown),
-                padding: EdgeInsets.zero, constraints: const BoxConstraints()),
+            // v2.0.76 — back button: previously used Navigator.maybePop
+            // which silently does nothing when this screen was reached
+            // via a tab switch (no route to pop). Falls back to /home so
+            // the button is never a no-op. Arrow direction flipped in AR.
+            Builder(builder: (ctx) {
+              final ar = UellowApi.instance.lang.toLowerCase().startsWith('ar');
+              return IconButton(
+                onPressed: () async {
+                  final popped = await Navigator.maybePop(ctx);
+                  if (!popped && ctx.mounted) {
+                    Navigator.pushNamedAndRemoveUntil(ctx, Routes.home, (_) => false);
+                  }
+                },
+                icon: Icon(ar ? Icons.arrow_forward : Icons.arrow_back,
+                    color: UellowColors.darkBrown),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+              );
+            }),
             const SizedBox(width: 6),
             const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text('My Wishlist', style: UT.h1),
