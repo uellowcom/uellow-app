@@ -766,6 +766,12 @@ class _CategoriesBlock extends StatelessWidget {
   }
 }
 
+// ─── PRODUCTS BLOCK — v2.0.68 PRO ────────────────────────────────────────────
+//   6 layout variants (carousel / grid_2 / grid_3 / spotlight / tall_split / masonry)
+//   Fixes name-as-Map bug (was rendering "{en: foo, ar: bar}").
+//   Per-block design options: card_style, card_radius, accent, show_rating,
+//   show_save_badge, show_wishlist, show_compare_price, show_brand, name_lines,
+//   price_emphasis, quick_add.
 class _ProductsBlock extends StatelessWidget {
   const _ProductsBlock({required this.p, required this.data, required this.t, required this.ar, required this.kind});
   final Map<String, dynamic> p;
@@ -781,12 +787,27 @@ class _ProductsBlock extends StatelessWidget {
     if (items.isEmpty) return const SizedBox.shrink();
     final titleGap = (p['title_gap'] as num?)?.toDouble() ?? 6;
     final showHeader = title.isNotEmpty;
+    // Default variant: kind='grid' → grid_2; everything else → carousel.
+    final variant = (p['variant'] as String?) ??
+        (kind == 'grid' ? 'grid_2' : 'carousel');
+
+    Widget body;
+    switch (variant) {
+      case 'grid_2':     body = _grid(items, cols: 2); break;
+      case 'grid_3':     body = _grid(items, cols: 3); break;
+      case 'spotlight':  body = _spotlight(items); break;
+      case 'tall_split': body = _tallSplit(items); break;
+      case 'masonry':    body = _masonry(items); break;
+      default:           body = _carousel(items);
+    }
+
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        if (showHeader)
-          Padding(padding: EdgeInsets.fromLTRB(16, 4, 16, titleGap),
+      if (showHeader)
+        Padding(padding: EdgeInsets.fromLTRB(16, 4, 16, titleGap),
           child: Row(children: [
             Expanded(child: Text(title, style: TextStyle(
-                color: t.dark, fontSize: 14, fontWeight: FontWeight.w900))),
+                color: t.dark, fontSize: 15, fontWeight: FontWeight.w900,
+                letterSpacing: -0.2))),
             TextButton(
               onPressed: () => Navigator.pushNamed(context,
                   kind == 'flash' ? Routes.flash : Routes.category),
@@ -798,155 +819,100 @@ class _ProductsBlock extends StatelessWidget {
               child: Text(ar ? 'الكل ←' : 'See all →'),
             ),
           ])),
-        // v2.0.38 — Tightened card height to match content + richer card layout
-        // so there's no gray empty space after the last product.
-        SizedBox(height: 250,
+      body,
+    ]);
+  }
+
+  Widget _carousel(List<Map<String, dynamic>> items) {
+    return SizedBox(height: 260,
+      child: ListView.separated(
+        physics: const ClampingScrollPhysics(),
+        padding: const EdgeInsets.symmetric(horizontal: 14),
+        scrollDirection: Axis.horizontal,
+        itemCount: items.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 8),
+        itemBuilder: (_, i) => SizedBox(width: 152, child: _card(items[i])),
+      ));
+  }
+
+  Widget _grid(List<Map<String, dynamic>> items, {required int cols}) {
+    return Padding(padding: const EdgeInsets.symmetric(horizontal: 12),
+      child: GridView.builder(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: cols,
+            mainAxisSpacing: 8, crossAxisSpacing: 8,
+            childAspectRatio: cols == 3 ? 0.62 : 0.66),
+        itemCount: items.length,
+        itemBuilder: (_, i) => _card(items[i], compact: cols == 3),
+      ));
+  }
+
+  Widget _spotlight(List<Map<String, dynamic>> items) {
+    final hero = items.first;
+    final tail = items.skip(1).take(4).toList();
+    return Padding(padding: const EdgeInsets.symmetric(horizontal: 12),
+      child: Column(children: [
+        SizedBox(height: 260, child: _card(hero, hero: true)),
+        const SizedBox(height: 8),
+        if (tail.isNotEmpty) SizedBox(
+          height: 152,
           child: ListView.separated(
             physics: const ClampingScrollPhysics(),
-            padding: const EdgeInsets.symmetric(horizontal: 14),
             scrollDirection: Axis.horizontal,
-            itemCount: items.length,
-            separatorBuilder: (_, __) => const SizedBox(width: 8),
-            itemBuilder: (_, i) {
-              final prod = items[i];
-              final price = (prod['price'] as Map?)?.cast<String, dynamic>();
-              final compare = prod['compare_price'];
-              final discount = (prod['discount_pct'] as num?)?.toInt() ?? 0;
-              final url = (prod['image'] as String?) ?? '';
-              final badges = ((prod['badges'] as List?) ?? const []).cast<dynamic>();
-              final rating = (prod['rating'] as Map?)?.cast<String, dynamic>();
-              final ratingAvg = (rating?['avg'] as num?)?.toDouble() ?? 0.0;
-              final ratingCount = (rating?['count'] as num?)?.toInt() ?? 0;
-              final priceAmt = (price?['amount'] as num?)?.toDouble() ?? 0;
-              final compareAmt = (compare is Map ? compare['amount'] : compare) as num?;
-              double saving = 0;
-              if (compareAmt != null && compareAmt > priceAmt) saving = compareAmt - priceAmt;
-              return GestureDetector(
-                onTap: () => UellowRouter.goProduct(context, (prod['id'] as num).toInt()),
-                child: Container(
-                  width: 152,
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(12),
-                    boxShadow: [BoxShadow(
-                      color: t.dark.withValues(alpha: 0.06),
-                      blurRadius: 6, offset: const Offset(0, 2))],
-                  ),
-                  clipBehavior: Clip.antiAlias,
-                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Stack(children: [
-                      AspectRatio(aspectRatio: 1,
-                        child: url.isNotEmpty
-                            ? CachedNetworkImage(imageUrl: url, fit: BoxFit.cover,
-                                placeholder: (_, __) => Container(color: t.primary.withValues(alpha: 0.06)),
-                                errorWidget: (_, __, ___) => Container(
-                                    color: t.primary.withValues(alpha: 0.08),
-                                    child: Icon(Icons.broken_image_outlined,
-                                        color: t.dark.withValues(alpha: 0.4))))
-                            : Container(color: t.primary.withValues(alpha: 0.08),
-                                child: Icon(Icons.shopping_bag_outlined,
-                                    color: t.dark.withValues(alpha: 0.4)))),
-                      // Discount % top-left
-                      if (discount > 0) Positioned(
-                        top: 6, left: 6,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFC0392B),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Text('-$discount%',
-                              style: const TextStyle(color: Colors.white,
-                                  fontSize: 10, fontWeight: FontWeight.w900)),
-                        ),
-                      ),
-                      // Smart badges top-right (🔥 ✨ 🚚 💯)
-                      if (badges.isNotEmpty) Positioned(
-                        top: 6, right: 6,
-                        child: Wrap(spacing: 3, direction: Axis.vertical, children: [
-                          for (final b in badges.take(2))
-                            if (b is Map) Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                borderRadius: BorderRadius.circular(4),
-                                boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 2)],
-                              ),
-                              child: Text((b['label_en']?.toString() ?? '').split(' ').first,
-                                  style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w900)),
-                            ),
-                        ]),
-                      ),
-                      // Wishlist heart bottom-right of image
-                      Positioned(
-                        bottom: 6, right: 6,
-                        child: Container(
-                          width: 28, height: 28,
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            shape: BoxShape.circle,
-                            boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 3)],
-                          ),
-                          child: Icon(Icons.favorite_border, size: 15, color: t.dark),
-                        ),
-                      ),
-                    ]),
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
-                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                        Text(prod['name']?.toString() ?? '',
-                            maxLines: 2, overflow: TextOverflow.ellipsis,
-                            style: TextStyle(color: t.dark, fontSize: 11.5,
-                                height: 1.2, fontWeight: FontWeight.w600)),
-                        const SizedBox(height: 4),
-                        Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
-                          Flexible(
-                            child: Text(
-                                '${priceAmt.toStringAsFixed(price?['digits'] ?? 3)} ${price?['symbol'] ?? ''}',
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(color: t.dark, fontSize: 14,
-                                    fontWeight: FontWeight.w900)),
-                          ),
-                          if (compareAmt != null) ...[
-                            const SizedBox(width: 4),
-                            Text('${compareAmt.toStringAsFixed(price?['digits'] ?? 3)}',
-                                style: TextStyle(color: t.dark.withValues(alpha: 0.45),
-                                    fontSize: 10, fontWeight: FontWeight.w600,
-                                    decoration: TextDecoration.lineThrough)),
-                          ],
-                        ]),
-                        if (saving > 0) Padding(
-                          padding: const EdgeInsets.only(top: 2),
-                          child: Text('${ar ? 'وفر' : 'Save'} ${saving.toStringAsFixed(price?['digits'] ?? 3)}',
-                              style: const TextStyle(color: Color(0xFF1F8A40), fontSize: 9.5,
-                                  fontWeight: FontWeight.w800)),
-                        ),
-                        // Rating + sold count footer
-                        if (ratingAvg > 0 || ratingCount > 0) Padding(
-                          padding: const EdgeInsets.only(top: 3),
-                          child: Row(children: [
-                            const Icon(Icons.star, size: 10.5, color: Color(0xFFFFC107)),
-                            const SizedBox(width: 2),
-                            Text(ratingAvg > 0 ? ratingAvg.toStringAsFixed(1) : '—',
-                                style: TextStyle(fontSize: 10,
-                                    color: t.dark, fontWeight: FontWeight.w700)),
-                            if (ratingCount > 0) ...[
-                              const SizedBox(width: 3),
-                              Text('($ratingCount)',
-                                  style: TextStyle(fontSize: 9.5,
-                                      color: t.dark.withValues(alpha: 0.5))),
-                            ],
-                          ]),
-                        ),
-                      ]),
-                    ),
-                  ]),
-                ),
-              );
-            },
-          ),
-        ),
+            itemCount: tail.length,
+            separatorBuilder: (_, __) => const SizedBox(width: 6),
+            itemBuilder: (_, i) => SizedBox(width: 100, child: _card(tail[i], compact: true)),
+          )),
+      ]));
+  }
+
+  Widget _tallSplit(List<Map<String, dynamic>> items) {
+    if (items.length < 3) return _carousel(items);
+    final left = items.take(2).toList();
+    final right = items[2];
+    return Padding(padding: const EdgeInsets.symmetric(horizontal: 12),
+      child: SizedBox(height: 320,
+        child: Row(children: [
+          Expanded(child: Column(children: [
+            Expanded(child: _card(left[0], compact: true)),
+            const SizedBox(height: 8),
+            Expanded(child: _card(left[1], compact: true)),
+          ])),
+          const SizedBox(width: 8),
+          Expanded(child: _card(right, hero: true)),
+        ])));
+  }
+
+  Widget _masonry(List<Map<String, dynamic>> items) {
+    final left = <Map<String, dynamic>>[];
+    final right = <Map<String, dynamic>>[];
+    for (int i = 0; i < items.length; i++) {
+      (i.isEven ? left : right).add(items[i]);
+    }
+    Widget col(List<Map<String, dynamic>> col, {required bool offset}) {
+      return Column(children: [
+        if (offset) const SizedBox(height: 20),
+        for (int i = 0; i < col.length; i++) ...[
+          if (i > 0) const SizedBox(height: 8),
+          _card(col[i]),
+        ],
       ]);
+    }
+    return Padding(padding: const EdgeInsets.symmetric(horizontal: 12),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Expanded(child: col(left, offset: false)),
+        const SizedBox(width: 8),
+        Expanded(child: col(right, offset: true)),
+      ]));
+  }
+
+  // ─── card builder (all variants funnel through here) ──────────────────────
+  Widget _card(Map<String, dynamic> prod, {bool hero = false, bool compact = false}) {
+    return _ProductCardPro(
+      prod: prod, p: p, t: t, ar: ar, hero: hero, compact: compact,
+    );
   }
 
   String _fallbackTitle(String k, bool ar) {
@@ -955,8 +921,222 @@ class _ProductsBlock extends StatelessWidget {
       case 'bestsellers': return ar ? 'الأكثر مبيعاً' : 'Bestsellers';
       case 'rec-ai':      return ar ? 'مقترحة لك' : 'Recommended for you';
       case 'recent':      return ar ? 'شاهدتها مؤخراً' : 'Recently viewed';
+      case 'grid':        return ar ? 'منتجات مختارة' : 'Featured products';
       default:            return ar ? 'منتجات' : 'Products';
     }
+  }
+}
+
+// Pull a bilingual product name out of the resolver shape:
+//   {'name': {'en': '...', 'ar': '...'}}  OR  {'name': 'flat string'}
+String _productName(Map<String, dynamic> prod, bool ar) {
+  final n = prod['name'];
+  if (n is Map) {
+    final m = n.cast<String, dynamic>();
+    final v = ar ? m['ar'] : m['en'];
+    final s = v?.toString() ?? '';
+    if (s.isNotEmpty) return s;
+    return (m['en'] ?? m['ar'] ?? '').toString();
+  }
+  return n?.toString() ?? '';
+}
+
+class _ProductCardPro extends StatelessWidget {
+  const _ProductCardPro({
+    required this.prod, required this.p, required this.t, required this.ar,
+    this.hero = false, this.compact = false,
+  });
+  final Map<String, dynamic> prod;
+  final Map<String, dynamic> p;
+  final DynTheme t;
+  final bool ar;
+  final bool hero, compact;
+
+  @override
+  Widget build(BuildContext context) {
+    final price = (prod['price'] as Map?)?.cast<String, dynamic>();
+    final compare = prod['compare_price'];
+    final discount = (prod['discount_pct'] as num?)?.toInt() ?? 0;
+    final url = (prod['image'] as String?) ?? '';
+    final badges = ((prod['badges'] as List?) ?? const []).cast<dynamic>();
+    final rating = (prod['rating'] as Map?)?.cast<String, dynamic>();
+    final ratingAvg = (rating?['avg'] as num?)?.toDouble() ?? 0.0;
+    final ratingCount = (rating?['count'] as num?)?.toInt() ?? 0;
+    final priceAmt = (price?['amount'] as num?)?.toDouble() ?? 0;
+    final compareAmt = (compare is Map ? compare['amount'] : compare) as num?;
+    double saving = 0;
+    if (compareAmt != null && compareAmt > priceAmt) saving = compareAmt - priceAmt;
+    final name = _productName(prod, ar);
+    final brand = ((prod['vendor'] as Map?)?.cast<String, dynamic>())?['name']?.toString();
+
+    // Per-block design options
+    final style = (p['card_style'] as String?) ?? 'shadow';
+    final radius = ((p['card_radius'] as num?)?.toDouble() ?? 12).clamp(0, 32).toDouble();
+    final accent = _hex(p['accent']) ?? const Color(0xFFC0392B);
+    final showRating = p['show_rating'] != false;
+    final showSave = p['show_save_badge'] != false;
+    final showWish = p['show_wishlist'] != false;
+    final showCompare = p['show_compare_price'] != false;
+    final showBrand = p['show_brand'] == true && brand != null && brand.isNotEmpty;
+    final nameLines = ((p['name_lines'] as num?)?.toInt() ?? 2).clamp(1, 3);
+    final priceEm = (p['price_emphasis'] as String?) ?? 'medium';
+    final showQuickAdd = p['quick_add'] == true;
+
+    final priceFont = hero ? 18.0 : (priceEm == 'large' ? 16.0 : priceEm == 'small' ? 12.0 : 14.0);
+    final nameFont  = hero ? 13.5 : (compact ? 10.5 : 11.5);
+
+    BoxDecoration deco;
+    switch (style) {
+      case 'flat':
+        deco = BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(radius));
+        break;
+      case 'outlined':
+        deco = BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(radius),
+          border: Border.all(color: t.dark.withValues(alpha: 0.10), width: 1));
+        break;
+      case 'minimal':
+        deco = BoxDecoration(color: Colors.transparent, borderRadius: BorderRadius.circular(radius));
+        break;
+      case 'gradient':
+        deco = BoxDecoration(
+          gradient: const LinearGradient(
+              colors: [Colors.white, Color(0xFFFFF6E0)],
+              begin: Alignment.topLeft, end: Alignment.bottomRight),
+          borderRadius: BorderRadius.circular(radius));
+        break;
+      case 'shadow':
+      default:
+        deco = BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(radius),
+          boxShadow: [BoxShadow(color: t.dark.withValues(alpha: 0.06), blurRadius: 6, offset: const Offset(0, 2))]);
+    }
+
+    return GestureDetector(
+      onTap: () => UellowRouter.goProduct(context, (prod['id'] as num).toInt()),
+      child: Container(
+        decoration: deco,
+        clipBehavior: Clip.antiAlias,
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Expanded(child: Stack(children: [
+            Positioned.fill(child: url.isNotEmpty
+                ? CachedNetworkImage(imageUrl: url, fit: BoxFit.cover,
+                    placeholder: (_, __) => Container(color: t.primary.withValues(alpha: 0.06)),
+                    errorWidget: (_, __, ___) => Container(
+                        color: t.primary.withValues(alpha: 0.08),
+                        child: Icon(Icons.broken_image_outlined, color: t.dark.withValues(alpha: 0.4))))
+                : Container(color: t.primary.withValues(alpha: 0.08),
+                    child: Icon(Icons.shopping_bag_outlined, color: t.dark.withValues(alpha: 0.4)))),
+            if (discount > 0) Positioned(top: 6, left: 6, child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(color: accent, borderRadius: BorderRadius.circular(4)),
+              child: Text('-$discount%',
+                  style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w900)),
+            )),
+            if (badges.isNotEmpty && !compact) Positioned(top: 6, right: 6, child: Wrap(
+              spacing: 3, direction: Axis.vertical, children: [
+                for (final b in badges.take(2))
+                  if (b is Map) Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: Colors.white, borderRadius: BorderRadius.circular(4),
+                      boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 2)],
+                    ),
+                    child: Text((b['label_en']?.toString() ?? '').split(' ').first,
+                        style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w900)),
+                  ),
+              ])),
+            if (showWish) Positioned(bottom: 6,
+              right: ar ? null : 6, left: ar ? 6 : null,
+              child: Container(
+                width: 28, height: 28,
+                decoration: BoxDecoration(
+                  color: Colors.white, shape: BoxShape.circle,
+                  boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 3)],
+                ),
+                child: Icon(Icons.favorite_border, size: 15, color: t.dark),
+              ),
+            ),
+            if (showQuickAdd) Positioned(bottom: 6,
+              right: ar ? 6 : null, left: ar ? null : 6,
+              child: Container(
+                width: 28, height: 28,
+                decoration: BoxDecoration(color: t.primary, shape: BoxShape.circle,
+                  boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 3)]),
+                child: Icon(Icons.add_rounded, size: 18, color: t.dark),
+              ),
+            ),
+          ])),
+          Padding(
+            padding: EdgeInsets.fromLTRB(8, compact ? 5 : 7, 8, compact ? 6 : 7),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+              if (showBrand) Padding(
+                padding: const EdgeInsets.only(bottom: 2),
+                child: Text(brand, maxLines: 1, overflow: TextOverflow.ellipsis,
+                    style: TextStyle(color: t.dark.withValues(alpha: 0.55),
+                        fontSize: compact ? 9 : 9.5, fontWeight: FontWeight.w700,
+                        letterSpacing: 0.3)),
+              ),
+              Text(name, maxLines: nameLines, overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: t.dark, fontSize: nameFont,
+                      height: 1.2, fontWeight: FontWeight.w600)),
+              SizedBox(height: compact ? 3 : 4),
+              Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                Flexible(child: Text(
+                  '${priceAmt.toStringAsFixed(price?['digits'] ?? 3)} ${price?['symbol'] ?? ''}',
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: t.dark, fontSize: priceFont, fontWeight: FontWeight.w900),
+                )),
+                if (showCompare && compareAmt != null && compareAmt > priceAmt) ...[
+                  const SizedBox(width: 4),
+                  Text('${compareAmt.toStringAsFixed(price?['digits'] ?? 3)}',
+                      style: TextStyle(color: t.dark.withValues(alpha: 0.45),
+                          fontSize: compact ? 9 : 10, fontWeight: FontWeight.w600,
+                          decoration: TextDecoration.lineThrough)),
+                ],
+              ]),
+              if (showSave && saving > 0) Padding(
+                padding: const EdgeInsets.only(top: 3),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(colors: [Color(0xFFE6F7EF), Color(0xFFD4F0DD)]),
+                    borderRadius: BorderRadius.circular(3),
+                    border: Border.all(color: const Color(0xFF1F8A40).withValues(alpha: 0.18), width: 0.6),
+                  ),
+                  child: Text('${ar ? 'وفر' : 'Save'} ${saving.toStringAsFixed(price?['digits'] ?? 3)} ${price?['symbol'] ?? ''}',
+                      style: const TextStyle(color: Color(0xFF1F8A40),
+                          fontSize: 9.5, fontWeight: FontWeight.w900)),
+                ),
+              ),
+              if (showRating && (ratingAvg > 0 || ratingCount > 0)) Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Row(children: [
+                  const Icon(Icons.star, size: 11, color: Color(0xFFFFC107)),
+                  const SizedBox(width: 2),
+                  Text(ratingAvg > 0 ? ratingAvg.toStringAsFixed(1) : '—',
+                      style: TextStyle(fontSize: 10, color: t.dark, fontWeight: FontWeight.w700)),
+                  if (ratingCount > 0) ...[
+                    const SizedBox(width: 3),
+                    Text('($ratingCount)',
+                        style: TextStyle(fontSize: 9.5, color: t.dark.withValues(alpha: 0.5))),
+                  ],
+                ]),
+              ),
+            ]),
+          ),
+        ]),
+      ),
+    );
+  }
+
+  Color? _hex(dynamic v) {
+    if (v is! String) return null;
+    final s = v.trim();
+    if (s.isEmpty || s == 'transparent') return null;
+    final hex = s.startsWith('#') ? s.substring(1) : s;
+    if (RegExp(r'^[0-9a-fA-F]{6}$').hasMatch(hex)) {
+      return Color(int.parse('FF$hex', radix: 16));
+    }
+    return null;
   }
 }
 
