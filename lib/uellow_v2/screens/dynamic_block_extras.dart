@@ -1295,9 +1295,11 @@ class DiscountStripBlock extends StatelessWidget {
   }
 
   // ─── compact (default) ─────────────────────────────────────────────────────
+  // v2.0.70 — width 120 → 140; row height bumped to fit redesigned info section
+  // (brand row + 2-line name + big price + save pill).
   Widget _compactRow(List items) {
     return SizedBox(
-      height: 178,
+      height: 244,
       child: ListView.separated(
         padding: const EdgeInsets.symmetric(horizontal: 12),
         scrollDirection: Axis.horizontal,
@@ -1306,7 +1308,7 @@ class DiscountStripBlock extends StatelessWidget {
         separatorBuilder: (_, __) => const SizedBox(width: 8),
         itemBuilder: (_, i) {
           final pp = (items[i] as Map).cast<String, dynamic>();
-          return _DiscountCard(p: pp, props: this.p, t: t, ar: ar, width: 120);
+          return _DiscountCard(p: pp, props: this.p, t: t, ar: ar, width: 140);
         },
       ),
     );
@@ -1361,8 +1363,9 @@ class DiscountStripBlock extends StatelessWidget {
         shrinkWrap: true,
         physics: const NeverScrollableScrollPhysics(),
         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 2, mainAxisSpacing: 6, crossAxisSpacing: 6,
-          childAspectRatio: 0.78,
+          // v2.0.70 — taller aspect to fit the new info section
+          crossAxisCount: 2, mainAxisSpacing: 8, crossAxisSpacing: 8,
+          childAspectRatio: 0.62,
         ),
         itemCount: list.length,
         itemBuilder: (_, i) => _DiscountCard(
@@ -1389,9 +1392,10 @@ class DiscountStripBlock extends StatelessWidget {
   }
 
   // ─── countdown row ─────────────────────────────────────────────────────────
+  // v2.0.70 — match compact card sizing (was width 128 / height 184)
   Widget _countdownRow(List items) {
     return SizedBox(
-      height: 184,
+      height: 244,
       child: ListView.separated(
         padding: const EdgeInsets.symmetric(horizontal: 12),
         scrollDirection: Axis.horizontal,
@@ -1400,7 +1404,7 @@ class DiscountStripBlock extends StatelessWidget {
         separatorBuilder: (_, __) => const SizedBox(width: 8),
         itemBuilder: (_, i) {
           final pp = (items[i] as Map).cast<String, dynamic>();
-          return _DiscountCard(p: pp, props: this.p, t: t, ar: ar, width: 128, showCountdown: true);
+          return _DiscountCard(p: pp, props: this.p, t: t, ar: ar, width: 144, showCountdown: true);
         },
       ),
     );
@@ -1521,17 +1525,27 @@ class _DiscountCard extends StatelessWidget {
     final nameMap = (p['name'] as Map?)?.cast<String, dynamic>();
     final productName = ar ? (nameMap?['ar']?.toString() ?? '') : (nameMap?['en']?.toString() ?? '');
 
+    // v2.0.70 — full info-section redesign. Hierarchy:
+    //   1. brand + rating chip row (small, secondary)
+    //   2. product name (2 lines, bold, primary)
+    //   3. BIG price + small strikethrough compare on the same row
+    //   4. full-width "Save X KD" gradient pill
+    final rating = (p['rating'] as Map?)?.cast<String, dynamic>();
+    final ratingAvg = (rating?['avg'] as num?)?.toDouble() ?? 0.0;
+    final ratingCount = (rating?['count'] as num?)?.toInt() ?? 0;
+    final cardW = width ?? (big ? 200.0 : 140.0);
+
     return GestureDetector(
       onTap: () {
         final id = (p['id'] as num?)?.toInt();
         if (id != null && id > 0) UellowRouter.goProduct(context, id);
       },
       child: Container(
-        width: fillWidth ? null : (width ?? 120),
+        width: fillWidth ? null : cardW,
         decoration: _cardDecoration(props, radius: radius),
         clipBehavior: Clip.antiAlias,
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          // ─ image (square or aspect)
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+          // ─── IMAGE ────────────────────────────────────────────────────────
           Stack(children: [
             AspectRatio(
               aspectRatio: 1,
@@ -1540,66 +1554,135 @@ class _DiscountCard extends StatelessWidget {
                   : Container(color: const Color(0xFFF1EBDF)),
             ),
             if (showBadge && discount > 0)
-              Positioned(top: 5, left: 5, child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                decoration: BoxDecoration(color: accent, borderRadius: BorderRadius.circular(4)),
+              Positioned(top: 6, left: 6, child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2.5),
+                decoration: BoxDecoration(
+                  color: accent,
+                  borderRadius: BorderRadius.circular(5),
+                  boxShadow: [BoxShadow(color: accent.withOpacity(0.4), blurRadius: 4, offset: const Offset(0, 1))],
+                ),
                 child: Text('-$discount%',
-                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 10.5)),
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 11, height: 1.0)),
               )),
             if (showUrg && discount >= urgTh)
-              Positioned(top: 5, right: 5, child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+              Positioned(top: 6, right: 6, child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2.5),
                 decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.6),
-                  borderRadius: BorderRadius.circular(4),
+                  color: Colors.black.withOpacity(0.65),
+                  borderRadius: BorderRadius.circular(5),
                 ),
-                child: Text(ar ? 'تنفد بسرعة' : 'Selling fast',
-                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 9)),
+                child: Text(ar ? '🔥 تنفد بسرعة' : '🔥 Selling fast',
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 9, height: 1.0)),
               )),
             if (showCountdown && endIso != null && endIso.isNotEmpty)
-              Positioned(bottom: 5, right: 5, child: _MiniCountdown(endIso: endIso, accent: accent)),
+              Positioned(bottom: 6, right: 6, child: _MiniCountdown(endIso: endIso, accent: accent)),
           ]),
-          // ─ info
+
+          // ─── INFO ─────────────────────────────────────────────────────────
           Padding(
-            padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
+            padding: EdgeInsets.fromLTRB(9, big ? 9 : 8, 9, big ? 10 : 9),
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-              if (showBrand && brand != null && brand.isNotEmpty)
-                Padding(padding: const EdgeInsets.only(bottom: 2), child: Text(
-                  brand, maxLines: 1, overflow: TextOverflow.ellipsis,
-                  style: TextStyle(color: t.dark.withOpacity(0.55), fontWeight: FontWeight.w700, fontSize: 9),
-                )),
-              // v2.0.69 — always show product name + price (was only on big).
+              // Row 1: brand + rating
+              if ((showBrand && brand != null && brand.isNotEmpty) || ratingAvg > 0)
+                Padding(padding: const EdgeInsets.only(bottom: 4), child: Row(children: [
+                  if (showBrand && brand != null && brand.isNotEmpty)
+                    Flexible(child: Text(brand.toUpperCase(),
+                        maxLines: 1, overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: t.dark.withOpacity(0.55),
+                          fontWeight: FontWeight.w800, fontSize: 8.5,
+                          letterSpacing: 0.5, height: 1.0,
+                        ))),
+                  if ((showBrand && brand != null && brand.isNotEmpty) && ratingAvg > 0)
+                    Padding(padding: const EdgeInsets.symmetric(horizontal: 5), child: Container(
+                      width: 2, height: 2,
+                      decoration: BoxDecoration(
+                        color: t.dark.withOpacity(0.3), shape: BoxShape.circle,
+                      ),
+                    )),
+                  if (ratingAvg > 0) ...[
+                    const Icon(Icons.star_rounded, size: 11, color: Color(0xFFFFC107)),
+                    const SizedBox(width: 2),
+                    Text(ratingAvg.toStringAsFixed(1),
+                        style: TextStyle(
+                          color: t.dark, fontWeight: FontWeight.w900,
+                          fontSize: 9.5, height: 1.0,
+                        )),
+                    if (ratingCount > 0) Padding(
+                      padding: const EdgeInsets.only(left: 2),
+                      child: Text('($ratingCount)',
+                          style: TextStyle(
+                            color: t.dark.withOpacity(0.5), fontWeight: FontWeight.w600,
+                            fontSize: 9, height: 1.0,
+                          )),
+                    ),
+                  ],
+                ])),
+
+              // Row 2: product name (always 2 lines high so card heights match)
               if (productName.isNotEmpty)
-                Padding(padding: const EdgeInsets.only(bottom: 3), child: Text(
-                  productName,
-                  maxLines: big ? 2 : 1, overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: t.dark, fontWeight: FontWeight.w700,
-                    fontSize: big ? 12 : 10.5, height: 1.2,
-                  ),
-                )),
-              Text(price,
-                  style: TextStyle(color: t.dark, fontWeight: FontWeight.w900, fontSize: 13)),
-              if (showCompare && compare != null && compare.isNotEmpty)
-                Padding(padding: const EdgeInsets.only(top: 1), child: Text(
-                  compare, maxLines: 1, overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: t.dark.withOpacity(0.45), fontSize: 10,
-                    decoration: TextDecoration.lineThrough, fontWeight: FontWeight.w600,
-                  ),
-                )),
-              if (showSave && saveAmt.isNotEmpty)
-                Padding(padding: const EdgeInsets.only(top: 3), child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(colors: [Color(0xFFE6F7EF), Color(0xFFD4F0DD)]),
-                    borderRadius: BorderRadius.circular(3),
-                    border: Border.all(color: const Color(0xFF1F8A40).withOpacity(0.18), width: 0.6),
-                  ),
+                SizedBox(
+                  height: big ? 34 : 30,
                   child: Text(
-                    ar ? 'وفر $saveAmt ${_currency(p)}' : 'Save $saveAmt ${_currency(p)}',
-                    style: const TextStyle(color: Color(0xFF1F8A40), fontWeight: FontWeight.w900, fontSize: 9.5),
+                    productName,
+                    maxLines: 2, overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: t.dark, fontWeight: FontWeight.w700,
+                      fontSize: big ? 13 : 11.5, height: 1.25,
+                      letterSpacing: -0.1,
+                    ),
                   ),
+                ),
+              SizedBox(height: big ? 6 : 5),
+
+              // Row 3: BIG price + strikethrough compare (inline, baseline-aligned)
+              Row(crossAxisAlignment: CrossAxisAlignment.baseline,
+                  textBaseline: TextBaseline.alphabetic, children: [
+                Flexible(child: Text(price,
+                    maxLines: 1, overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: t.dark, fontWeight: FontWeight.w900,
+                      fontSize: big ? 17 : 14.5, height: 1.0,
+                      letterSpacing: -0.3,
+                    ))),
+                if (showCompare && compare != null && compare.isNotEmpty) ...[
+                  const SizedBox(width: 5),
+                  Flexible(child: Text(compare,
+                      maxLines: 1, overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: t.dark.withOpacity(0.42), fontSize: 10,
+                        decoration: TextDecoration.lineThrough,
+                        decorationColor: t.dark.withOpacity(0.42),
+                        fontWeight: FontWeight.w600, height: 1.0,
+                      ))),
+                ],
+              ]),
+
+              // Row 4: Save badge (full-width pill)
+              if (showSave && saveAmt.isNotEmpty)
+                Padding(padding: const EdgeInsets.only(top: 6), child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3.5),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFFEAFBF1), Color(0xFFD0F0DD)],
+                      begin: Alignment.centerLeft, end: Alignment.centerRight,
+                    ),
+                    borderRadius: BorderRadius.circular(5),
+                    border: Border.all(color: const Color(0xFF1F8A40).withOpacity(0.25), width: 0.7),
+                  ),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    const Icon(Icons.savings_outlined, size: 11, color: Color(0xFF1F8A40)),
+                    const SizedBox(width: 4),
+                    Flexible(child: Text(
+                      ar ? 'وفر $saveAmt ${_currency(p)}' : 'Save $saveAmt ${_currency(p)}',
+                      maxLines: 1, overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Color(0xFF166534), fontWeight: FontWeight.w900,
+                        fontSize: 10, height: 1.0, letterSpacing: -0.1,
+                      ),
+                    )),
+                  ]),
                 )),
             ]),
           ),
