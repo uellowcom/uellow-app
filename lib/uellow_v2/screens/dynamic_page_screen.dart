@@ -16,6 +16,7 @@ import '../../api/uellow_api.dart';
 import '../../api/uellow_models.dart';
 import '../router/uellow_router.dart';
 import '../widgets/product_card.dart';
+import 'dynamic_block_extras.dart';
 
 class DynamicPageScreen extends StatefulWidget {
   const DynamicPageScreen({super.key, required this.slug});
@@ -25,8 +26,13 @@ class DynamicPageScreen extends StatefulWidget {
   State<DynamicPageScreen> createState() => _DynamicPageScreenState();
 }
 
-class _DynamicPageScreenState extends State<DynamicPageScreen> {
+class _DynamicPageScreenState extends State<DynamicPageScreen>
+    with AutomaticKeepAliveClientMixin {
   late Future<Map<String, dynamic>> _future;
+
+  // Keep this page alive across nav so we don't refetch when user comes back.
+  @override
+  bool get wantKeepAlive => true;
 
   @override
   void initState() {
@@ -58,6 +64,7 @@ class _DynamicPageScreenState extends State<DynamicPageScreen> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context); // AutomaticKeepAliveClientMixin
     return FutureBuilder<Map<String, dynamic>>(
       future: _future,
       builder: (ctx, snap) {
@@ -107,6 +114,12 @@ class _DynamicPageScreenState extends State<DynamicPageScreen> {
         child: ListView.builder(
           padding: const EdgeInsets.only(top: 8, bottom: 32),
           itemCount: blocks.length,
+          // Cache off-screen blocks so they don't rebuild on every scroll —
+          // big perf win when the page has many image-heavy blocks.
+          cacheExtent: 800,
+          addAutomaticKeepAlives: false,
+          addRepaintBoundaries: true,
+          physics: const ClampingScrollPhysics(),
           itemBuilder: (_, i) {
             final b = (blocks[i] as Map).cast<String, dynamic>();
             return _renderBlock(context, b, theme);
@@ -180,39 +193,49 @@ Widget _renderBlock(BuildContext c, Map<String, dynamic> b, DynTheme t) {
   // `data` is the server-resolved payload (real categories/products/vendors)
   final data = ((b['data'] as Map?) ?? const {}).cast<String, dynamic>();
   final ar = UellowApi.instance.lang == 'ar';
+  Widget inner;
   switch (kind) {
-    case 'hero':       return _Hero(p: p, t: t, ar: ar);
-    case 'carousel':   return _CarouselBlock(p: p, data: data, t: t, ar: ar);
-    case 'searchbar':  return _SearchBarBlock(p: p, t: t, ar: ar);
-    case 'countdown':  return _CountdownBlock(p: p, t: t, ar: ar);
+    case 'hero':       inner = _Hero(p: p, t: t, ar: ar); break;
+    case 'carousel':   inner = _CarouselBlock(p: p, data: data, t: t, ar: ar); break;
+    case 'searchbar':  inner = _SearchBarBlock(p: p, t: t, ar: ar); break;
+    case 'countdown':  inner = _CountdownBlock(p: p, t: t, ar: ar); break;
     case 'cats-grid':
-    case 'cats-strip': return _CategoriesBlock(p: p, data: data, t: t, ar: ar);
-    case 'flash':      return _FlashBlock(p: p, data: data, t: t, ar: ar);
+    case 'cats-strip': inner = _CategoriesBlock(p: p, data: data, t: t, ar: ar); break;
+    case 'flash':      inner = _FlashBlock(p: p, data: data, t: t, ar: ar); break;
     case 'products':
     case 'bestsellers':
     case 'rec-ai':
     case 'recent':
-    case 'grid':       return _ProductsBlock(p: p, data: data, t: t, ar: ar, kind: kind);
-    case 'banner-1':   return _Banner1(p: p, t: t, ar: ar);
-    case 'banner-2':   return _BannerMulti(p: p, t: t, columns: 2);
-    case 'banner-3':   return _BannerMulti(p: p, t: t, columns: 3);
+    case 'grid':       inner = _ProductsBlock(p: p, data: data, t: t, ar: ar, kind: kind); break;
+    case 'banner-1':   inner = _Banner1(p: p, t: t, ar: ar); break;
+    case 'banner-2':   inner = _BannerMulti(p: p, t: t, columns: 2); break;
+    case 'banner-3':   inner = _BannerMulti(p: p, t: t, columns: 3); break;
     case 'vendors':
-    case 'vendor-feat':return _VendorsBlock(p: p, data: data, t: t, ar: ar);
-    case 'loyalty':    return _LoyaltyBlock(p: p, t: t, ar: ar, wallet: false);
-    case 'wallet':     return _LoyaltyBlock(p: p, t: t, ar: ar, wallet: true);
-    case 'coupons':    return _CouponsBlock(p: p, t: t, ar: ar);
-    case 'newsletter': return _NewsletterBlock(p: p, t: t, ar: ar);
-    case 'app-promo':  return _AppPromoBlock(p: p, t: t, ar: ar);
-    case 'beena':      return _BeenaBlock(p: p, t: t, ar: ar);
-    case 'reviews':    return _ReviewsBlock(p: p, t: t, ar: ar);
-    case 'text':       return _TextBlock(p: p, t: t, ar: ar);
-    case 'video':      return _VideoBlock(p: p, t: t);
+    case 'vendor-feat':inner = _VendorsBlock(p: p, data: data, t: t, ar: ar); break;
+    case 'loyalty':    inner = _LoyaltyBlock(p: p, t: t, ar: ar, wallet: false); break;
+    case 'wallet':     inner = _LoyaltyBlock(p: p, t: t, ar: ar, wallet: true); break;
+    case 'coupons':    inner = _CouponsBlock(p: p, t: t, ar: ar); break;
+    case 'newsletter': inner = _NewsletterBlock(p: p, t: t, ar: ar); break;
+    case 'app-promo':  inner = _AppPromoBlock(p: p, t: t, ar: ar); break;
+    case 'beena':      inner = _BeenaBlock(p: p, t: t, ar: ar); break;
+    case 'reviews':    inner = _ReviewsBlock(p: p, t: t, ar: ar); break;
+    case 'text':       inner = _TextBlock(p: p, t: t, ar: ar); break;
+    case 'video':      inner = _VideoBlock(p: p, t: t); break;
     case 'spacer':     return const SizedBox(height: 16);
     case 'divider':    return const Padding(
         padding: EdgeInsets.symmetric(horizontal: 14, vertical: 8),
         child: Divider(height: 1));
-    default:           return const SizedBox.shrink();
+    // v2.0.34 new block kinds
+    case 'quick-pills':    inner = QuickPillsBlock(p: p, data: data, t: t, ar: ar); break;
+    case 'promo-pills':    inner = PromoPillsBlock(p: p, t: t, ar: ar); break;
+    case 'themed-promo':   inner = ThemedPromoBlock(p: p, t: t, ar: ar); break;
+    case 'mini-cats':      inner = MiniCategoryCardsBlock(p: p, data: data, t: t, ar: ar); break;
+    case 'welcome-deal':   inner = WelcomeDealBlock(p: p, data: data, t: t, ar: ar); break;
+    case 'discount-strip': inner = DiscountStripBlock(p: p, data: data, t: t, ar: ar); break;
+    case 'pill-filter':    inner = PillFilterBlock(p: p, t: t, ar: ar); break;
+    default:               return const SizedBox.shrink();
   }
+  return BlockEnvelope(props: p, theme: t, child: inner);
 }
 
 // ─── LINK HANDLER ──────────────────────────────────────────────────────────
@@ -258,6 +281,10 @@ void _gotoScreen(BuildContext c, String name) {
 }
 
 String _tx(Map p, bool ar, String key, String fallback) {
+  // v2.0.34: a block can opt out of showing its title via {"show_title": false}.
+  // We honor that here so all existing renderers (which already do
+  // `if (title.isNotEmpty) ...`) drop the title strip without per-block edits.
+  if (key == 'title' && p['show_title'] == false) return '';
   final v = (ar ? p['${key}Ar'] : p['${key}En'])?.toString();
   if (v != null && v.isNotEmpty) return v;
   final fb = p['${key}En']?.toString();
@@ -552,10 +579,11 @@ class _ProductsBlock extends StatelessWidget {
     final items = ((data['items'] as List?) ?? const []).cast<dynamic>()
         .map((e) => (e as Map).cast<String, dynamic>()).toList();
     if (items.isEmpty) return const SizedBox.shrink();
-    return Container(
-      margin: const EdgeInsets.fromLTRB(0, 8, 0, 8),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Padding(padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+    final titleGap = (p['title_gap'] as num?)?.toDouble() ?? 6;
+    final showHeader = title.isNotEmpty;
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        if (showHeader)
+          Padding(padding: EdgeInsets.fromLTRB(16, 4, 16, titleGap),
           child: Row(children: [
             Expanded(child: Text(title, style: TextStyle(
                 color: t.dark, fontSize: 14, fontWeight: FontWeight.w900))),
@@ -648,8 +676,7 @@ class _ProductsBlock extends StatelessWidget {
             },
           ),
         ),
-      ]),
-    );
+      ]);
   }
 
   String _fallbackTitle(String k, bool ar) {

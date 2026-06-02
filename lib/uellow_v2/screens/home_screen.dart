@@ -114,7 +114,11 @@ class _HomeScreenState extends State<HomeScreen> {
           SliverToBoxAdapter(child: _TopBar()),
           SliverList.builder(
             itemCount: dyn.blocks.length,
-            itemBuilder: (ctx, i) => renderDynamicBlock(ctx, dyn.blocks[i], dyn.theme),
+            itemBuilder: (ctx, i) => RepaintBoundary(
+              child: renderDynamicBlock(ctx, dyn.blocks[i], dyn.theme),
+            ),
+            addAutomaticKeepAlives: false,
+            addRepaintBoundaries: false, // we add it manually for tighter control
           ),
           const SliverToBoxAdapter(child: SizedBox(height: 80)),
         ],
