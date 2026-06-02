@@ -1203,7 +1203,7 @@ class _ThemedPromoCard extends StatelessWidget {
         ? (c['subtitleAr']?.toString() ?? c['subtitleEn']?.toString() ?? '')
         : (c['subtitleEn']?.toString() ?? '');
     final bg = BlockEnvelope._hex(c['color']) ?? const Color(0xFFEAF7C9);
-    final img = (c['image_url'] as String?) ?? '';
+    final img = pickLocalizedImage(c, ar);
     return GestureDetector(
       onTap: () => _openLink(context, (c['link'] as Map?)?.cast<String, dynamic>()),
       child: Container(
@@ -1493,6 +1493,16 @@ class DiscountStripBlock extends StatelessWidget {
 }
 
 // ───── helpers ─────────────────────────────────────────────────────────────
+// v2.0.75 — pick the localized image URL from any item/props map.
+// Looks at `<key>_ar` first when the app is in Arabic mode AND the
+// override is set; otherwise falls back to the default key.
+String pickLocalizedImage(Map item, bool ar, {String key = 'image_url'}) {
+  final base = (item[key] as String?) ?? '';
+  if (!ar) return base;
+  final loc = (item['${key}_ar'] as String?) ?? '';
+  return loc.isNotEmpty ? loc : base;
+}
+
 Color? _parseColor(dynamic v) {
   if (v is! String) return null;
   final s = v.trim();
@@ -2098,7 +2108,7 @@ class _MiniCatCard extends StatelessWidget {
     final sub = ar
         ? (c['subtitleAr']?.toString() ?? c['subtitleEn']?.toString() ?? '')
         : (c['subtitleEn']?.toString() ?? '');
-    final img = (c['image_url'] as String?) ?? '';
+    final img = pickLocalizedImage(c, ar);
     return GestureDetector(
       onTap: () => _openLink(context, (c['link'] as Map?)?.cast<String, dynamic>()),
       child: Container(
@@ -3143,7 +3153,7 @@ class _Slide extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final kind = (slide['kind'] as String?) ?? 'image';
-    final img = (slide['image_url'] as String?) ?? '';
+    final img = pickLocalizedImage(slide, ar);
     final overlayKind = (slide['overlay_kind'] as String?) ?? 'solid';
     final c1 = _hexColor(slide['overlay_color'], const Color(0xFF000000));
     final c2 = _hexColor(slide['overlay_color2'], c1);
@@ -3557,7 +3567,7 @@ class _StoryBubblesBlockState extends State<StoryBubblesBlock> {
           itemBuilder: (_, i) {
             final b = (bubbles[i] as Map).cast<String, dynamic>();
             final label = (widget.ar ? b['labelAr'] : b['labelEn'])?.toString() ?? '';
-            final img = (b['image_url'] as String?) ?? '';
+            final img = pickLocalizedImage(b, widget.ar);
             final icon = (b['icon'] as String?) ?? '⭐';
             return GestureDetector(
               onTap: () => _openLink(context, (b['link'] as Map?)?.cast<String, dynamic>()),
@@ -3663,7 +3673,7 @@ class LookbookBlock extends StatelessWidget {
   Widget _img(BuildContext c, dynamic raw) {
     if (raw == null) return Container(color: const Color(0xFFEEE6D6));
     final m = (raw as Map).cast<String, dynamic>();
-    final url = (m['image_url'] as String?) ?? '';
+    final url = pickLocalizedImage(m, ar);
     return ClipRRect(
       borderRadius: BorderRadius.circular(8),
       child: GestureDetector(

@@ -315,7 +315,7 @@ class _Hero extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final link = (p['link'] as Map?)?.cast<String, dynamic>();
-    final imgUrl = (p['image_url'] as String?) ?? '';
+    final imgUrl = pickLocalizedImage(p, ar);
     return GestureDetector(
       onTap: () => _openLink(context, link),
       child: Container(
@@ -420,7 +420,7 @@ class _CarouselBlockState extends State<_CarouselBlock> {
         itemCount: slides.length,
         itemBuilder: (_, i) {
           final s = (slides[i] as Map).cast<String, dynamic>();
-          final url = s['image_url']?.toString() ?? '';
+          final url = pickLocalizedImage(s, widget.ar);
           final link = (s['link'] is Map) ? (s['link'] as Map).cast<String, dynamic>() : null;
           return Padding(
             padding: const EdgeInsets.symmetric(horizontal: 6),
@@ -1153,7 +1153,7 @@ class _Banner1 extends StatelessWidget {
     final color = DynTheme._hex(p['color'], t.accent);
     final link = (p['link'] as Map?)?.cast<String, dynamic>();
     final text = _tx(p, ar, 'title', 'Promo banner');
-    final imgUrl = (p['image_url'] as String?) ?? '';
+    final imgUrl = pickLocalizedImage(p, ar);
     return GestureDetector(
       onTap: () => _openLink(context, link),
       child: Container(
