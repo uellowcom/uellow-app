@@ -896,7 +896,7 @@ class _FulfilledByUellowCard extends StatelessWidget {
             decoration: BoxDecoration(
               color: UellowColors.yellow,
               borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: UellowColors.yellowDk, width: 1.5),
+              border: Border.all(color: UellowColors.darkBrown, width: 1.5),
             ),
             alignment: Alignment.center,
             child: const Text('uellow.',
