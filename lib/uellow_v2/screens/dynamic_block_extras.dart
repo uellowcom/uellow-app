@@ -50,23 +50,37 @@ class BlockEnvelope extends StatelessWidget {
     final pattern = (props['bg_pattern'] as String?) ?? 'none';
     final bgImage = (props['bg_image'] as String?) ?? '';
     final hasBg = bgColor != null || pattern != 'none' || bgImage.isNotEmpty;
+    // v2.0.69 — when background is set, give the content breathing room and
+    // round the colored panel so product rows don't sit flush against its
+    // edges. Both knobs are admin-configurable.
+    final innerRadius = ((props['bg_radius'] as num?)?.toDouble() ?? 14).clamp(0, 32).toDouble();
+    final innerInsetX = ((props['bg_inset_x'] as num?)?.toDouble() ?? 10).clamp(0, 40).toDouble();
+    final innerPadX  = ((props['bg_pad_x'] as num?)?.toDouble() ?? 6).clamp(0, 40).toDouble();
+    final innerPadY  = ((props['bg_pad_y'] as num?)?.toDouble() ?? 8).clamp(0, 40).toDouble();
 
-    // Wrap child in a RepaintBoundary so its repaints don't bleed into
-    // siblings (a Timer-driven block won't force the whole list to repaint).
     Widget content = RepaintBoundary(child: child);
 
     if (hasBg) {
-      content = Stack(children: [
-        Positioned.fill(
-          child: _BackgroundLayer(
-            color: bgColor,
-            pattern: pattern,
-            imageUrl: bgImage,
-            patternColor: theme?.dark ?? const Color(0xFF412402),
-          ),
+      content = Container(
+        margin: EdgeInsets.symmetric(horizontal: innerInsetX),
+        padding: EdgeInsets.symmetric(horizontal: innerPadX, vertical: innerPadY),
+        clipBehavior: Clip.antiAlias,
+        decoration: BoxDecoration(
+          color: bgColor,
+          borderRadius: BorderRadius.circular(innerRadius),
         ),
-        content,
-      ]);
+        child: Stack(children: [
+          Positioned.fill(
+            child: _BackgroundLayer(
+              color: null, // already painted on the Container
+              pattern: pattern,
+              imageUrl: bgImage,
+              patternColor: theme?.dark ?? const Color(0xFF412402),
+            ),
+          ),
+          content,
+        ]),
+      );
     }
 
     return Padding(
@@ -236,21 +250,50 @@ class DynSectionHeader extends StatelessWidget {
     final subtitle = ar
         ? (props['subtitleAr']?.toString() ?? '')
         : (props['subtitleEn']?.toString() ?? '');
+    // v2.0.69 — optional header icon OR image next to/replacing the title.
+    final headerImg = (props['header_image_url'] as String?) ?? '';
+    final headerIcon = (props['header_icon'] as String?) ?? '';
+    final headerMode = (props['header_image_mode'] as String?) ?? 'beside';
+    final iconSize = ((props['header_icon_size'] as num?)?.toDouble() ?? 22).clamp(12, 64).toDouble();
+
+    Widget? leading;
+    if (headerImg.isNotEmpty) {
+      leading = ClipRRect(
+        borderRadius: BorderRadius.circular(iconSize / 5),
+        child: CachedNetworkImage(
+          imageUrl: headerImg, width: iconSize, height: iconSize, fit: BoxFit.cover,
+          errorWidget: (_, __, ___) => SizedBox(width: iconSize, height: iconSize),
+        ),
+      );
+    } else if (headerIcon.isNotEmpty) {
+      leading = SizedBox(
+        width: iconSize, height: iconSize,
+        child: Center(child: Text(headerIcon, style: TextStyle(fontSize: iconSize * 0.85))),
+      );
+    }
+
+    // Replace title with image when mode = 'replace' and a header image exists.
+    final showTextTitle = !(headerMode == 'replace' && headerImg.isNotEmpty);
+
     return Padding(
       padding: EdgeInsets.fromLTRB(
         14, 6, 14, (props['title_gap'] as num?)?.toDouble() ?? 6,
       ),
       child: Row(children: [
-        Expanded(
-          child: Column(
+        if (leading != null && headerMode == 'replace' && headerImg.isNotEmpty)
+          Expanded(child: Align(alignment: ar ? Alignment.centerRight : Alignment.centerLeft, child: leading))
+        else ...[
+          if (leading != null) Padding(padding: EdgeInsets.only(right: ar ? 0 : 10, left: ar ? 10 : 0), child: leading),
+          Expanded(child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(t,
-                  style: TextStyle(
-                    fontWeight: FontWeight.w900,
-                    fontSize: 16,
-                    color: theme.dark,
-                  )),
+              if (showTextTitle)
+                Text(t,
+                    style: TextStyle(
+                      fontWeight: FontWeight.w900,
+                      fontSize: 16,
+                      color: theme.dark,
+                    )),
               if (subtitle.isNotEmpty)
                 Padding(
                   padding: const EdgeInsets.only(top: 2),
@@ -262,8 +305,8 @@ class DynSectionHeader extends StatelessWidget {
                       )),
                 ),
             ],
-          ),
-        ),
+          )),
+        ],
         if (trailing != null) trailing!,
       ]),
     );
@@ -1217,10 +1260,6 @@ class DiscountStripBlock extends StatelessWidget {
     final items = (data['items'] as List? ?? data['products'] as List? ?? const []).cast<dynamic>();
     if (items.isEmpty) return const SizedBox.shrink();
     final variant = (p['variant'] as String?) ?? 'compact';
-    final bgStrip = _parseColor(p['bg_strip']);
-    final stripBg = (bgStrip != null && bgStrip != Colors.transparent)
-        ? Container(color: bgStrip)
-        : null;
     Widget body;
     switch (variant) {
       case 'hero':      body = _hero(items); break;
@@ -1230,13 +1269,29 @@ class DiscountStripBlock extends StatelessWidget {
       case 'countdown': body = _countdownRow(items); break;
       default:          body = _compactRow(items);
     }
-    return Stack(children: [
-      if (stripBg != null) Positioned.fill(child: stripBg),
-      Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+    // v2.0.69 — no outer Stack (was crashing the page when used 2+ times).
+    // Background is applied via a single Container wrapper, with inner
+    // padding so the inner card row doesn't touch the colored edges.
+    final bgStrip = _parseColor(p['bg_strip']);
+    final hasBg = bgStrip != null && bgStrip != Colors.transparent;
+    final inner = Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
         DynSectionHeader(props: p, theme: t, ar: ar, fallbackEn: 'Hot deals'),
-        body,
-      ]),
-    ]);
+        Padding(padding: EdgeInsets.only(bottom: hasBg ? 10 : 0), child: body),
+      ],
+    );
+    if (!hasBg) return inner;
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 10),
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      decoration: BoxDecoration(
+        color: bgStrip,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: inner,
+    );
   }
 
   // ─── compact (default) ─────────────────────────────────────────────────────
@@ -1513,10 +1568,15 @@ class _DiscountCard extends StatelessWidget {
                   brand, maxLines: 1, overflow: TextOverflow.ellipsis,
                   style: TextStyle(color: t.dark.withOpacity(0.55), fontWeight: FontWeight.w700, fontSize: 9),
                 )),
-              if (big && productName.isNotEmpty)
-                Padding(padding: const EdgeInsets.only(bottom: 2), child: Text(
-                  productName, maxLines: 1, overflow: TextOverflow.ellipsis,
-                  style: TextStyle(color: t.dark, fontWeight: FontWeight.w800, fontSize: 11),
+              // v2.0.69 — always show product name + price (was only on big).
+              if (productName.isNotEmpty)
+                Padding(padding: const EdgeInsets.only(bottom: 3), child: Text(
+                  productName,
+                  maxLines: big ? 2 : 1, overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: t.dark, fontWeight: FontWeight.w700,
+                    fontSize: big ? 12 : 10.5, height: 1.2,
+                  ),
                 )),
               Text(price,
                   style: TextStyle(color: t.dark, fontWeight: FontWeight.w900, fontSize: 13)),
@@ -1743,14 +1803,27 @@ class _MiniCountdown extends StatefulWidget {
 class _MiniCountdownState extends State<_MiniCountdown> {
   DateTime? _end;
   Duration _left = Duration.zero;
-  Stream<DateTime>? _ticker;
+  Timer? _timer;
 
   @override
   void initState() {
     super.initState();
     try { _end = DateTime.parse(widget.endIso); } catch (_) { _end = null; }
     _recalc();
-    _ticker = Stream.periodic(const Duration(seconds: 1), (_) => DateTime.now());
+    // v2.0.69 — Timer.periodic that we explicitly cancel in dispose.
+    // (was Stream.periodic — leaked across rebuilds and contributed to
+    // the multi-Discount-Strip page-render crash.)
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted) return;
+      _recalc();
+      setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
   }
 
   void _recalc() {
@@ -1761,24 +1834,18 @@ class _MiniCountdownState extends State<_MiniCountdown> {
 
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<DateTime>(
-      stream: _ticker,
-      builder: (_, __) {
-        _recalc();
-        if (_left == Duration.zero) return const SizedBox.shrink();
-        final h = _left.inHours.toString().padLeft(2, '0');
-        final m = (_left.inMinutes % 60).toString().padLeft(2, '0');
-        final s = (_left.inSeconds % 60).toString().padLeft(2, '0');
-        return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-          decoration: BoxDecoration(
-            color: Colors.black.withOpacity(0.7),
-            borderRadius: BorderRadius.circular(4),
-          ),
-          child: Text('$h:$m:$s',
-              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 10)),
-        );
-      },
+    if (_left == Duration.zero) return const SizedBox.shrink();
+    final h = _left.inHours.toString().padLeft(2, '0');
+    final m = (_left.inMinutes % 60).toString().padLeft(2, '0');
+    final s = (_left.inSeconds % 60).toString().padLeft(2, '0');
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+      decoration: BoxDecoration(
+        color: Colors.black.withOpacity(0.7),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Text('$h:$m:$s',
+          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 10)),
     );
   }
 }
