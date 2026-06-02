@@ -18,6 +18,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../api/uellow_api.dart';
 import '../../api/uellow_models.dart';
 import '../router/uellow_router.dart';
+import '../services/first_launch_service.dart';
 import '../theme/uellow_l10n.dart';
 import '../theme/uellow_theme.dart';
 import 'address_picker_screen.dart';
@@ -278,29 +279,7 @@ class _AddressList extends StatelessWidget {
   Widget build(BuildContext context) {
     final ar = UellowApi.instance.lang == 'ar';
     if (addresses.isEmpty) {
-      return Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: UellowColors.yellowSoft,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          if (geoCity != null) Text(
-              ar ? 'موقعك المكتشف: $geoCity' : 'Detected location: $geoCity',
-              style: const TextStyle(fontWeight: FontWeight.w800,
-                  color: UellowColors.darkBrown)),
-          const SizedBox(height: 8),
-          ElevatedButton.icon(
-            onPressed: () => Navigator.pushNamed(context, '/addresses'),
-            icon: const Icon(Icons.add_location_alt_outlined, size: 16),
-            label: Text(ar ? 'إضافة عنوان' : 'Add delivery address'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: UellowColors.yellow,
-              foregroundColor: UellowColors.darkBrown,
-            ),
-          ),
-        ]),
-      );
+      return _EmptyAddressCta(geoCity: geoCity);
     }
     // Only the selected address is shown; tap opens a picker.
     final current = addresses.firstWhere(
@@ -417,6 +396,93 @@ class _AddressList extends StatelessWidget {
               style: const TextStyle(fontSize: 12, color: UellowColors.text)),
         ])),
         if (showChevron) const Icon(Icons.chevron_right, color: UellowColors.muted),
+      ]),
+    );
+  }
+}
+
+// v2.0.72 (#416) — empty-state CTA that lets the user fill in their address
+// from device GPS instead of typing. Uses FirstLaunchService's cached fix
+// when possible, otherwise requests a fresh location reading.
+class _EmptyAddressCta extends StatefulWidget {
+  const _EmptyAddressCta({required this.geoCity});
+  final String? geoCity;
+  @override
+  State<_EmptyAddressCta> createState() => _EmptyAddressCtaState();
+}
+
+class _EmptyAddressCtaState extends State<_EmptyAddressCta> {
+  bool _busy = false;
+
+  Future<void> _detect() async {
+    setState(() => _busy = true);
+    final ar = UellowApi.instance.lang == 'ar';
+    // Ensure we either have a cached fix from first-launch or a fresh one
+    // before opening the picker, so its map opens at the right spot.
+    var fix = await FirstLaunchService.lastFix();
+    fix ??= await FirstLaunchService.refreshNow();
+    if (!mounted) return;
+    setState(() => _busy = false);
+    if (fix == null) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(
+          ar ? 'تعذّر تحديد موقعك — فعّل صلاحية الموقع وحاول مرة أخرى'
+             : 'Could not detect your location — enable Location and retry')));
+      return;
+    }
+    // AddressPickerScreen calls Geolocator on its own; with the perm + GPS
+    // cache primed it lands on the user's location instantly.
+    if (!mounted) return;
+    Navigator.push(context, MaterialPageRoute(
+        builder: (_) => const AddressPickerScreen()));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ar = UellowApi.instance.lang == 'ar';
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: UellowColors.yellowSoft,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        if (widget.geoCity != null) Padding(
+          padding: const EdgeInsets.only(bottom: 10),
+          child: Row(children: [
+            const Icon(Icons.public, size: 16, color: UellowColors.darkBrown),
+            const SizedBox(width: 6),
+            Flexible(child: Text(
+                ar ? 'موقعك المكتشف: ${widget.geoCity}'
+                   : 'Detected location: ${widget.geoCity}',
+                style: const TextStyle(fontWeight: FontWeight.w800,
+                    color: UellowColors.darkBrown))),
+          ]),
+        ),
+        Wrap(spacing: 8, runSpacing: 8, children: [
+          ElevatedButton.icon(
+            onPressed: _busy ? null : _detect,
+            icon: _busy
+                ? const SizedBox(width: 14, height: 14,
+                    child: CircularProgressIndicator(strokeWidth: 2,
+                        color: UellowColors.darkBrown))
+                : const Icon(Icons.my_location, size: 16),
+            label: Text(ar ? 'استخدم موقعي الحالي' : 'Use my current location'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: UellowColors.yellow,
+              foregroundColor: UellowColors.darkBrown,
+              elevation: 0,
+            ),
+          ),
+          OutlinedButton.icon(
+            onPressed: () => Navigator.pushNamed(context, '/addresses'),
+            icon: const Icon(Icons.add_location_alt_outlined, size: 16),
+            label: Text(ar ? 'إدخال يدوي' : 'Enter manually'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: UellowColors.darkBrown,
+              side: const BorderSide(color: UellowColors.darkBrown, width: 1),
+            ),
+          ),
+        ]),
       ]),
     );
   }

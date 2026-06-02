@@ -12,6 +12,7 @@
 // UX: matches the mockup splash exactly — Uellow logo top, country
 // dropdown, language tabs, "Detected" hint, Continue CTA bottom.
 // =============================================================================
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -21,6 +22,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../api/uellow_api.dart';
 import '../../api/uellow_endpoints.dart';
 import '../router/uellow_router.dart';
+import '../services/first_launch_service.dart';
 import '../theme/uellow_l10n.dart';
 import '../theme/uellow_theme.dart';
 import '../widgets/uellow_logo.dart';
@@ -134,6 +136,10 @@ class _SplashScreenState extends State<SplashScreen> {
         await prefs.setString('uellow_country_code_v1', code);
       }
     } catch (_) {/* ignore */}
+    // v2.0.72 (#416) — fire-and-forget first-launch permission prompts +
+    // GPS pre-warm. Runs in the background so the home transition stays
+    // snappy; idempotent across cold starts.
+    unawaited(FirstLaunchService.kickOff());
     if (!mounted) return;
     // Visible confirmation so the user knows the URL switch happened.
     final cname = (_picked?['country']?['name']?['en'] as String?) ?? code ?? '';
