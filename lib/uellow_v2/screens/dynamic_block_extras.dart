@@ -250,12 +250,80 @@ class DynSectionHeader extends StatelessWidget {
     final subtitle = ar
         ? (props['subtitleAr']?.toString() ?? '')
         : (props['subtitleEn']?.toString() ?? '');
-    // v2.0.69 — optional header icon OR image next to/replacing the title.
+    // v2.0.69/70 — optional header icon OR image next to/replacing the title.
+    // Modes:
+    //   'beside'  — small icon-sized thumb next to the title (default)
+    //   'replace' — icon-sized thumb in place of the title
+    //   'banner'  — full-width image banner above the content; treated as
+    //               its own title (text title is hidden). The image keeps
+    //               its natural aspect ratio inside a rounded card with a
+    //               soft shadow.
     final headerImg = (props['header_image_url'] as String?) ?? '';
     final headerIcon = (props['header_icon'] as String?) ?? '';
     final headerMode = (props['header_image_mode'] as String?) ?? 'beside';
     final iconSize = ((props['header_icon_size'] as num?)?.toDouble() ?? 22).clamp(12, 64).toDouble();
+    final bannerHeight = ((props['header_banner_height'] as num?)?.toDouble() ?? 84).clamp(40, 240).toDouble();
+    final bannerRadius = ((props['header_banner_radius'] as num?)?.toDouble() ?? 12).clamp(0, 32).toDouble();
+    final bannerFit = (props['header_banner_fit'] as String?) ?? 'cover'; // cover | contain
 
+    // ── BANNER MODE — full-width header image as the section title ───────
+    if (headerMode == 'banner' && headerImg.isNotEmpty) {
+      final gap = (props['title_gap'] as num?)?.toDouble() ?? 6;
+      return Padding(
+        padding: EdgeInsets.fromLTRB(12, 4, 12, gap),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(bannerRadius),
+          child: Container(
+            width: double.infinity,
+            height: bannerHeight,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(bannerRadius),
+              boxShadow: [BoxShadow(
+                color: theme.dark.withOpacity(0.08),
+                blurRadius: 10, offset: const Offset(0, 3),
+              )],
+            ),
+            child: Stack(fit: StackFit.expand, children: [
+              CachedNetworkImage(
+                imageUrl: headerImg,
+                fit: bannerFit == 'contain' ? BoxFit.contain : BoxFit.cover,
+                placeholder: (_, __) => Container(color: theme.primary.withOpacity(0.06)),
+                errorWidget: (_, __, ___) => Container(
+                    color: theme.primary.withOpacity(0.06),
+                    child: Icon(Icons.image_outlined,
+                        color: theme.dark.withOpacity(0.3))),
+              ),
+              // Subtle gradient veil + optional overlay text/trailing.
+              if (subtitle.isNotEmpty || trailing != null)
+                Positioned.fill(child: DecoratedBox(decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [Colors.black.withOpacity(0.35), Colors.transparent],
+                    begin: Alignment.bottomLeft, end: Alignment.topRight,
+                  ),
+                ))),
+              if (subtitle.isNotEmpty)
+                Positioned(
+                  left: 14, right: 14, bottom: 10,
+                  child: Text(subtitle,
+                      maxLines: 1, overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white, fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        shadows: [Shadow(color: Colors.black54, blurRadius: 4)],
+                      )),
+                ),
+              if (trailing != null)
+                Positioned(
+                  top: 8, right: ar ? null : 8, left: ar ? 8 : null,
+                  child: trailing!,
+                ),
+            ]),
+          ),
+        ),
+      );
+    }
+
+    // ── ICON / SMALL-IMAGE MODES ─────────────────────────────────────────
     Widget? leading;
     if (headerImg.isNotEmpty) {
       leading = ClipRRect(
