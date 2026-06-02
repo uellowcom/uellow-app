@@ -72,16 +72,26 @@ class _CartScreenState extends State<CartScreen> {
   }
 
   Future<void> _shareCart() async {
+    // v2.0.77 — was only catching UellowApiException, so a PlatformException
+    // from share_plus (e.g. no installed share targets) bubbled up as a red
+    // overlay. Now any failure surfaces as a friendly snackbar.
+    final ar = UellowApi.instance.lang == 'ar';
     try {
       final url = await UellowApi.instance.cart.share();
-      if (url.isEmpty) return;
-      final ar = UellowApi.instance.lang == 'ar';
+      if (url.isEmpty) {
+        _snack(ar ? 'تعذّر مشاركة السلة' : 'Could not share cart');
+        return;
+      }
       final msg = ar
           ? 'شاهد سلتي في يلو 🛒\n$url'
           : 'Check out my Uellow cart 🛒\n$url';
       await Share.share(msg, subject: ar ? 'سلتي' : 'My Uellow cart');
     } on UellowApiException catch (e) {
       _snack(e.message);
+    } catch (e) {
+      _snack(ar
+          ? 'تعذّر فتح المشاركة — تأكد من تثبيت تطبيقات مشاركة'
+          : 'Sharing failed — make sure a share target app is installed');
     }
   }
 

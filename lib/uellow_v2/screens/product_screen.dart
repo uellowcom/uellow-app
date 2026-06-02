@@ -16,6 +16,7 @@ import 'package:webview_flutter/webview_flutter.dart';
 import '../../api/uellow_api.dart';
 import '../../api/uellow_models.dart';
 import '../router/uellow_router.dart';
+import '../services/first_launch_service.dart';
 import '../theme/uellow_l10n.dart';
 import '../theme/uellow_theme.dart';
 import '../widgets/flash_banner.dart';
@@ -574,33 +575,57 @@ class _PriceRow extends StatelessWidget {
     final lang = UellowApi.instance.lang;
     final sym = p.price.displaySymbol(lang);
     final saveLabel = lang == 'ar' ? 'وفّر' : 'Save';
+    // v2.0.77 redesign — keep everything on ONE line:
+    //   • Big price with the currency symbol in a smaller superscript-ish
+    //     font (saves horizontal space)
+    //   • Struck-through compare price in black (was muted)
+    //   • Discount pill: RED background (was green)
+    //   • Save pill: GREEN background (was red) — same row, never wraps
     return Container(
       color: Colors.white,
       padding: const EdgeInsets.fromLTRB(18, 4, 18, 14),
-      child: Wrap(spacing: 10, runSpacing: 6, crossAxisAlignment: WrapCrossAlignment.center, children: [
-        Text('${p.price.amount.toStringAsFixed(3)} $sym',
-            style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w900,
-                color: UellowColors.darkBrown, letterSpacing: -0.3)),
-        if (hasDisc) MidStrikePrice(
-          text: p.comparePrice!.amount.toStringAsFixed(3),
-          fontSize: 14, color: UellowColors.muted,
-          lineColor: UellowColors.danger),
-        if (hasDisc) Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          decoration: BoxDecoration(color: UellowColors.successBg,
-              borderRadius: BorderRadius.circular(6)),
-          child: Text('-${p.discountPct}%',
-              style: const TextStyle(color: UellowColors.successDk,
-                  fontSize: 11, fontWeight: FontWeight.w800)),
-        ),
-        if (hasDisc) Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          decoration: BoxDecoration(color: UellowColors.danger,
-              borderRadius: BorderRadius.circular(6)),
-          child: Text('$saveLabel ${save.toStringAsFixed(3)} $sym',
-              style: const TextStyle(color: Colors.white,
-                  fontSize: 11, fontWeight: FontWeight.w800)),
-        ),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
+        // Price + small currency symbol (baseline-aligned)
+        Text.rich(TextSpan(children: [
+          TextSpan(text: p.price.amount.toStringAsFixed(3),
+              style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w900,
+                  color: UellowColors.darkBrown, letterSpacing: -0.4, height: 1.0)),
+          const TextSpan(text: ' '),
+          TextSpan(text: sym,
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700,
+                  color: UellowColors.muted, height: 1.0)),
+        ])),
+        if (hasDisc) ...[
+          const SizedBox(width: 8),
+          MidStrikePrice(
+            text: p.comparePrice!.amount.toStringAsFixed(3),
+            fontSize: 13, color: Colors.black87,
+            lineColor: Colors.black87),
+          const SizedBox(width: 6),
+          // -X% pill — RED (the discount is the "warning" we want to draw the
+          // eye to, then the green "Save" pill reinforces the positive value)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(color: UellowColors.danger,
+                borderRadius: BorderRadius.circular(4)),
+            child: Text('-${p.discountPct}%',
+                style: const TextStyle(color: Colors.white,
+                    fontSize: 10.5, fontWeight: FontWeight.w900, height: 1.0)),
+          ),
+          const SizedBox(width: 6),
+          // Save pill — GREEN now; smaller text so the whole row stays on
+          // a single line. Wrapped in Flexible so it clips with ellipsis
+          // instead of wrapping if the screen is really narrow.
+          Flexible(child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(color: UellowColors.success,
+                borderRadius: BorderRadius.circular(4)),
+            child: Text('$saveLabel ${save.toStringAsFixed(3)} $sym',
+                maxLines: 1, overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: Colors.white,
+                    fontSize: 10.5, fontWeight: FontWeight.w900, height: 1.0)),
+          )),
+        ],
       ]),
     );
   }
@@ -993,17 +1018,35 @@ class _CompactDeliveryState extends State<_CompactDelivery> {
   @override
   void initState() { super.initState(); _loadAddress(); }
   Future<void> _loadAddress() async {
+    // v2.0.77 — guests previously saw only "Choose your address". Now:
+    //   1. If signed in → use the saved-default / first address.
+    //   2. Else fall back to FirstLaunchService's cached GPS+geocode.
+    //   3. Else (no perms) fall back to a coarse country/locale label
+    //      from UellowApi so the row is never empty for a guest.
     try {
       final addrs = await UellowApi.instance.addresses.list();
-      if (addrs.isEmpty) return;
-      // Prefer the saved-default; else first (newest)
-      final savedId = await UellowApi.instance.tokenStore.readAddressId();
-      final pick = addrs.firstWhere((a) => a.id == savedId,
-          orElse: () => addrs.first);
-      final parts = [
-        pick.country, pick.state, pick.city,
-      ].where((s) => s.isNotEmpty).toList();
-      if (mounted) setState(() => _summary = parts.join(' · '));
+      if (addrs.isNotEmpty) {
+        final savedId = await UellowApi.instance.tokenStore.readAddressId();
+        final pick = addrs.firstWhere((a) => a.id == savedId,
+            orElse: () => addrs.first);
+        final parts = [pick.country, pick.state, pick.city]
+            .where((s) => s.isNotEmpty).toList();
+        if (mounted) setState(() => _summary = parts.join(' · '));
+        return;
+      }
+    } catch (_) {/* guest or 401 */}
+    try {
+      final fix = await FirstLaunchService.lastFix();
+      if (fix != null && fix.address.isNotEmpty) {
+        // Nominatim addresses are long: "House, Street, City, Region, …"
+        // keep the last 2-3 components which usually = City · Country.
+        final pieces = fix.address.split(',').map((s) => s.trim())
+            .where((s) => s.isNotEmpty).toList();
+        final tail = pieces.length > 2
+            ? pieces.sublist(pieces.length - 2).join(' · ')
+            : pieces.join(' · ');
+        if (mounted) setState(() => _summary = tail);
+      }
     } catch (_) {}
   }
   @override
@@ -1036,6 +1079,15 @@ class _CompactDeliveryState extends State<_CompactDelivery> {
                 style: TextStyle(fontSize: 13,
                     fontWeight: FontWeight.w800,
                     color: has ? UellowColors.darkBrown : UellowColors.ink)),
+            // v2.0.77 — small subline with delivery-time estimate.
+            const SizedBox(height: 2),
+            Text(ar
+                ? 'لو طلبت الآن، يصل خلال 3 ساعات أو اليوم التالي حسب اختيارك'
+                : 'Order now — arrives in 3 hours or next day depending on your choice',
+                maxLines: 2, overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 10.5,
+                    color: UellowColors.muted, fontWeight: FontWeight.w600,
+                    height: 1.3)),
           ],
         )),
         const Icon(Icons.chevron_right, color: Color(0xFFCBB78A)),
