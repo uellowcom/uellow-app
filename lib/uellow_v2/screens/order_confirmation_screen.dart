@@ -33,11 +33,33 @@ class OrderConfirmationScreen extends StatefulWidget {
 
 class _OrderConfirmationScreenState extends State<OrderConfirmationScreen>
     with SingleTickerProviderStateMixin {
+  // v2.1.18 — contact numbers come from Mobile App Settings (backend:
+  // Mobile App Manager → Settings → WhatsApp Number / Support Phone),
+  // falling back to the legacy hardcoded line.
+  String _whatsapp = '+96522227777';
+  String _phone = '+96522227777';
+
+  String _digits(String s) => s.replaceAll(RegExp(r'[^0-9]'), '');
+
+  void _loadContacts() async {
+    try {
+      final s = await UellowApi.instance.settings.get();
+      if (!mounted) return;
+      setState(() {
+        if (s.whatsapp.isNotEmpty) _whatsapp = s.whatsapp;
+        if (s.supportPhone.isNotEmpty) _phone = s.supportPhone;
+        if (s.whatsapp.isEmpty && s.supportPhone.isNotEmpty) _whatsapp = s.supportPhone;
+        if (s.supportPhone.isEmpty && s.whatsapp.isNotEmpty) _phone = s.whatsapp;
+      });
+    } catch (_) {}
+  }
+
   AnimationController? _ctrl;
 
   @override
   void initState() {
     super.initState();
+    _loadContacts();
     if (widget.args.success) {
       _ctrl = AnimationController(
         vsync: this, duration: const Duration(seconds: 3));
@@ -175,7 +197,7 @@ class _OrderConfirmationScreenState extends State<OrderConfirmationScreen>
       const SizedBox(height: 10),
       Row(children: [
         Expanded(child: OutlinedButton.icon(
-          onPressed: () => _open('https://wa.me/96522227777'),
+          onPressed: () => _open('https://wa.me/${_digits(_whatsapp)}'),
           icon: const Icon(Icons.chat_bubble_outline, size: 16,
               color: Color(0xFF25D366)),
           label: Text(ar ? 'واتساب' : 'WhatsApp',
@@ -188,7 +210,7 @@ class _OrderConfirmationScreenState extends State<OrderConfirmationScreen>
         )),
         const SizedBox(width: 10),
         Expanded(child: OutlinedButton.icon(
-          onPressed: () => _open('tel:+96522227777'),
+          onPressed: () => _open('tel:+${_digits(_phone)}'),
           icon: const Icon(Icons.phone, size: 16, color: UellowColors.darkBrown),
           label: Text(ar ? 'اتصل بنا' : 'Contact us',
               style: const TextStyle(color: UellowColors.ink,

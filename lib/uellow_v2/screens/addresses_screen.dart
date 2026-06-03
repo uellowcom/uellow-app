@@ -158,20 +158,20 @@ class _AddressesScreenState extends State<AddressesScreen> {
     showModalBottomSheet(
       context: context, isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => _AddressForm(initial: initial, onSaved: _reload),
+      builder: (_) => AddressFormSheet(initial: initial, onSaved: _reload),
     );
   }
 }
 
-class _AddressForm extends StatefulWidget {
-  const _AddressForm({this.initial, required this.onSaved});
+class AddressFormSheet extends StatefulWidget {
+  const AddressFormSheet({this.initial, required this.onSaved});
   final UellowAddress? initial;
   final VoidCallback onSaved;
   @override
-  State<_AddressForm> createState() => _AddressFormState();
+  State<AddressFormSheet> createState() => _AddressFormSheetState();
 }
 
-class _AddressFormState extends State<_AddressForm> {
+class _AddressFormSheetState extends State<AddressFormSheet> {
   final _name = TextEditingController();
   final _phone = TextEditingController();
   final _street = TextEditingController();

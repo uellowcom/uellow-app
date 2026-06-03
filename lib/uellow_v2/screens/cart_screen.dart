@@ -499,8 +499,9 @@ class _DeliveryBar extends StatelessWidget {
               borderRadius: BorderRadius.circular(999)),
           child: FractionallySizedBox(
             alignment: Alignment.centerLeft, widthFactor: info.progress.clamp(0, 1),
+            // v2.1.18 — green progress per request (was yellow gradient).
             child: const DecoratedBox(decoration: BoxDecoration(
-              gradient: LinearGradient(colors: [UellowColors.yellowLight, UellowColors.yellow]),
+              gradient: LinearGradient(colors: [Color(0xFF34D399), UellowColors.success]),
               borderRadius: BorderRadius.all(Radius.circular(999)),
             )),
           ),

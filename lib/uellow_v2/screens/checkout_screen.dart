@@ -23,6 +23,7 @@ import '../services/first_launch_service.dart';
 import '../theme/uellow_l10n.dart';
 import '../theme/uellow_theme.dart';
 import 'address_picker_screen.dart';
+import 'addresses_screen.dart';
 import 'auth_screen.dart';
 import 'order_confirmation_screen.dart';
 import 'webview_screen.dart';
@@ -141,6 +142,19 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       _selectedAddressId = hasStored
           ? stored
           : (asInt(geoMatch?['id']) ?? asInt((addrs.first as Map)['id']));
+      // v2.1.18 — prefer a COMPLETE address over an incomplete default
+      // (fresh signups have a name-only record).
+      final selMap = addrs.cast<Map>().firstWhere(
+          (a) => asInt(a['id']) == _selectedAddressId,
+          orElse: () => addrs.first as Map);
+      if (!addrComplete(selMap.cast<String, dynamic>())) {
+        for (final a in addrs.cast<Map>()) {
+          if (addrComplete(a.cast<String, dynamic>())) {
+            _selectedAddressId = asInt(a['id']);
+            break;
+          }
+        }
+      }
     }
     if (out.shippingMethods.isNotEmpty) {
       _selectedCarrierId = asInt(out.shippingMethods.first['id']);
@@ -153,6 +167,64 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
 
   Future<void> _placeOrder(_CheckoutData d) async {
     if (_placing) return;
+    // v2.1.18 — the order can only be placed with a COMPLETE address
+    // (phone + street + city). Otherwise: red dialog with a button that
+    // edits the SAME record (no new address row is created).
+    final addrs = ((d.summary?['addresses'] as List?) ?? const [])
+        .cast<Map>().map((a) => a.cast<String, dynamic>()).toList();
+    Map<String, dynamic>? cur;
+    for (final a in addrs) {
+      if (a['id'] == _selectedAddressId) { cur = a; break; }
+    }
+    cur ??= addrs.isNotEmpty ? addrs.first : null;
+    if (cur == null || !addrComplete(cur)) {
+      final ar = UellowApi.instance.lang == 'ar';
+      await showDialog(context: context, builder: (dctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(children: [
+          const Icon(Icons.error_outline, color: UellowColors.danger),
+          const SizedBox(width: 8),
+          Expanded(child: Text(ar ? 'عبّئ عنوانك' : 'Complete your address',
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900,
+                  color: UellowColors.danger))),
+        ]),
+        content: Text(ar
+            ? 'لا يمكن إتمام الطلب قبل تعبئة الهاتف والشارع والمدينة في عنوانك.'
+            : 'Phone, street and city are required before placing the order.',
+            style: const TextStyle(fontSize: 13)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dctx),
+            child: Text(ar ? 'لاحقاً' : 'Later',
+                style: const TextStyle(color: UellowColors.muted)),
+          ),
+          ElevatedButton.icon(
+            onPressed: () async {
+              Navigator.pop(dctx);
+              final initial = cur == null
+                  ? null : UellowAddress.fromJson(cur);
+              await showModalBottomSheet(
+                context: context, isScrollControlled: true,
+                backgroundColor: Colors.transparent,
+                builder: (_) => AddressFormSheet(
+                  initial: initial,
+                  onSaved: () {},
+                ),
+              );
+              if (mounted) setState(() { _data = _bootstrap(); });
+            },
+            icon: const Icon(Icons.add_location_alt_outlined, size: 16),
+            label: Text(ar ? 'أكمل العنوان' : 'Complete address',
+                style: const TextStyle(fontWeight: FontWeight.w900)),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: UellowColors.yellow,
+              foregroundColor: UellowColors.darkBrown,
+            ),
+          ),
+        ],
+      ));
+      return;
+    }
     setState(() => _placing = true);
     try {
       final result = await UellowApi.instance.orders.checkoutConfirm(
@@ -422,6 +494,15 @@ class _CheckoutData {
 
 // ─── Addresses ─────────────────────────────────────────────────────
 
+
+// v2.1.18 — an address is COMPLETE when its required fields are filled
+// (fresh signups land in checkout with just a name). Incomplete addresses
+// are flagged red and cannot be used to place an order.
+bool addrComplete(Map<String, dynamic> a) {
+  bool has(String k) => ((a[k] as String?) ?? '').trim().isNotEmpty;
+  return has('phone') && has('street') && has('city');
+}
+
 class _AddressList extends StatelessWidget {
   const _AddressList({
     required this.addresses, required this.selected,
@@ -525,24 +606,32 @@ class _AddressList extends StatelessWidget {
 
   Widget _addrCard(Map<String, dynamic> a,
       {required bool selected, bool showChevron = false}) {
+    final ar = UellowApi.instance.lang == 'ar';
     final name = (a['name'] as String?) ?? '';
     final addr = [a['street'], a['street2'], a['city']]
         .where((s) => s != null && (s as String).isNotEmpty)
         .map((s) => s as String).join(', ');
     final phone = (a['phone'] as String?) ?? '';
+    final complete = addrComplete(a);
+    // Incomplete address is NEVER highlighted green — red outline instead.
+    final on = selected && complete;
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: selected ? UellowColors.successBg : Colors.white,
+        color: on ? UellowColors.successBg
+                  : (complete ? Colors.white : const Color(0xFFFFF5F5)),
         border: Border.all(
-          color: selected ? UellowColors.success : UellowColors.border,
-          width: selected ? 2 : 1),
+          color: on ? UellowColors.success
+                    : (complete ? UellowColors.border : UellowColors.danger),
+          width: (on || !complete) ? 2 : 1),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Padding(padding: const EdgeInsets.only(top: 2),
-            child: Icon(selected ? Icons.location_on : Icons.location_on_outlined,
-                color: selected ? UellowColors.warn : UellowColors.muted, size: 20)),
+            child: Icon(on ? Icons.location_on : Icons.location_on_outlined,
+                color: on ? UellowColors.warn
+                          : (complete ? UellowColors.muted : UellowColors.danger),
+                size: 20)),
         const SizedBox(width: 12),
         Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(name, style: const TextStyle(
@@ -550,6 +639,17 @@ class _AddressList extends StatelessWidget {
           const SizedBox(height: 4),
           Text([addr, phone].where((s) => s.isNotEmpty).join(' · '),
               style: const TextStyle(fontSize: 12, color: UellowColors.text)),
+          if (!complete) Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              const Icon(Icons.error_outline, size: 13, color: UellowColors.danger),
+              const SizedBox(width: 4),
+              Text(ar ? 'أكمل عنوانك — الهاتف والشارع والمدينة مطلوبة'
+                      : 'Complete your address — phone, street & city required',
+                  style: const TextStyle(fontSize: 11,
+                      color: UellowColors.danger, fontWeight: FontWeight.w800)),
+            ]),
+          ),
         ])),
         if (showChevron) const Icon(Icons.chevron_right, color: UellowColors.muted),
       ]),
@@ -674,6 +774,10 @@ class _ShippingMethodList extends StatelessWidget {
       final price = priceMap == null
           ? null
           : UellowMoney.fromJson(Map<String, dynamic>.from(priceMap));
+      // v2.1.18 — small public description under the method name.
+      final descMap = m['description'] as Map?;
+      final desc = (descMap?[lang] as String?)
+          ?? (descMap?['en'] as String?) ?? '';
       final zone = m['zone'] as Map?;
       final cutoff = zone?['cutoff_time'] as String? ?? '';
       // v2.0.97 — informational per-zone delivery window (no pricing impact).
@@ -710,6 +814,12 @@ class _ShippingMethodList extends StatelessWidget {
               // v2.1.15 — smaller label per request (long names were loud).
               Text(name, style: const TextStyle(
                   fontSize: 12, fontWeight: FontWeight.w800, color: UellowColors.ink)),
+              if (desc.isNotEmpty) Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: Text(desc, maxLines: 2, overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 10.5,
+                        color: UellowColors.muted)),
+              ),
               if (cutoff.isNotEmpty) Padding(
                 padding: const EdgeInsets.only(top: 2),
                 child: Text(lang == 'ar' ? 'اطلب قبل $cutoff' : 'Order before $cutoff',
