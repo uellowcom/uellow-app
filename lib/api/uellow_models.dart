@@ -420,6 +420,8 @@ class UellowProductCard {
   final bool hasVideo;
   // v2.1.24 — Best Seller rank badge {rank, category_id, label{en,ar}}.
   final Map<String, dynamic>? rank;
+  // v2.1.25 — price-intelligence indicator {direction, change_pct, is_lowest, label}.
+  final Map<String, dynamic>? priceTrend;
   // v2.0.73 — sold/view counts surfaced as small badges on the product
   // card. Backend may omit them; defaults to 0 so layout stays stable.
   final int soldCount;
@@ -434,6 +436,7 @@ class UellowProductCard {
     this.allowOutOfStockOrder = true,
     this.hasVideo = false,
     this.rank,
+    this.priceTrend,
     this.soldCount = 0,
     this.viewCount = 0,
   });
@@ -459,6 +462,7 @@ class UellowProductCard {
         allowOutOfStockOrder: (j['allow_out_of_stock_order'] ?? true) as bool,
         hasVideo: (j['has_video'] ?? false) as bool,
         rank: (j['rank'] as Map?)?.cast<String, dynamic>(),
+        priceTrend: (j['price_trend'] as Map?)?.cast<String, dynamic>(),
         soldCount: (j['sold_count'] ?? 0) as int,
         viewCount: (j['view_count'] ?? 0) as int,
       );
@@ -467,6 +471,8 @@ class UellowProductCard {
 class UellowProductFull extends UellowProductCard {
   // v2.1.24 — all Best Seller ranks (product-page strip).
   final List<Map<String, dynamic>> ranks;
+  // v2.1.25 — sparkline payload {points, min, max, current, days, changes}.
+  final Map<String, dynamic>? priceHistory;
   final UellowText descriptionShort;
   final UellowText descriptionHtml;
   final List<String> images;
@@ -507,7 +513,9 @@ class UellowProductFull extends UellowProductCard {
     bool allowOutOfStockOrder = true,
     bool hasVideo = false,
     Map<String, dynamic>? rank,
+    Map<String, dynamic>? priceTrend,
     this.ranks = const [],
+    this.priceHistory,
     this.flashEndsAt, this.flashTitle,
   }) : super(
             id: id, name: name, slug: slug, image: image, price: price,
@@ -515,7 +523,7 @@ class UellowProductFull extends UellowProductCard {
             inStock: inStock, qtyAvailable: qtyAvailable, rating: rating,
             isPublished: isPublished, badges: badges, vendor: vendor,
             allowOutOfStockOrder: allowOutOfStockOrder,
-            hasVideo: hasVideo, rank: rank,
+            hasVideo: hasVideo, rank: rank, priceTrend: priceTrend,
             soldCount: soldCount, viewCount: viewCount);
 
   factory UellowProductFull.fromJson(Map<String, dynamic> j) => UellowProductFull(
@@ -544,6 +552,8 @@ class UellowProductFull extends UellowProductCard {
             .toList(),
         hasVideo: (j['has_video'] ?? false) as bool,
         rank: (j['rank'] as Map?)?.cast<String, dynamic>(),
+        priceTrend: (j['price_trend'] as Map?)?.cast<String, dynamic>(),
+        priceHistory: (j['price_history'] as Map?)?.cast<String, dynamic>(),
         ranks: ((j['ranks'] as List?) ?? const [])
             .map((e) => (e as Map).cast<String, dynamic>())
             .toList(),

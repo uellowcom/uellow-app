@@ -201,6 +201,32 @@ class _StdLayout extends StatelessWidget {
                   ),
                 ],
               ]),
+              // v2.1.25 — price-intelligence indicator (drop / lowest-90d).
+              if (product.priceTrend != null) Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: Builder(builder: (_) {
+                  final t = product.priceTrend!;
+                  final ar2 = lang.toLowerCase().startsWith('ar');
+                  final lowest = t['is_lowest'] == true;
+                  final down = t['direction'] == 'down';
+                  final color = lowest
+                      ? const Color(0xFFB8860B)
+                      : (down ? UellowColors.successDk : UellowColors.danger);
+                  final icon = lowest
+                      ? Icons.workspace_premium_outlined
+                      : (down ? Icons.trending_down : Icons.trending_up);
+                  return Row(mainAxisSize: MainAxisSize.min, children: [
+                    Icon(icon, size: 11, color: color),
+                    const SizedBox(width: 3),
+                    Flexible(child: Text(
+                        (((t['label'] as Map?)?[ar2 ? 'ar' : 'en']) ?? '')
+                            .toString(),
+                        maxLines: 1, overflow: TextOverflow.ellipsis,
+                        style: TextStyle(fontSize: 9,
+                            fontWeight: FontWeight.w800, color: color))),
+                  ]);
+                }),
+              ),
               SizedBox(height: padBetweenPriceAndStats),
               _StatsRow(product: product, lang: lang),
               if (!hideSavePill) ...[

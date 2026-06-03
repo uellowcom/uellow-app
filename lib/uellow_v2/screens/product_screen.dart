@@ -175,6 +175,11 @@ class _ProductScreenState extends State<ProductScreen> {
       // v2.1.24 — Best Seller rank strip (tappable → that category).
       if (p.ranks.isNotEmpty)
         SliverToBoxAdapter(child: _RankStrip(ranks: p.ranks)),
+      // v2.1.25 — price-history insight (sparkline + min/max).
+      if (p.priceHistory != null
+          && ((p.priceHistory!['points'] as List?)?.length ?? 0) >= 2)
+        SliverToBoxAdapter(child: _PriceHistoryBlock(
+            history: p.priceHistory!, trend: p.priceTrend)),
       // Show whenever there's at least one bulk tier — even a single
       // "buy 5+ → save 5%" hint is useful.
       if (p.bulkPricing.isNotEmpty)
@@ -1157,6 +1162,126 @@ class _RankStrip extends StatelessWidget {
       ]),
     );
   }
+}
+
+// ─── Price-history insight (v2.1.25) ──────────────────────────────
+
+class _PriceHistoryBlock extends StatelessWidget {
+  const _PriceHistoryBlock({required this.history, this.trend});
+  final Map<String, dynamic> history;
+  final Map<String, dynamic>? trend;
+  @override
+  Widget build(BuildContext context) {
+    final ar = UellowApi.instance.lang.toLowerCase().startsWith('ar');
+    final pts = ((history['points'] as List?) ?? const [])
+        .map((e) => ((e as Map)['p'] as num).toDouble()).toList();
+    final mn = (history['min'] as num?)?.toDouble() ?? 0;
+    final mx = (history['max'] as num?)?.toDouble() ?? 0;
+    final cur = (history['current'] as num?)?.toDouble() ?? 0;
+    final days = history['days'] ?? 90;
+    final t = trend;
+    final lowest = t?['is_lowest'] == true;
+    return Container(
+      color: Colors.white, margin: const EdgeInsets.only(top: 8),
+      padding: const EdgeInsets.fromLTRB(18, 14, 18, 14),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          const Icon(Icons.query_stats, size: 16, color: UellowColors.darkBrown),
+          const SizedBox(width: 6),
+          Text(ar ? 'تتبع السعر' : 'Price tracker', style: UT.h3),
+          const Spacer(),
+          Text(ar ? 'آخر $days يوم' : 'Last $days days',
+              style: const TextStyle(fontSize: 10.5, color: UellowColors.muted,
+                  fontWeight: FontWeight.w700)),
+        ]),
+        if (lowest) Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: const Color(0xFFFFF8E1),
+              border: Border.all(color: const Color(0xFFE8A800)),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              const Icon(Icons.workspace_premium,
+                  size: 14, color: Color(0xFFB8860B)),
+              const SizedBox(width: 5),
+              Text(ar ? '🔥 هذا أقل سعر خلال $days يوم — اغتنمه!'
+                      : '🔥 Lowest price in $days days — grab it!',
+                  style: const TextStyle(fontSize: 11.5,
+                      fontWeight: FontWeight.w900, color: Color(0xFF8B6508))),
+            ]),
+          ),
+        ),
+        const SizedBox(height: 10),
+        SizedBox(height: 56, width: double.infinity,
+            child: CustomPaint(painter: _SparklinePainter(pts))),
+        const SizedBox(height: 8),
+        Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+          _stat(ar ? 'الأدنى' : 'Lowest', mn, UellowColors.successDk),
+          _stat(ar ? 'الحالي' : 'Current', cur, UellowColors.darkBrown),
+          _stat(ar ? 'الأعلى' : 'Highest', mx, UellowColors.muted),
+        ]),
+      ]),
+    );
+  }
+
+  Widget _stat(String label, double v, Color color) => Column(children: [
+    Text(label, style: const TextStyle(fontSize: 10,
+        color: UellowColors.muted, fontWeight: FontWeight.w700)),
+    const SizedBox(height: 2),
+    Text(v.toStringAsFixed(3), style: TextStyle(fontSize: 12.5,
+        fontWeight: FontWeight.w900, color: color)),
+  ]);
+}
+
+class _SparklinePainter extends CustomPainter {
+  _SparklinePainter(this.points);
+  final List<double> points;
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (points.length < 2) return;
+    final mn = points.reduce((a, b) => a < b ? a : b);
+    final mx = points.reduce((a, b) => a > b ? a : b);
+    final span = (mx - mn) == 0 ? 1.0 : (mx - mn);
+    final dx = size.width / (points.length - 1);
+    final path = Path();
+    for (var i = 0; i < points.length; i++) {
+      final x = dx * i;
+      final y = size.height - ((points[i] - mn) / span) * (size.height - 8) - 4;
+      if (i == 0) {
+        path.moveTo(x, y);
+      } else {
+        path.lineTo(x, y);
+      }
+    }
+    // soft fill under the line
+    final fill = Path.from(path)
+      ..lineTo(size.width, size.height)
+      ..lineTo(0, size.height)
+      ..close();
+    canvas.drawPath(fill, Paint()
+      ..style = PaintingStyle.fill
+      ..shader = const LinearGradient(
+        begin: Alignment.topCenter, end: Alignment.bottomCenter,
+        colors: [Color(0x33F5C320), Color(0x00F5C320)],
+      ).createShader(Offset.zero & size));
+    canvas.drawPath(path, Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2
+      ..strokeCap = StrokeCap.round
+      ..color = const Color(0xFFC69B00));
+    // end dot = current price
+    final lastY = size.height -
+        ((points.last - mn) / span) * (size.height - 8) - 4;
+    canvas.drawCircle(Offset(size.width, lastY), 3.5,
+        Paint()..color = const Color(0xFF412402));
+  }
+
+  @override
+  bool shouldRepaint(covariant _SparklinePainter old) =>
+      old.points != points;
 }
 
 // ─── Compact delivery (clickable) ─────────────────────────────────
