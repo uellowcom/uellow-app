@@ -158,7 +158,10 @@ class UellowRouter {
         );
       case Routes.webview:
         final args = (settings.arguments as Map?) ?? const {};
-        return MaterialPageRoute(
+        // v2.1.13 — MUST be Route<bool>: checkout awaits pushNamed<bool> for
+        // the payment result; an untyped MaterialPageRoute<dynamic> made that
+        // cast throw at runtime and the payment webview silently never opened.
+        return MaterialPageRoute<bool>(
           settings: settings,
           builder: (_) => WebViewScreen(
             url: (args['url'] as String?) ?? '',

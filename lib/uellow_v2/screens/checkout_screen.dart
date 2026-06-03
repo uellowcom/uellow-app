@@ -173,9 +173,10 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
             'title': ar ? 'الدفع' : 'Payment',
           });
         if (!mounted) return;
-        // Cancelled / not completed → cart is preserved (online order stayed a
-        // draft until payment). Show a failure screen with return buttons.
-        if (paid == false) {
+        // Cancelled / not completed / closed with back → cart is preserved
+        // (online order stayed a draft until payment). Only an explicit `true`
+        // (gateway redirected to the return/status URL) counts as paid.
+        if (paid != true) {
           Navigator.pushReplacementNamed(context, Routes.orderConfirm,
             arguments: OrderConfirmationArgs(
               success: false,

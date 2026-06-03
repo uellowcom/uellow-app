@@ -32,7 +32,12 @@ class _WebViewScreenState extends State<WebViewScreen> {
         onNavigationRequest: (req) {
           final u = req.url;
           if (u.contains('/payments/upayments/return') || u.contains('/payment/status')) {
-            if (mounted) Navigator.of(context).maybePop(true);
+            // v2.1.13 — UPayments redirects failures to the SAME returnUrl
+            // with result=NOT_CAPTURED; only pop success on a clean capture.
+            final up = u.toUpperCase();
+            final failed = up.contains('NOT_CAPTURED') || up.contains('FAILED')
+                || up.contains('CANCELED') || up.contains('CANCELLED');
+            if (mounted) Navigator.of(context).maybePop(!failed);
             return NavigationDecision.prevent;
           }
           if (u.contains('/payments/upayments/cancel')) {
