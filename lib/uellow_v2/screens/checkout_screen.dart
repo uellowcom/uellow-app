@@ -149,6 +149,18 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         paymentMethod: _paymentCodeOf(d, _selectedPaymentId),
       );
       if (!mounted) return;
+      // v2.0.85 — honor paymentRequired + paymentUrl. For non-COD
+      // (UPayments / KNET / Visa / Apple Pay / etc.), push the payment
+      // page in a webview FIRST. The backend redirects to /payment/status
+      // when the gateway returns; we listen for that URL and only then
+      // route to the order-confirmation screen.
+      if (result.paymentRequired && (result.paymentUrl ?? '').isNotEmpty) {
+        await Navigator.pushNamed(context, Routes.webview, arguments: {
+          'url': result.paymentUrl!,
+          'title': UellowApi.instance.lang == 'ar' ? 'الدفع' : 'Payment',
+        });
+        if (!mounted) return;
+      }
       Navigator.pushReplacementNamed(context, Routes.orderConfirm,
         arguments: OrderConfirmationArgs(
           success: true,

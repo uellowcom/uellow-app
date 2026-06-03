@@ -49,7 +49,9 @@ Widget _renderNavIcon(String raw, {required Color color, double size = 22}) {
   return Text(raw, style: TextStyle(fontSize: size * 0.95, color: color, height: 1));
 }
 
-enum UNavTab { home, shop, beena, cart, account }
+// v2.0.85 — Reels added as a tab. Sits between beena and cart so the
+// thumb-reach order is: home · shop · reels · cart · account · beena.
+enum UNavTab { home, shop, reels, beena, cart, account }
 
 // ── Dynamic nav bar items loaded from the admin's design ─────────────────
 
@@ -207,6 +209,7 @@ class _UellowBottomNavState extends State<UellowBottomNav> {
     switch (widget.active) {
       case UNavTab.home:    return 'home';
       case UNavTab.shop:    return 'shop';
+      case UNavTab.reels:   return 'reels';
       case UNavTab.beena:   return 'beena';
       case UNavTab.cart:    return 'cart';
       case UNavTab.account: return 'account';
@@ -219,6 +222,7 @@ class _UellowBottomNavState extends State<UellowBottomNav> {
     switch (tab) {
       case UNavTab.home:    route = Routes.home; break;
       case UNavTab.shop:    route = Routes.category; break;
+      case UNavTab.reels:   route = Routes.reels; break;
       case UNavTab.beena:   route = Routes.beena; break;
       case UNavTab.cart:    route = Routes.cart; break;
       case UNavTab.account: route = Routes.account; break;
@@ -252,6 +256,9 @@ class _UellowBottomNavState extends State<UellowBottomNav> {
           child: Row(children: [
             _tab(context, UNavTab.home,    Icons.home_filled,             T.t('nav.home')),
             _tab(context, UNavTab.shop,    Icons.grid_view,               T.t('nav.shop')),
+            // v2.0.85 — Reels tab between Shop and Beena
+            _tab(context, UNavTab.reels,   Icons.play_circle_filled,
+                UellowApi.instance.lang.toLowerCase().startsWith('ar') ? 'فيديو' : 'Reels'),
             _beenaTab(context),
             _tab(context, UNavTab.cart,    Icons.shopping_cart_outlined,  T.t('nav.cart'), badge: badge),
             _tab(context, UNavTab.account, Icons.person_outline,          T.t('nav.account')),
