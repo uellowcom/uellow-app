@@ -701,6 +701,7 @@ void _runAction(BuildContext context, String type, dynamic value) {
         'wallet': Routes.wallet, 'coupons': Routes.coupons, 'search': Routes.search,
         'notifications': Routes.notifications, 'flash': Routes.flash,
         'free-shipping': Routes.freeShipping, 'reels': Routes.reels,
+        'delivery-coverage': Routes.deliveryCoverage,
       };
       final r = screens[value?.toString() ?? ''];
       if (r != null) Navigator.of(context).pushNamed(r);

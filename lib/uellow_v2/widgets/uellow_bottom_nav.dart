@@ -192,6 +192,7 @@ class _UellowBottomNavState extends State<UellowBottomNav> {
           // from admin-configured 'screen' nav/action targets (the builder
           // offers a free-shipping chip; the tap was silently dropped).
           'free-shipping': Routes.freeShipping, 'reels': Routes.reels,
+          'delivery-coverage': Routes.deliveryCoverage,
         };
         final r = map[it.targetValue];
         if (r != null) Navigator.of(context).pushReplacementNamed(r);

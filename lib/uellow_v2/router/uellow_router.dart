@@ -36,6 +36,7 @@ import '../screens/helpdesk_screen.dart';
 import '../screens/dynamic_page_screen.dart';
 import '../screens/reels_screen.dart';
 import '../screens/free_shipping_screen.dart';
+import '../screens/delivery_coverage_screen.dart';
 
 class Routes {
   Routes._();
@@ -71,6 +72,7 @@ class Routes {
   static const dynPage       = '/dyn-page';   // arg: slug
   static const reels         = '/reels';      // v2.0.83 — vertical video feed
   static const freeShipping  = '/free-shipping'; // v2.0.89
+  static const deliveryCoverage = '/delivery-coverage'; // v2.1.1 — Shipping Pro lookup
 }
 
 class UellowRouter {
@@ -101,6 +103,7 @@ class UellowRouter {
     Routes.scan:          (ctx) => const BarcodeScanScreen(),
     Routes.reels:         (ctx) => const ReelsScreen(),
     Routes.freeShipping:  (ctx) => const FreeShippingScreen(),
+    Routes.deliveryCoverage: (ctx) => const DeliveryCoverageScreen(),
   };
 
   /// Handles dynamic routes that take arguments (e.g. /product with id).
