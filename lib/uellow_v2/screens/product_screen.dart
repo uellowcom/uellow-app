@@ -1216,9 +1216,10 @@ class _DeliveryDialogState extends State<_DeliveryDialog> {
         Center(child: Container(width: 36, height: 4,
             decoration: BoxDecoration(color: UellowColors.border,
                 borderRadius: BorderRadius.circular(2)))),
-        const Padding(padding: EdgeInsets.fromLTRB(20, 14, 20, 6),
+        Padding(padding: const EdgeInsets.fromLTRB(20, 14, 20, 6),
             child: Row(children: [
-              Text('Deliver to', style: UT.h2),
+              Text(UellowApi.instance.lang == 'ar' ? 'التوصيل إلى' : 'Deliver to',
+                  style: UT.h2),
             ])),
         Flexible(child: FutureBuilder<List<UellowAddress>>(
           future: _future,
@@ -1257,7 +1258,7 @@ class _DeliveryDialogState extends State<_DeliveryDialog> {
                     const SizedBox(width: 10),
                     Expanded(child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Text(a.name.isNotEmpty ? a.name : (a.city.isNotEmpty ? a.city : 'Address'),
+                      Text(a.name.isNotEmpty ? a.name : (a.city.isNotEmpty ? a.city : (UellowApi.instance.lang == 'ar' ? 'العنوان' : 'Address')),
                           style: const TextStyle(fontWeight: FontWeight.w800,
                               fontSize: 14, color: UellowColors.ink)),
                       const SizedBox(height: 2),
@@ -1269,7 +1270,8 @@ class _DeliveryDialogState extends State<_DeliveryDialog> {
                       decoration: BoxDecoration(
                         color: UellowColors.yellow,
                         borderRadius: BorderRadius.circular(6)),
-                      child: const Text('DEFAULT', style: TextStyle(
+                      child: Text(UellowApi.instance.lang == 'ar' ? 'افتراضي' : 'DEFAULT',
+                          style: const TextStyle(
                           fontSize: 9, fontWeight: FontWeight.w900,
                           color: UellowColors.darkBrown, letterSpacing: 0.5)),
                     ),
@@ -1294,7 +1296,8 @@ class _DeliveryDialogState extends State<_DeliveryDialog> {
               )),
               TextButton(
                 onPressed: () => Navigator.pop(context),
-                child: const Text('Close', style: TextStyle(color: UellowColors.text)),
+                child: Text(UellowApi.instance.lang == 'ar' ? 'إغلاق' : 'Close',
+                    style: const TextStyle(color: UellowColors.text)),
               ),
             ])),
       ]),
@@ -1305,7 +1308,8 @@ class _DeliveryDialogState extends State<_DeliveryDialog> {
     return Padding(padding: const EdgeInsets.all(20), child: Column(children: [
       const Icon(Icons.location_off_outlined, size: 48, color: UellowColors.muted),
       const SizedBox(height: 10),
-      const Text('No saved addresses yet.', style: UT.body),
+      Text(UellowApi.instance.lang == 'ar'
+          ? 'لا توجد عناوين محفوظة بعد.' : 'No saved addresses yet.', style: UT.body),
       const SizedBox(height: 14),
       SizedBox(width: double.infinity, child: ElevatedButton.icon(
         onPressed: () {
@@ -1313,7 +1317,8 @@ class _DeliveryDialogState extends State<_DeliveryDialog> {
           Navigator.pushNamed(context, '/auth');
         },
         icon: const Icon(Icons.login, size: 16),
-        label: const Text('Sign in to add address'),
+        label: Text(UellowApi.instance.lang == 'ar'
+            ? 'سجّل الدخول لإضافة عنوان' : 'Sign in to add address'),
         style: ElevatedButton.styleFrom(
             padding: const EdgeInsets.symmetric(vertical: 14)),
       )),
@@ -1599,13 +1604,16 @@ class _DescriptionBlock extends StatelessWidget {
     final raw = product.descriptionHtml.current(lang).isNotEmpty
         ? _stripHtml(product.descriptionHtml.current(lang))
         : _stripHtml(product.descriptionShort.current(lang));
-    final body = raw.isEmpty ? 'No description provided for this product.' : raw;
+    final ar = lang == 'ar';
+    final body = raw.isEmpty
+        ? (ar ? 'لا يوجد وصف لهذا المنتج.' : 'No description provided for this product.')
+        : raw;
     final long = body.length > 240;
     return Container(
       color: Colors.white, margin: const EdgeInsets.only(top: 8),
       padding: const EdgeInsets.all(16),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        const Text('Description', style: UT.h3),
+        Text(ar ? 'الوصف' : 'Description', style: UT.h3),
         const SizedBox(height: 10),
         Stack(children: [
           ConstrainedBox(
@@ -1640,8 +1648,8 @@ class _DescriptionBlock extends StatelessWidget {
               shape: const RoundedRectangleBorder(
                   borderRadius: BorderRadius.all(Radius.circular(12))),
             ),
-            child: const Text('See full description  ›',
-                style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13)),
+            child: Text(ar ? 'عرض الوصف كامل  ›' : 'See full description  ›',
+                style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13)),
           )),
         ],
       ]),
@@ -1671,7 +1679,7 @@ class _DescriptionDialog extends StatelessWidget {
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       child: Column(mainAxisSize: MainAxisSize.min, children: [
-        _SheetHeader(title: 'Description'),
+        _SheetHeader(title: UellowApi.instance.lang == 'ar' ? 'الوصف' : 'Description'),
         Flexible(child: SingleChildScrollView(
           padding: const EdgeInsets.fromLTRB(18, 12, 18, 30),
           child: Text(text, style: UT.body),
@@ -1703,11 +1711,14 @@ class _SpecsBlock extends StatelessWidget {
             child: const Icon(Icons.grid_view, size: 18, color: UellowColors.warn),
           ),
           const SizedBox(width: 12),
-          const Expanded(child: Column(
+          Expanded(child: Column(
             crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text('Specifications', style: UT.h3),
-              SizedBox(height: 2),
-              Text('Brand, materials, warranty & more', style: UT.small),
+              Text(UellowApi.instance.lang == 'ar' ? 'المواصفات' : 'Specifications',
+                  style: UT.h3),
+              const SizedBox(height: 2),
+              Text(UellowApi.instance.lang == 'ar'
+                  ? 'الماركة، الخامات، الضمان والمزيد'
+                  : 'Brand, materials, warranty & more', style: UT.small),
             ],
           )),
           const Icon(Icons.chevron_right, color: Color(0xFFCBB78A), size: 22),
@@ -1723,8 +1734,9 @@ class _SpecsDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final lang = UellowApi.instance.lang;
+    final ar = lang == 'ar';
     final rows = <(String, String)>[];
-    if (p.brand != null) rows.add(('Brand', p.brand!.name.current(lang)));
+    if (p.brand != null) rows.add((ar ? 'الماركة' : 'Brand', p.brand!.name.current(lang)));
     for (final line in p.attributes) {
       final attr = line.attributeName.current(lang);
       final lo = attr.toLowerCase();
@@ -1734,9 +1746,10 @@ class _SpecsDialog extends StatelessWidget {
         rows.add((attr, line.values.map((v) => v.name.current(lang)).join(' · ')));
       }
     }
-    if (p.sku.isNotEmpty) rows.add(('SKU', p.sku));
-    if (p.barcode.isNotEmpty) rows.add(('Barcode', p.barcode));
-    rows.add(('Warranty', '${p.warrantyMonths} months'));
+    if (p.sku.isNotEmpty) rows.add((ar ? 'رقم المنتج' : 'SKU', p.sku));
+    if (p.barcode.isNotEmpty) rows.add((ar ? 'الباركود' : 'Barcode', p.barcode));
+    rows.add((ar ? 'الضمان' : 'Warranty',
+        ar ? '${p.warrantyMonths} شهر' : '${p.warrantyMonths} months'));
     return Container(
       constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.88),
       decoration: const BoxDecoration(
@@ -1744,7 +1757,7 @@ class _SpecsDialog extends StatelessWidget {
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       child: Column(mainAxisSize: MainAxisSize.min, children: [
-        _SheetHeader(title: 'Specifications'),
+        _SheetHeader(title: ar ? 'المواصفات' : 'Specifications'),
         Flexible(child: SingleChildScrollView(
           padding: const EdgeInsets.fromLTRB(18, 4, 18, 30),
           child: Column(children: rows.map((r) => Container(
@@ -2006,7 +2019,8 @@ class _ReviewsBlockState extends State<_ReviewsBlock> {
                     color: UellowColors.success,
                     borderRadius: BorderRadius.circular(4),
                   ),
-                  child: const Text('VERIFIED', style: TextStyle(
+                  child: Text(UellowApi.instance.lang == 'ar' ? 'موثّق' : 'VERIFIED',
+                      style: const TextStyle(
                       color: Colors.white, fontSize: 9, fontWeight: FontWeight.w800)),
                 ),
               ),
@@ -2232,15 +2246,17 @@ class _CtaBar extends StatelessWidget {
           },
           child: Padding(
             padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 18),
-            child: Row(children: const [
-              Icon(Icons.notifications_active_outlined, size: 18,
+            child: Row(children: [
+              const Icon(Icons.notifications_active_outlined, size: 18,
                   color: UellowColors.yellowLight),
-              SizedBox(width: 10),
-              Text('Notify me when back in stock', style: TextStyle(
+              const SizedBox(width: 10),
+              Text(UellowApi.instance.lang == 'ar'
+                  ? 'أبلغني عند توفّره' : 'Notify me when back in stock',
+                  style: const TextStyle(
                   color: UellowColors.yellowLight, fontSize: 14,
                   fontWeight: FontWeight.w900, letterSpacing: 0.2)),
-              Spacer(),
-              Icon(Icons.arrow_forward, size: 16,
+              const Spacer(),
+              const Icon(Icons.arrow_forward, size: 16,
                   color: UellowColors.yellowLight),
             ]),
           ),

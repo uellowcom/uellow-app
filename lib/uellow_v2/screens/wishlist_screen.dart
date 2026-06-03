@@ -123,13 +123,16 @@ class _WishlistScreenState extends State<WishlistScreen> {
       : const ['All','In stock','On sale','Price drop','Recently added'];
 
   Widget _empty() {
+    final ar = UellowApi.instance.lang.toLowerCase().startsWith('ar');
     return ListView(children: [
       const SizedBox(height: 100),
       const Center(child: Icon(Icons.favorite_border, size: 80, color: UellowColors.muted)),
       const SizedBox(height: 18),
-      const Center(child: Text('Your wishlist is empty', style: UT.h2)),
+      Center(child: Text(ar ? 'قائمة مفضلتك فارغة' : 'Your wishlist is empty', style: UT.h2)),
       const SizedBox(height: 6),
-      const Center(child: Text('Tap the heart on any product to add it', style: UT.body)),
+      Center(child: Text(
+          ar ? 'اضغط على القلب في أي منتج لإضافته' : 'Tap the heart on any product to add it',
+          style: UT.body, textAlign: TextAlign.center)),
     ]);
   }
 }

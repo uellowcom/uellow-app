@@ -569,9 +569,11 @@ class _ShippingMethodList extends StatelessWidget {
   Widget build(BuildContext context) {
     final lang = UellowApi.instance.lang;
     if (methods.isEmpty) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(vertical: 16),
-        child: Text('No shipping methods available for your address.',
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        child: Text(lang == 'ar'
+            ? 'لا توجد طرق شحن متاحة لعنوانك.'
+            : 'No shipping methods available for your address.',
             style: UT.body),
       );
     }
@@ -617,7 +619,7 @@ class _ShippingMethodList extends StatelessWidget {
                   fontSize: 13.5, fontWeight: FontWeight.w800, color: UellowColors.ink)),
               if (cutoff.isNotEmpty) Padding(
                 padding: const EdgeInsets.only(top: 2),
-                child: Text('Order before $cutoff',
+                child: Text(lang == 'ar' ? 'اطلب قبل $cutoff' : 'Order before $cutoff',
                     style: const TextStyle(fontSize: 11, color: UellowColors.muted)),
               ),
             ])),
@@ -692,9 +694,11 @@ class _PaymentMethodGrid extends StatelessWidget {
       for (final e in _extras) if (!codes.contains(e['code'])) e,
     ];
     if (list.isEmpty) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(vertical: 16),
-        child: Text('No payment methods configured.', style: UT.body),
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        child: Text(UellowApi.instance.lang == 'ar'
+            ? 'لا توجد طرق دفع مُهيّأة.' : 'No payment methods configured.',
+            style: UT.body),
       );
     }
     return GridView.builder(

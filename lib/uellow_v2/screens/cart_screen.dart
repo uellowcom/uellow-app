@@ -297,6 +297,7 @@ class _Header extends StatelessWidget {
   final int lineCount;
   @override
   Widget build(BuildContext context) {
+    final ar = UellowApi.instance.lang.toLowerCase().startsWith('ar');
     return Container(
       color: Colors.white,
       padding: const EdgeInsets.fromLTRB(18, 14, 18, 14),
@@ -304,9 +305,10 @@ class _Header extends StatelessWidget {
         border: Border(bottom: BorderSide(color: UellowColors.border)),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        const Text('My Cart', style: UT.h1),
+        Text(ar ? 'سلتي' : 'My Cart', style: UT.h1),
         const SizedBox(height: 2),
-        Text('$lineCount items · ready to checkout', style: UT.small),
+        Text(ar ? '$lineCount منتج · جاهز للدفع' : '$lineCount items · ready to checkout',
+            style: UT.small),
       ]),
     );
   }
@@ -381,8 +383,9 @@ class _LineCard extends StatelessWidget {
                 try {
                   await UellowApi.instance.wishlist.add(line.productId);
                   if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Saved to wishlist'),
-                          duration: Duration(seconds: 1)));
+                      SnackBar(content: Text(UellowApi.instance.lang == 'ar'
+                              ? 'حُفظ في المفضلة' : 'Saved to wishlist'),
+                          duration: const Duration(seconds: 1)));
                   onRemove(line.id);
                 } on UellowApiException catch (e) {
                   if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(
@@ -404,7 +407,8 @@ class _LineCard extends StatelessWidget {
             const SizedBox(width: 14),
             GestureDetector(
               onTap: () => onRemove(line.id),
-              child: const Text('Remove', style: TextStyle(
+              child: Text(UellowApi.instance.lang == 'ar' ? 'إزالة' : 'Remove',
+                  style: const TextStyle(
                   fontSize: 11, color: UellowColors.danger, fontWeight: FontWeight.w700)),
             ),
           ]),
@@ -513,10 +517,11 @@ class _ShippingMethods extends StatelessWidget {
         borderRadius: BorderRadius.all(Radius.circular(12)),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        const Row(children: [
-          Icon(Icons.local_shipping_outlined, size: 16, color: UellowColors.darkBrown),
-          SizedBox(width: 6),
-          Text('Delivery options', style: UT.h3),
+        Row(children: [
+          const Icon(Icons.local_shipping_outlined, size: 16, color: UellowColors.darkBrown),
+          const SizedBox(width: 6),
+          Text(UellowApi.instance.lang == 'ar' ? 'خيارات التوصيل' : 'Delivery options',
+              style: UT.h3),
         ]),
         const SizedBox(height: 10),
         for (final m in methods) Container(
@@ -835,7 +840,8 @@ class _CheckoutCta extends StatelessWidget {
                 child: Row(children: [
                   const Icon(Icons.lock_outline, size: 18, color: UellowColors.darkBrown),
                   const SizedBox(width: 8),
-                  const Text('Secure Checkout', style: TextStyle(
+                  Text(UellowApi.instance.lang == 'ar' ? 'إتمام الدفع الآمن' : 'Secure Checkout',
+                      style: const TextStyle(
                       color: UellowColors.darkBrown,
                       fontSize: 15, fontWeight: FontWeight.w900,
                       letterSpacing: 0.2)),
@@ -868,15 +874,17 @@ class _CheckoutCta extends StatelessWidget {
 class _EmptyCart extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
+    final ar = UellowApi.instance.lang.toLowerCase().startsWith('ar');
     return ListView(children: [
       const SizedBox(height: 100),
       const Center(child: Icon(Icons.shopping_cart_outlined,
           size: 80, color: UellowColors.muted)),
       const SizedBox(height: 18),
-      const Center(child: Text('Your cart is empty', style: UT.h2)),
+      Center(child: Text(ar ? 'سلتك فارغة' : 'Your cart is empty', style: UT.h2)),
       const SizedBox(height: 6),
-      const Center(child: Text('Browse the latest deals and add to cart',
-          style: UT.body)),
+      Center(child: Text(
+          ar ? 'تصفّح أحدث العروض وأضفها إلى السلة' : 'Browse the latest deals and add to cart',
+          textAlign: TextAlign.center, style: UT.body)),
       const SizedBox(height: 20),
       Center(child: ElevatedButton.icon(
         onPressed: () {
@@ -906,7 +914,8 @@ class _ErrorPane extends StatelessWidget {
         const SizedBox(height: 14),
         Text(message, textAlign: TextAlign.center, style: UT.body),
         const SizedBox(height: 16),
-        ElevatedButton(onPressed: onRetry, child: const Text('Retry')),
+        ElevatedButton(onPressed: onRetry,
+            child: Text(UellowApi.instance.lang == 'ar' ? 'إعادة المحاولة' : 'Retry')),
       ]),
     ));
   }

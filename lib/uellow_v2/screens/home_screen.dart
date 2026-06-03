@@ -694,7 +694,8 @@ void _runAction(BuildContext context, String type, dynamic value) {
       // Pass to launchUrl when url_launcher is wired; for now just
       // surface the deep link so the user can confirm something happened.
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('Opening: $value'),
+        content: Text(UellowApi.instance.lang.toLowerCase().startsWith('ar')
+            ? 'جارٍ الفتح: $value' : 'Opening: $value'),
         duration: const Duration(seconds: 1),
       ));
       break;
@@ -714,8 +715,9 @@ class _DemoSlide extends StatelessWidget {
       ),
       padding: const EdgeInsets.all(18),
       alignment: Alignment.bottomLeft,
-      child: const Text('Big Sale — Up to 70% off',
-          style: TextStyle(color: UellowColors.yellowLight,
+      child: Text(UellowApi.instance.lang.toLowerCase().startsWith('ar')
+          ? 'تخفيضات كبيرة — حتى ٧٠٪' : 'Big Sale — Up to 70% off',
+          style: const TextStyle(color: UellowColors.yellowLight,
               fontSize: 18, fontWeight: FontWeight.w800)),
     );
   }
@@ -992,7 +994,9 @@ class _ProductRailState extends State<_ProductRail> {
                 return const Center(child: CircularProgressIndicator());
               }
               if (snap.hasError || (snap.data?.isEmpty ?? true)) {
-                return Center(child: Text('No products', style: UT.small));
+                return Center(child: Text(
+                    UellowApi.instance.lang.toLowerCase().startsWith('ar')
+                        ? 'لا توجد منتجات' : 'No products', style: UT.small));
               }
               final items = snap.data!;
               return ListView.separated(
@@ -1138,7 +1142,9 @@ class _ErrorState extends StatelessWidget {
         ),
         const SizedBox(height: 18),
         Center(child: ElevatedButton(
-          onPressed: onRetry, child: const Text('Retry'),
+          onPressed: onRetry,
+          child: Text(UellowApi.instance.lang.toLowerCase().startsWith('ar')
+              ? 'إعادة المحاولة' : 'Retry'),
         )),
       ],
     );
@@ -1204,14 +1210,17 @@ class _ExploreMoreSliverState extends State<_ExploreMoreSliver> {
       sliver: SliverMainAxisGroup(slivers: [
         SliverToBoxAdapter(child: Padding(
           padding: const EdgeInsets.fromLTRB(6, 0, 6, 12),
-          child: Row(children: const [
-            Icon(Icons.explore_outlined, size: 18, color: UellowColors.darkBrown),
-            SizedBox(width: 6),
-            Text('Explore More', style: UT.h2),
-            SizedBox(width: 8),
-            Text('for you', style: TextStyle(
-                color: UellowColors.muted, fontSize: 12)),
-          ]),
+          child: Builder(builder: (_) {
+            final ar = UellowApi.instance.lang.toLowerCase().startsWith('ar');
+            return Row(children: [
+              const Icon(Icons.explore_outlined, size: 18, color: UellowColors.darkBrown),
+              const SizedBox(width: 6),
+              Text(ar ? 'اكتشف المزيد' : 'Explore More', style: UT.h2),
+              const SizedBox(width: 8),
+              Text(ar ? 'لك' : 'for you', style: const TextStyle(
+                  color: UellowColors.muted, fontSize: 12)),
+            ]);
+          }),
         )),
         SliverGrid(
           gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
@@ -1243,8 +1252,9 @@ class _ExploreMoreSliverState extends State<_ExploreMoreSliver> {
             child: ElevatedButton.icon(
               onPressed: _loadMore,
               icon: const Icon(Icons.arrow_downward, size: 16),
-              label: const Text('Load more',
-                  style: TextStyle(fontWeight: FontWeight.w800)),
+              label: Text(UellowApi.instance.lang.toLowerCase().startsWith('ar')
+                  ? 'تحميل المزيد' : 'Load more',
+                  style: const TextStyle(fontWeight: FontWeight.w800)),
               style: ElevatedButton.styleFrom(
                 backgroundColor: UellowColors.yellowSoft,
                 foregroundColor: UellowColors.darkBrown, elevation: 0,
