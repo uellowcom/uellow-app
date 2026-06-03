@@ -34,6 +34,7 @@ import '../screens/tryon_screen.dart';
 import '../screens/beena_screen.dart';
 import '../screens/helpdesk_screen.dart';
 import '../screens/dynamic_page_screen.dart';
+import '../screens/reels_screen.dart';
 
 class Routes {
   Routes._();
@@ -67,6 +68,7 @@ class Routes {
   static const scan          = '/scan';
   static const helpdesk      = '/helpdesk';
   static const dynPage       = '/dyn-page';   // arg: slug
+  static const reels         = '/reels';      // v2.0.83 — vertical video feed
 }
 
 class UellowRouter {
@@ -95,6 +97,7 @@ class UellowRouter {
     Routes.profile:       (ctx) => const ProfileScreen(),
     Routes.addresses:     (ctx) => const AddressesScreen(),
     Routes.scan:          (ctx) => const BarcodeScanScreen(),
+    Routes.reels:         (ctx) => const ReelsScreen(),
   };
 
   /// Handles dynamic routes that take arguments (e.g. /product with id).
