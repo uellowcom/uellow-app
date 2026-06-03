@@ -117,20 +117,14 @@ class _ReelsScreenState extends State<ReelsScreen> {
           itemBuilder: (_, i) => _ReelSlide(
             item: _items[i], active: i == _activeIdx, ar: ar),
         ),
-        // Top header
-        Positioned(top: 8, left: 16, right: 16, child: Row(children: [
-          IconButton(
-            icon: const Icon(Icons.close, color: Colors.white),
-            onPressed: () => Navigator.maybePop(context),
-          ),
-          const Spacer(),
-          Text(ar ? 'فيديوهات' : 'Reels',
+        // Top header — centered title only. The close (X) button was removed:
+        // on a nav tab there is nothing to pop, so it did nothing.
+        Positioned(top: 10, left: 16, right: 16, child: Center(
+          child: Text(ar ? 'فيديوهات' : 'Reels',
               style: const TextStyle(color: Colors.white,
                   fontSize: 16, fontWeight: FontWeight.w900,
                   shadows: [Shadow(color: Colors.black54, blurRadius: 4)])),
-          const Spacer(),
-          const SizedBox(width: 48),
-        ])),
+        )),
       ])),
     );
   }
@@ -250,11 +244,25 @@ class _ReelSlideState extends State<_ReelSlide> {
           });
         },
       )),
-      // Mute hint
+      // Tappable sound button — videos autoplay MUTED; tap to turn sound on.
       if (_ctrl != null && _ctrl!.value.isInitialized) Positioned(
-        top: 50, right: 16,
-        child: Icon(_muted ? Icons.volume_off : Icons.volume_up,
-            color: Colors.white.withValues(alpha: 0.65), size: 18),
+        top: 44, right: 14,
+        child: GestureDetector(
+          onTap: () => setState(() {
+            _muted = !_muted;
+            _ctrl!.setVolume(_muted ? 0 : 1);
+          }),
+          child: Container(
+            width: 40, height: 40,
+            decoration: BoxDecoration(
+              color: Colors.black.withValues(alpha: 0.45),
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.white.withValues(alpha: 0.55), width: 1),
+            ),
+            child: Icon(_muted ? Icons.volume_off_rounded : Icons.volume_up_rounded,
+                color: Colors.white, size: 21),
+          ),
+        ),
       ),
       // ── Bottom-left product details overlay
       Positioned(left: 16, right: 92, bottom: 28, child: Column(
