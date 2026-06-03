@@ -690,6 +690,21 @@ void _runAction(BuildContext context, String type, dynamic value) {
       final q = value?.toString() ?? '';
       if (q.isNotEmpty) UellowRouter.goSearchResults(context, q);
       break;
+    case 'screen':
+      // v2.1.0 — block CTAs (slider/icon/section "view more") configured to
+      // open an app screen were silently dropped. Map known screen tokens to
+      // their routes, consistent with the bottom-nav target map.
+      const screens = {
+        'home': Routes.home, 'shop': Routes.category, 'categories': Routes.category,
+        'wishlist': Routes.wishlist, 'cart': Routes.cart, 'account': Routes.account,
+        'beena': Routes.beena, 'orders': Routes.orders, 'loyalty': Routes.loyalty,
+        'wallet': Routes.wallet, 'coupons': Routes.coupons, 'search': Routes.search,
+        'notifications': Routes.notifications, 'flash': Routes.flash,
+        'free-shipping': Routes.freeShipping, 'reels': Routes.reels,
+      };
+      final r = screens[value?.toString() ?? ''];
+      if (r != null) Navigator.of(context).pushNamed(r);
+      break;
     case 'url':
       // Pass to launchUrl when url_launcher is wired; for now just
       // surface the deep link so the user can confirm something happened.

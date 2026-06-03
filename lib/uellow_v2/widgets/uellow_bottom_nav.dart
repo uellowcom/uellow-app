@@ -188,6 +188,10 @@ class _UellowBottomNavState extends State<UellowBottomNav> {
           'orders': Routes.orders, 'loyalty': Routes.loyalty,
           'wallet': Routes.wallet, 'coupons': Routes.coupons,
           'notifications': Routes.notifications, 'search': Routes.search,
+          // v2.1.0 — these screens existed + had routes but were unreachable
+          // from admin-configured 'screen' nav/action targets (the builder
+          // offers a free-shipping chip; the tap was silently dropped).
+          'free-shipping': Routes.freeShipping, 'reels': Routes.reels,
         };
         final r = map[it.targetValue];
         if (r != null) Navigator.of(context).pushReplacementNamed(r);
