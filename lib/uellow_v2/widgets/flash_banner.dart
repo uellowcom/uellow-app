@@ -126,7 +126,8 @@ class FlashBanner extends StatelessWidget {
                 Text('-${discountPct}%', style: const TextStyle(
                     color: Color(0xFFEA580C), fontSize: 16,
                     fontWeight: FontWeight.w900, height: 1)),
-                const Text('OFF', style: TextStyle(color: Color(0xFFB91C1C),
+                Text(UellowApi.instance.lang == 'ar' ? 'خصم' : 'OFF',
+                    style: const TextStyle(color: Color(0xFFB91C1C),
                     fontSize: 8, fontWeight: FontWeight.w900,
                     letterSpacing: 0.6, height: 1)),
               ])

@@ -426,7 +426,8 @@ class _VendorFilter extends StatelessWidget {
         border: Border(bottom: BorderSide(color: UellowColors.border)),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        const Text('FILTER BY VENDOR', style: TextStyle(
+        Text(lang == 'ar' ? 'تصفية حسب المتجر' : 'FILTER BY VENDOR',
+            style: const TextStyle(
             fontSize: 10.5, color: UellowColors.muted,
             fontWeight: FontWeight.w800, letterSpacing: 0.5)),
         const SizedBox(height: 8),
@@ -446,7 +447,8 @@ class _VendorFilter extends StatelessWidget {
                     borderRadius: BorderRadius.circular(999),
                   ),
                   alignment: Alignment.center,
-                  child: Text('All vendors', style: TextStyle(
+                  child: Text(lang == 'ar' ? 'كل المتاجر' : 'All vendors',
+                    style: TextStyle(
                     color: on ? UellowColors.yellowLight : UellowColors.text,
                     fontWeight: FontWeight.w800, fontSize: 12,
                   )),
@@ -498,6 +500,7 @@ class _SortBar extends StatelessWidget {
   final ValueChanged<String> onSort;
   @override
   Widget build(BuildContext context) {
+    final ar = UellowApi.instance.lang == 'ar';
     return Container(
       color: Colors.white,
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
@@ -508,7 +511,7 @@ class _SortBar extends StatelessWidget {
         Text.rich(TextSpan(style: const TextStyle(fontSize: 12, color: UellowColors.muted), children: [
           TextSpan(text: '$count', style: const TextStyle(
               fontWeight: FontWeight.w900, color: UellowColors.darkBrown)),
-          const TextSpan(text: ' deals · in stock'),
+          TextSpan(text: ar ? ' عرض · متوفّر' : ' deals · in stock'),
         ])),
         const Spacer(),
         GestureDetector(
@@ -516,17 +519,17 @@ class _SortBar extends StatelessWidget {
             final picked = await showModalBottomSheet<String>(
               context: context,
               builder: (_) => Column(mainAxisSize: MainAxisSize.min, children: [
-                _sortTile(context, 'discount', '🔥 Biggest discount first'),
-                _sortTile(context, 'price', '↑ Lowest price first'),
-                _sortTile(context, 'sold', '⭐ Most reviewed first'),
+                _sortTile(context, 'discount', ar ? '🔥 الأكبر خصماً أولاً' : '🔥 Biggest discount first'),
+                _sortTile(context, 'price', ar ? '↑ الأقل سعراً أولاً' : '↑ Lowest price first'),
+                _sortTile(context, 'sold', ar ? '⭐ الأكثر تقييماً أولاً' : '⭐ Most reviewed first'),
               ]),
             );
             if (picked != null) onSort(picked);
           },
-          child: Row(children: const [
-            Icon(Icons.swap_vert, size: 14, color: UellowColors.darkBrown),
-            SizedBox(width: 3),
-            Text('Sort', style: TextStyle(
+          child: Row(children: [
+            const Icon(Icons.swap_vert, size: 14, color: UellowColors.darkBrown),
+            const SizedBox(width: 3),
+            Text(ar ? 'ترتيب' : 'Sort', style: const TextStyle(
                 fontSize: 12, fontWeight: FontWeight.w700, color: UellowColors.darkBrown)),
           ]),
         ),
@@ -550,12 +553,13 @@ class _EmptyFlash extends StatelessWidget {
       child: Column(mainAxisSize: MainAxisSize.min, children: [
         const Icon(Icons.flash_off, size: 64, color: UellowColors.muted),
         const SizedBox(height: 14),
-        const Text('No flash sale is live right now',
+        Text(UellowApi.instance.lang == 'ar'
+            ? 'لا يوجد عرض فلاش مباشر الآن' : 'No flash sale is live right now',
             textAlign: TextAlign.center, style: UT.body),
         const SizedBox(height: 16),
         ElevatedButton(
           onPressed: () => UellowRouter.pushNamed(context, '/category'),
-          child: const Text('Browse all products'),
+          child: Text(UellowApi.instance.lang == 'ar' ? 'تصفّح كل المنتجات' : 'Browse all products'),
         ),
       ]),
     ));

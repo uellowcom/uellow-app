@@ -346,10 +346,11 @@ class _SortBar extends StatelessWidget {
             );
             if (picked != null) onSort(picked);
           },
-          child: Row(children: const [
-            Icon(Icons.swap_vert, size: 14, color: UellowColors.darkBrown),
-            SizedBox(width: 3),
-            Text('Sort', style: TextStyle(fontSize: 12,
+          child: Row(children: [
+            const Icon(Icons.swap_vert, size: 14, color: UellowColors.darkBrown),
+            const SizedBox(width: 3),
+            Text(UellowApi.instance.lang == 'ar' ? 'ترتيب' : 'Sort',
+                style: const TextStyle(fontSize: 12,
                 fontWeight: FontWeight.w700, color: UellowColors.darkBrown)),
           ]),
         ),

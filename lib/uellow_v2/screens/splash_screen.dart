@@ -243,20 +243,20 @@ class _SplashScreenState extends State<SplashScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Padding(
-            padding: EdgeInsets.fromLTRB(14, 12, 14, 6),
-            child: Text('COUNTRY',
-                style: TextStyle(fontSize: 11, color: UellowColors.muted,
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 12, 14, 6),
+            child: Text(_lang == 'ar' ? 'الدولة' : 'COUNTRY',
+                style: const TextStyle(fontSize: 11, color: UellowColors.muted,
                     fontWeight: FontWeight.w800, letterSpacing: 0.8)),
           ),
           Padding(
             padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
             child: _countryDropdown(),
           ),
-          const Padding(
-            padding: EdgeInsets.fromLTRB(14, 6, 14, 6),
-            child: Text('LANGUAGE',
-                style: TextStyle(fontSize: 11, color: UellowColors.muted,
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 6, 14, 6),
+            child: Text(_lang == 'ar' ? 'اللغة' : 'LANGUAGE',
+                style: const TextStyle(fontSize: 11, color: UellowColors.muted,
                     fontWeight: FontWeight.w800, letterSpacing: 0.8)),
           ),
           Padding(
@@ -328,11 +328,11 @@ class _SplashScreenState extends State<SplashScreen> {
                     borderRadius: BorderRadius.circular(2)),
               ),
             ),
-            const Padding(
-              padding: EdgeInsets.fromLTRB(20, 8, 20, 12),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
               child: Align(alignment: Alignment.centerLeft,
-                  child: Text('Select your country',
-                      style: TextStyle(color: UellowColors.darkBrown,
+                  child: Text(_lang == 'ar' ? 'اختر دولتك' : 'Select your country',
+                      style: const TextStyle(color: UellowColors.darkBrown,
                           fontWeight: FontWeight.w800, fontSize: 16))),
             ),
             Flexible(
@@ -424,10 +424,10 @@ class _SplashScreenState extends State<SplashScreen> {
             child: Container(width: 36, height: 4,
               decoration: BoxDecoration(color: UellowColors.border,
                   borderRadius: BorderRadius.circular(2)))),
-          const Padding(padding: EdgeInsets.fromLTRB(20, 8, 20, 12),
+          Padding(padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
             child: Align(alignment: Alignment.centerLeft,
-              child: Text('Select your language',
-                style: TextStyle(color: UellowColors.darkBrown,
+              child: Text(_lang == 'ar' ? 'اختر لغتك' : 'Select your language',
+                style: const TextStyle(color: UellowColors.darkBrown,
                     fontWeight: FontWeight.w800, fontSize: 16)))),
           Flexible(child: ListView.separated(
             shrinkWrap: true,

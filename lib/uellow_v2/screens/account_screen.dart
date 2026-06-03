@@ -263,7 +263,7 @@ class _ProfileHeaderState extends State<_ProfileHeader> {
     final ar = UellowApi.instance.lang == 'ar';
     final name = widget.isGuest
         ? (ar ? 'ضيف' : 'Guest')
-        : ((widget.user['name'] as String?) ?? 'Customer');
+        : ((widget.user['name'] as String?) ?? (ar ? 'عميل' : 'Customer'));
     final country = (widget.user['country'] as String?)
         ?? _guestCountry
         ?? 'KW';

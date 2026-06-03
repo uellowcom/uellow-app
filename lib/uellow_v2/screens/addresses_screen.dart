@@ -94,7 +94,8 @@ class _AddressesScreenState extends State<AddressesScreen> {
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                 decoration: BoxDecoration(color: UellowColors.yellow,
                     borderRadius: BorderRadius.circular(4)),
-                child: const Text('DEFAULT', style: TextStyle(
+                child: Text(UellowApi.instance.lang == 'ar' ? 'افتراضي' : 'DEFAULT',
+                    style: const TextStyle(
                     fontSize: 9, fontWeight: FontWeight.w900,
                     color: UellowColors.darkBrown, letterSpacing: 0.5)),
               ),
@@ -120,10 +121,12 @@ class _AddressesScreenState extends State<AddressesScreen> {
               _addNew(initial: a);
             }
           },
-          itemBuilder: (_) => const [
-            PopupMenuItem(value: 'edit', child: Text('Edit')),
+          itemBuilder: (_) => [
+            PopupMenuItem(value: 'edit',
+                child: Text(UellowApi.instance.lang == 'ar' ? 'تعديل' : 'Edit')),
             PopupMenuItem(value: 'delete',
-                child: Text('Delete', style: TextStyle(color: UellowColors.danger))),
+                child: Text(UellowApi.instance.lang == 'ar' ? 'حذف' : 'Delete',
+                    style: const TextStyle(color: UellowColors.danger))),
           ],
         ),
       ]),

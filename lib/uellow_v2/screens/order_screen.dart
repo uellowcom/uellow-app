@@ -797,10 +797,10 @@ class _ContactSellerDialogState extends State<_ContactSellerDialog> {
     final src = await showModalBottomSheet<ImageSource>(
       context: context, builder: (_) => SafeArea(child: Column(mainAxisSize: MainAxisSize.min, children: [
         ListTile(leading: const Icon(Icons.photo_camera_outlined),
-            title: const Text('Take photo'),
+            title: Text(UellowApi.instance.lang == 'ar' ? 'التقاط صورة' : 'Take photo'),
             onTap: () => Navigator.pop(context, ImageSource.camera)),
         ListTile(leading: const Icon(Icons.photo_library_outlined),
-            title: const Text('Choose from gallery'),
+            title: Text(UellowApi.instance.lang == 'ar' ? 'اختيار من المعرض' : 'Choose from gallery'),
             onTap: () => Navigator.pop(context, ImageSource.gallery)),
       ])));
     if (src == null) return;
@@ -861,10 +861,11 @@ class _ContactSellerDialogState extends State<_ContactSellerDialog> {
                   border: Border.all(color: UellowColors.yellow, width: 1.5),
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: const Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                  Icon(Icons.add_a_photo_outlined, color: UellowColors.darkBrown, size: 22),
-                  SizedBox(height: 2),
-                  Text('Add', style: TextStyle(fontSize: 9.5,
+                child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                  const Icon(Icons.add_a_photo_outlined, color: UellowColors.darkBrown, size: 22),
+                  const SizedBox(height: 2),
+                  Text(UellowApi.instance.lang == 'ar' ? 'إضافة' : 'Add',
+                      style: const TextStyle(fontSize: 9.5,
                       color: UellowColors.darkBrown, fontWeight: FontWeight.w800)),
                 ]),
               ));
@@ -968,10 +969,10 @@ class _RateDialogState extends State<_RateDialog> {
     final src = await showModalBottomSheet<ImageSource>(
       context: context, builder: (_) => SafeArea(child: Column(mainAxisSize: MainAxisSize.min, children: [
         ListTile(leading: const Icon(Icons.photo_camera_outlined),
-            title: const Text('Take photo'),
+            title: Text(UellowApi.instance.lang == 'ar' ? 'التقاط صورة' : 'Take photo'),
             onTap: () => Navigator.pop(context, ImageSource.camera)),
         ListTile(leading: const Icon(Icons.photo_library_outlined),
-            title: const Text('Choose from gallery'),
+            title: Text(UellowApi.instance.lang == 'ar' ? 'اختيار من المعرض' : 'Choose from gallery'),
             onTap: () => Navigator.pop(context, ImageSource.gallery)),
       ])));
     if (src == null) return;

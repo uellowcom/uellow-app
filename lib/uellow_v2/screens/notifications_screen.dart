@@ -46,9 +46,12 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       backgroundColor: UellowColors.bg,
       appBar: AppBar(
         leading: const BackButton(color: UellowColors.darkBrown),
-        title: const Text('Notifications', style: UT.h1),
-        actions: const [Padding(padding: EdgeInsets.symmetric(horizontal: 16),
-            child: Center(child: Text('Mark all read', style: TextStyle(
+        title: Text(UellowApi.instance.lang == 'ar' ? 'الإشعارات' : 'Notifications',
+            style: UT.h1),
+        actions: [Padding(padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Center(child: Text(
+                UellowApi.instance.lang == 'ar' ? 'تعليم الكل كمقروء' : 'Mark all read',
+                style: const TextStyle(
                 color: UellowColors.text, fontWeight: FontWeight.w700, fontSize: 12))))],
       ),
       body: SafeArea(bottom: false, child: FutureBuilder<List<Map<String, dynamic>>>(
@@ -68,14 +71,16 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   }
 
   Widget _empty() {
+    final ar = UellowApi.instance.lang == 'ar';
     return ListView(children: [
       const SizedBox(height: 120),
       const Center(child: Icon(Icons.notifications_off_outlined,
           size: 80, color: UellowColors.muted)),
       const SizedBox(height: 18),
-      const Center(child: Text('No notifications yet', style: UT.h2)),
+      Center(child: Text(ar ? 'لا توجد إشعارات بعد' : 'No notifications yet', style: UT.h2)),
       const SizedBox(height: 6),
-      const Center(child: Text("We'll let you know when there's news", style: UT.body)),
+      Center(child: Text(ar ? 'سنُعلمك عند وجود جديد' : "We'll let you know when there's news",
+          style: UT.body)),
     ]);
   }
 

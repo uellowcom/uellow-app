@@ -82,7 +82,8 @@ class _DynamicPageScreenState extends State<DynamicPageScreen>
               child: Column(mainAxisSize: MainAxisSize.min, children: [
                 const Icon(Icons.error_outline, size: 48, color: Colors.redAccent),
                 const SizedBox(height: 12),
-                const Text('Page not available', style: TextStyle(fontWeight: FontWeight.w900)),
+                Text(UellowApi.instance.lang == 'ar' ? 'الصفحة غير متاحة' : 'Page not available',
+                    style: const TextStyle(fontWeight: FontWeight.w900)),
                 const SizedBox(height: 6),
                 Text(snap.error.toString(), textAlign: TextAlign.center,
                     style: const TextStyle(color: Colors.black54)),
@@ -1755,10 +1756,11 @@ class _FlashDark extends StatelessWidget {
                     color: const Color(0xFFFFD340).withValues(alpha: 0.6),
                     blurRadius: 12)],
               ),
-              child: const Row(mainAxisSize: MainAxisSize.min, children: [
-                Icon(Icons.flash_on, color: Colors.black, size: 14),
-                SizedBox(width: 2),
-                Text('FLASH', style: TextStyle(color: Colors.black,
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                const Icon(Icons.flash_on, color: Colors.black, size: 14),
+                const SizedBox(width: 2),
+                Text(UellowApi.instance.lang == 'ar' ? 'فلاش' : 'FLASH',
+                    style: const TextStyle(color: Colors.black,
                     fontSize: 11, fontWeight: FontWeight.w900,
                     letterSpacing: 1.2)),
               ]),
@@ -1806,10 +1808,11 @@ class _FlashMinimal extends StatelessWidget {
               decoration: BoxDecoration(
                 color: const Color(0xFFC0392B),
                 borderRadius: BorderRadius.circular(4)),
-              child: const Row(mainAxisSize: MainAxisSize.min, children: [
-                Icon(Icons.flash_on, color: Colors.white, size: 12),
-                SizedBox(width: 2),
-                Text('FLASH', style: TextStyle(color: Colors.white,
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                const Icon(Icons.flash_on, color: Colors.white, size: 12),
+                const SizedBox(width: 2),
+                Text(UellowApi.instance.lang == 'ar' ? 'فلاش' : 'FLASH',
+                    style: const TextStyle(color: Colors.white,
                     fontSize: 10, fontWeight: FontWeight.w900,
                     letterSpacing: 0.8)),
               ]),
@@ -1925,11 +1928,11 @@ class _FlashHeroState extends State<_FlashHero> {
                           decoration: BoxDecoration(
                             color: Colors.white,
                             borderRadius: BorderRadius.circular(20)),
-                          child: const Row(mainAxisSize: MainAxisSize.min, children: [
-                            Icon(Icons.flash_on, color: Color(0xFFC0392B), size: 14),
-                            SizedBox(width: 2),
-                            Text('FLASH',
-                                style: TextStyle(color: Color(0xFFC0392B),
+                          child: Row(mainAxisSize: MainAxisSize.min, children: [
+                            const Icon(Icons.flash_on, color: Color(0xFFC0392B), size: 14),
+                            const SizedBox(width: 2),
+                            Text(UellowApi.instance.lang == 'ar' ? 'فلاش' : 'FLASH',
+                                style: const TextStyle(color: Color(0xFFC0392B),
                                     fontSize: 11, fontWeight: FontWeight.w900,
                                     letterSpacing: 0.8)),
                           ]),

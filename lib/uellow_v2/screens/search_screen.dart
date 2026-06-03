@@ -229,10 +229,11 @@ class _SearchScreenState extends State<SearchScreen> {
           return const Center(child: CircularProgressIndicator());
         }
         final d = snap.data ?? _IdleData.empty();
+        final ar = UellowApi.instance.lang == 'ar';
         return ListView(children: [
           if (d.recent.isNotEmpty) _section(
-            title: 'RECENT SEARCHES',
-            trailing: 'Clear all',
+            title: ar ? 'عمليات البحث الأخيرة' : 'RECENT SEARCHES',
+            trailing: ar ? 'مسح الكل' : 'Clear all',
             onTrailing: _clearRecent,
             child: Wrap(spacing: 6, runSpacing: 6, children: d.recent.map((m) {
               final q = m['query'] as String? ?? '';
@@ -251,7 +252,7 @@ class _SearchScreenState extends State<SearchScreen> {
             }).toList()),
           ),
           if (d.trending.isNotEmpty) _section(
-            title: 'TRENDING TODAY  🔥',
+            title: ar ? 'الأكثر رواجاً اليوم  🔥' : 'TRENDING TODAY  🔥',
             child: GridView.builder(
               shrinkWrap: true, physics: const NeverScrollableScrollPhysics(),
               gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
@@ -297,7 +298,7 @@ class _SearchScreenState extends State<SearchScreen> {
             ),
           ),
           if (d.categories.isNotEmpty) _section(
-            title: 'BROWSE CATEGORIES', child: SizedBox(
+            title: ar ? 'تصفّح الفئات' : 'BROWSE CATEGORIES', child: SizedBox(
               height: 100,
               child: ListView.separated(
                 scrollDirection: Axis.horizontal,
@@ -339,12 +340,13 @@ class _SearchScreenState extends State<SearchScreen> {
             ),
           ),
           if (d.recent.isEmpty && d.trending.isEmpty)
-            const Padding(
-              padding: EdgeInsets.fromLTRB(28, 80, 28, 30),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(28, 80, 28, 30),
               child: Column(children: [
-                Icon(Icons.search, size: 64, color: UellowColors.muted),
-                SizedBox(height: 12),
-                Text('Start typing to search 30,000+ products',
+                const Icon(Icons.search, size: 64, color: UellowColors.muted),
+                const SizedBox(height: 12),
+                Text(ar ? 'ابدأ الكتابة للبحث في أكثر من ٣٠٠٠٠ منتج'
+                        : 'Start typing to search 30,000+ products',
                     textAlign: TextAlign.center, style: UT.body),
               ]),
             ),
@@ -397,7 +399,9 @@ class _SearchScreenState extends State<SearchScreen> {
             child: Column(children: [
               const Icon(Icons.search_off, size: 64, color: UellowColors.muted),
               const SizedBox(height: 12),
-              Text('No products match "${_ctrl.text}"',
+              Text(lang == 'ar'
+                  ? 'لا توجد منتجات تطابق "${_ctrl.text}"'
+                  : 'No products match "${_ctrl.text}"',
                   textAlign: TextAlign.center, style: UT.body),
             ]),
           );
@@ -406,8 +410,8 @@ class _SearchScreenState extends State<SearchScreen> {
           Container(
             color: Colors.white,
             padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
-            child: const Text('SUGGESTED RESULTS',
-                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800,
+            child: Text(lang == 'ar' ? 'نتائج مقترحة' : 'SUGGESTED RESULTS',
+                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800,
                     color: UellowColors.muted, letterSpacing: 0.5)),
           ),
           Container(
@@ -444,7 +448,9 @@ class _SearchScreenState extends State<SearchScreen> {
             padding: const EdgeInsets.all(16),
             child: ElevatedButton(
               onPressed: () => _goSeeAll(_ctrl.text),
-              child: Text('See all results for "${_ctrl.text.trim()}"  →'),
+              child: Text(lang == 'ar'
+                  ? 'عرض كل النتائج لـ "${_ctrl.text.trim()}"  ←'
+                  : 'See all results for "${_ctrl.text.trim()}"  →'),
             ),
           ),
         ]);

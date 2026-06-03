@@ -4,6 +4,7 @@
 // =============================================================================
 import 'package:flutter/material.dart';
 
+import '../../api/uellow_api.dart';
 import '../theme/uellow_theme.dart';
 
 class VendorScreen extends StatefulWidget {
@@ -15,7 +16,9 @@ class VendorScreen extends StatefulWidget {
 
 class _VendorScreenState extends State<VendorScreen> {
   int _tab = 0;
-  static const _tabs = ['All','New','Best sellers','⚡ Flash','Categories','Reviews','About'];
+  static List<String> get _tabs => UellowApi.instance.lang == 'ar'
+      ? const ['الكل','جديد','الأكثر مبيعاً','⚡ فلاش','الفئات','التقييمات','حول']
+      : const ['All','New','Best sellers','⚡ Flash','Categories','Reviews','About'];
 
   @override
   Widget build(BuildContext context) {
@@ -30,11 +33,11 @@ class _VendorScreenState extends State<VendorScreen> {
             tab: _tab, onChange: (i) => setState(() => _tab = i),
           )),
         ],
-        body: ListView(padding: EdgeInsets.zero, children: const [
-          _InternalFlash(),
-          _ProductsSection(title: 'New arrivals'),
-          _ProductsSection(title: 'Best sellers'),
-          SizedBox(height: 30),
+        body: ListView(padding: EdgeInsets.zero, children: [
+          const _InternalFlash(),
+          _ProductsSection(title: UellowApi.instance.lang == 'ar' ? 'وصل حديثاً' : 'New arrivals'),
+          _ProductsSection(title: UellowApi.instance.lang == 'ar' ? 'الأكثر مبيعاً' : 'Best sellers'),
+          const SizedBox(height: 30),
         ]),
       )),
     );
@@ -108,8 +111,9 @@ class _Info extends StatelessWidget {
           const Padding(padding: EdgeInsets.only(top: 4),
               child: Text('Uellow Official', style: UT.h1)),
           const SizedBox(height: 4),
-          const Text('Authorized seller · same-day shipping',
-              style: TextStyle(fontSize: 11.5, color: UellowColors.muted)),
+          Text(UellowApi.instance.lang == 'ar'
+              ? 'بائع معتمد · شحن في نفس اليوم' : 'Authorized seller · same-day shipping',
+              style: const TextStyle(fontSize: 11.5, color: UellowColors.muted)),
           const SizedBox(height: 2),
           Row(children: const [
             Text('★★★★★', style: TextStyle(color: UellowColors.yellow, fontSize: 11, letterSpacing: -1)),
@@ -125,13 +129,14 @@ class _Info extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
                 shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(8))),
               ),
-              child: const Text('+ Follow', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+              child: Text(UellowApi.instance.lang == 'ar' ? '+ متابعة' : '+ Follow',
+                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
             ),
             const SizedBox(width: 6),
             OutlinedButton.icon(
               onPressed: () {},
               icon: const Icon(Icons.chat_bubble_outline, size: 13),
-              label: const Text('Chat'),
+              label: Text(UellowApi.instance.lang == 'ar' ? 'محادثة' : 'Chat'),
               style: OutlinedButton.styleFrom(
                 foregroundColor: UellowColors.darkBrown,
                 side: BorderSide.none,
@@ -235,11 +240,13 @@ class _InternalFlash extends StatelessWidget {
       ),
       child: Column(children: [
         Row(children: [
-          const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('⚡ Vendor Flash · Uellow', style: TextStyle(
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(UellowApi.instance.lang == 'ar' ? '⚡ فلاش المتجر · Uellow' : '⚡ Vendor Flash · Uellow',
+                style: const TextStyle(
                 color: Colors.white, fontSize: 16, fontWeight: FontWeight.w900)),
-            Text('Exclusive deals from this store',
-                style: TextStyle(color: Colors.white70, fontSize: 11)),
+            Text(UellowApi.instance.lang == 'ar'
+                ? 'عروض حصرية من هذا المتجر' : 'Exclusive deals from this store',
+                style: const TextStyle(color: Colors.white70, fontSize: 11)),
           ])),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
@@ -304,7 +311,8 @@ class _ProductsSection extends StatelessWidget {
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
           Expanded(child: Text(title, style: UT.h3)),
-          const Text('See all →', style: TextStyle(
+          Text(UellowApi.instance.lang == 'ar' ? 'عرض الكل ←' : 'See all →',
+              style: const TextStyle(
               fontSize: 11, fontWeight: FontWeight.w700, color: UellowColors.text)),
         ]),
         const SizedBox(height: 12),

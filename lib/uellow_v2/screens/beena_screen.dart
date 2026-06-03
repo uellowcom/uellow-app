@@ -290,7 +290,8 @@ class _MsgBubble extends StatelessWidget {
                   borderRadius: BorderRadius.all(Radius.circular(6)),
                 ),
                 alignment: Alignment.center,
-                child: const Text('View', style: TextStyle(
+                child: Text(UellowApi.instance.lang == 'ar' ? 'عرض' : 'View',
+                    style: const TextStyle(
                     color: UellowColors.darkBrown, fontSize: 10, fontWeight: FontWeight.w800)),
               ),
             ]),

@@ -2725,8 +2725,8 @@ class _ProductTile extends StatelessWidget {
               color: const Color(0xFF6E4AB0),
               borderRadius: BorderRadius.circular(3),
             ),
-            child: const Text('AD',
-                style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w900)),
+            child: Text(UellowApi.instance.lang == 'ar' ? 'إعلان' : 'AD',
+                style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w900)),
           ),
         ),
     ]);

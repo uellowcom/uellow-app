@@ -300,10 +300,10 @@ class _AddressFormState extends State<_AddressForm> {
       context: context, builder: (_) => SafeArea(child: Column(mainAxisSize: MainAxisSize.min,
           children: [
         ListTile(leading: const Icon(Icons.photo_camera_outlined),
-            title: const Text('Take photo'),
+            title: Text(UellowApi.instance.lang == 'ar' ? 'التقاط صورة' : 'Take photo'),
             onTap: () => Navigator.pop(context, ImageSource.camera)),
         ListTile(leading: const Icon(Icons.photo_library_outlined),
-            title: const Text('Choose from gallery'),
+            title: Text(UellowApi.instance.lang == 'ar' ? 'اختيار من المعرض' : 'Choose from gallery'),
             onTap: () => Navigator.pop(context, ImageSource.gallery)),
       ])));
     if (src == null) return;

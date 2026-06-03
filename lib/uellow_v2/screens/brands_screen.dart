@@ -31,7 +31,7 @@ class _BrandsScreenState extends State<BrandsScreen> {
       backgroundColor: UellowColors.bg,
       appBar: AppBar(
         leading: const BackButton(color: UellowColors.darkBrown),
-        title: const Text('All Brands', style: UT.h1),
+        title: Text(UellowApi.instance.lang == 'ar' ? 'كل الماركات' : 'All Brands', style: UT.h1),
       ),
       body: SafeArea(bottom: false, child: Stack(children: [
         ListView(padding: EdgeInsets.zero, children: [
@@ -58,11 +58,11 @@ class _BrandsScreenState extends State<BrandsScreen> {
           color: UellowColors.border,
           borderRadius: BorderRadius.all(Radius.circular(12)),
         ),
-        child: Row(children: const [
-          Icon(Icons.search, size: 18, color: UellowColors.muted),
-          SizedBox(width: 10),
-          Text('Search brand or vendor…',
-              style: TextStyle(fontSize: 13, color: UellowColors.muted)),
+        child: Row(children: [
+          const Icon(Icons.search, size: 18, color: UellowColors.muted),
+          const SizedBox(width: 10),
+          Text(UellowApi.instance.lang == 'ar' ? 'ابحث عن ماركة أو متجر…' : 'Search brand or vendor…',
+              style: const TextStyle(fontSize: 13, color: UellowColors.muted)),
         ]),
       ),
     );
