@@ -8,6 +8,112 @@ import 'package:webview_flutter/webview_flutter.dart';
 
 import '../theme/uellow_theme.dart';
 
+/// v2.1.14 — Payment DIALOG: opens the gateway page (KNET / Apple Pay /
+/// card — white-label links go straight to the chosen gateway) as a modal
+/// bottom sheet ON TOP of the checkout, instead of navigating away to a
+/// full page. Returns true only when the gateway redirected to the
+/// return/status URL without a failure result.
+Future<bool> showPaymentSheet(BuildContext context,
+    {required String url, required String title}) async {
+  final r = await showModalBottomSheet<bool>(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    useSafeArea: true,
+    builder: (_) => _PaymentSheet(url: url, title: title),
+  );
+  return r == true;
+}
+
+class _PaymentSheet extends StatefulWidget {
+  const _PaymentSheet({required this.url, required this.title});
+  final String url;
+  final String title;
+  @override
+  State<_PaymentSheet> createState() => _PaymentSheetState();
+}
+
+class _PaymentSheetState extends State<_PaymentSheet> {
+  late final WebViewController _controller;
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = WebViewController()
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..setBackgroundColor(Colors.white)
+      ..setNavigationDelegate(NavigationDelegate(
+        onNavigationRequest: (req) {
+          final u = req.url;
+          if (u.contains('/payments/upayments/return') || u.contains('/payment/status')) {
+            final up = u.toUpperCase();
+            final failed = up.contains('NOT_CAPTURED') || up.contains('FAILED')
+                || up.contains('CANCELED') || up.contains('CANCELLED');
+            if (mounted) Navigator.of(context).maybePop(!failed);
+            return NavigationDecision.prevent;
+          }
+          if (u.contains('/payments/upayments/cancel')) {
+            if (mounted) Navigator.of(context).maybePop(false);
+            return NavigationDecision.prevent;
+          }
+          return NavigationDecision.navigate;
+        },
+        onPageFinished: (_) {
+          if (mounted) setState(() => _loading = false);
+        },
+      ))
+      ..loadRequest(Uri.parse(widget.url));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: const BorderRadius.vertical(top: Radius.circular(22)),
+      child: SizedBox(
+        height: MediaQuery.of(context).size.height * 0.92,
+        child: Scaffold(
+          backgroundColor: Colors.white,
+          body: SafeArea(
+            top: false,
+            child: Column(children: [
+              // Grab handle + header
+              Container(
+                margin: const EdgeInsets.only(top: 10),
+                width: 44, height: 4,
+                decoration: BoxDecoration(
+                  color: UellowColors.border,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 6, 6, 0),
+                child: Row(children: [
+                  const Icon(Icons.lock_outline,
+                      size: 16, color: UellowColors.success),
+                  const SizedBox(width: 6),
+                  Expanded(child: Text(widget.title,
+                      style: const TextStyle(fontSize: 15,
+                          fontWeight: FontWeight.w800,
+                          color: UellowColors.darkBrown))),
+                  IconButton(
+                    icon: const Icon(Icons.close, color: UellowColors.muted),
+                    onPressed: () => Navigator.of(context).maybePop(false),
+                  ),
+                ]),
+              ),
+              if (_loading) const LinearProgressIndicator(
+                  backgroundColor: UellowColors.border, minHeight: 2,
+                  color: UellowColors.darkBrown),
+              Expanded(child: WebViewWidget(controller: _controller)),
+            ]),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class WebViewScreen extends StatefulWidget {
   const WebViewScreen({super.key, required this.url, required this.title});
   final String url;

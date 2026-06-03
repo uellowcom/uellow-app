@@ -25,6 +25,7 @@ import '../theme/uellow_theme.dart';
 import 'address_picker_screen.dart';
 import 'auth_screen.dart';
 import 'order_confirmation_screen.dart';
+import 'webview_screen.dart';
 
 class CheckoutScreen extends StatefulWidget {
   const CheckoutScreen({super.key});
@@ -167,11 +168,12 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       // route to the order-confirmation screen.
       final ar = UellowApi.instance.lang == 'ar';
       if (result.paymentRequired && (result.paymentUrl ?? '').isNotEmpty) {
-        final paid = await Navigator.pushNamed<bool>(context, Routes.webview,
-          arguments: {
-            'url': result.paymentUrl!,
-            'title': ar ? 'الدفع' : 'Payment',
-          });
+        // v2.1.14 — payment opens as a DIALOG over the checkout (white-label
+        // links land straight on the chosen gateway: KNET / Apple Pay / card)
+        // instead of navigating away to a separate page.
+        final paid = await showPaymentSheet(context,
+            url: result.paymentUrl!,
+            title: ar ? 'الدفع الآمن' : 'Secure payment');
         if (!mounted) return;
         // Cancelled / not completed / closed with back → cart is preserved
         // (online order stayed a draft until payment). Only an explicit `true`
