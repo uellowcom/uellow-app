@@ -707,8 +707,9 @@ class _ShippingMethodList extends StatelessWidget {
             ),
             const SizedBox(width: 12),
             Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              // v2.1.15 — smaller label per request (long names were loud).
               Text(name, style: const TextStyle(
-                  fontSize: 13.5, fontWeight: FontWeight.w800, color: UellowColors.ink)),
+                  fontSize: 12, fontWeight: FontWeight.w800, color: UellowColors.ink)),
               if (cutoff.isNotEmpty) Padding(
                 padding: const EdgeInsets.only(top: 2),
                 child: Text(lang == 'ar' ? 'اطلب قبل $cutoff' : 'Order before $cutoff',

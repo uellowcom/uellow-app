@@ -469,20 +469,27 @@ class _DeliveryBar extends StatelessWidget {
         borderRadius: BorderRadius.all(Radius.circular(12)),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        if (info.qualified) const Text.rich(TextSpan(
-          style: TextStyle(fontSize: 12, color: UellowColors.text), children: [
-            TextSpan(text: '🎉 You qualified for ', style: TextStyle()),
-            TextSpan(text: 'FREE delivery!',
-                style: TextStyle(color: UellowColors.successDk, fontWeight: FontWeight.w800)),
+        // v2.1.15 — bilingual (the progress label was English-only).
+        if (info.qualified) Text.rich(TextSpan(
+          style: const TextStyle(fontSize: 12, color: UellowColors.text), children: [
+            TextSpan(text: UellowApi.instance.lang == 'ar'
+                ? '🎉 تأهلت للحصول على ' : '🎉 You qualified for '),
+            TextSpan(text: UellowApi.instance.lang == 'ar'
+                ? 'توصيل مجاني!' : 'FREE delivery!',
+                style: const TextStyle(color: UellowColors.successDk,
+                    fontWeight: FontWeight.w800)),
           ],
         )) else Text.rich(TextSpan(
           style: const TextStyle(fontSize: 12, color: UellowColors.text), children: [
-            const TextSpan(text: 'Add '),
+            TextSpan(text: UellowApi.instance.lang == 'ar' ? 'أضف ' : 'Add '),
             TextSpan(text: info.remaining.format(), style: const TextStyle(
                 color: UellowColors.darkBrown, fontWeight: FontWeight.w800)),
-            const TextSpan(text: ' more for '),
-            const TextSpan(text: 'FREE delivery', style: TextStyle(
-                color: UellowColors.darkBrown, fontWeight: FontWeight.w800)),
+            TextSpan(text: UellowApi.instance.lang == 'ar'
+                ? ' للحصول على ' : ' more for '),
+            TextSpan(text: UellowApi.instance.lang == 'ar'
+                ? 'توصيل مجاني' : 'FREE delivery',
+                style: const TextStyle(color: UellowColors.darkBrown,
+                    fontWeight: FontWeight.w800)),
           ],
         )),
         const SizedBox(height: 6),

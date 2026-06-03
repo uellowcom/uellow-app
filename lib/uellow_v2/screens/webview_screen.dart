@@ -3,6 +3,8 @@
 // etc. Loads a URL and injects a small bit of CSS to hide the website's
 // header / footer / cookie banner so the content reads like a native page.
 // =============================================================================
+import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
@@ -20,6 +22,10 @@ Future<bool> showPaymentSheet(BuildContext context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
     useSafeArea: true,
+    // v2.1.15 — the sheet's drag gesture was swallowing vertical swipes, so
+    // long gateway pages could not scroll. Dragging is disabled (close via
+    // the X button) and the webview claims all touch gestures below.
+    enableDrag: false,
     builder: (_) => _PaymentSheet(url: url, title: title),
   );
   return r == true;
@@ -105,7 +111,15 @@ class _PaymentSheetState extends State<_PaymentSheet> {
               if (_loading) const LinearProgressIndicator(
                   backgroundColor: UellowColors.border, minHeight: 2,
                   color: UellowColors.darkBrown),
-              Expanded(child: WebViewWidget(controller: _controller)),
+              Expanded(child: WebViewWidget(
+                controller: _controller,
+                // Let the webview win every gesture inside its area so the
+                // payment page scrolls/zooms normally inside the sheet.
+                gestureRecognizers: {
+                  Factory<OneSequenceGestureRecognizer>(
+                      EagerGestureRecognizer.new),
+                },
+              )),
             ]),
           ),
         ),
