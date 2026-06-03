@@ -435,7 +435,11 @@ class _ReelSlideState extends State<_ReelSlide> {
             : 'Sign in or create an account to save to wishlist'),
         action: SnackBarAction(
           label: ar ? 'تسجيل الدخول' : 'Sign in',
-          onPressed: () => Navigator.pushNamed(context, Routes.auth),
+          onPressed: () async {
+            _pause();
+            await Navigator.pushNamed(context, Routes.auth);
+            _resumeIfActive();
+          },
         ),
       ));
       return;
@@ -459,17 +463,38 @@ class _ReelSlideState extends State<_ReelSlide> {
     }
   }
 
+  // Fully stop playback (frees the stream / saves data) while we're on
+  // another screen, then resume only if this slide is still the active one.
+  void _pause() => _ctrl?.pause();
+  void _resumeIfActive() {
+    if (mounted && widget.active && _ctrl != null && _ctrl!.value.isInitialized) {
+      _ctrl!.play();
+    }
+  }
+
+  Future<void> _goProduct() async {
+    _pause();
+    await Navigator.of(context)
+        .pushNamed(Routes.product, arguments: {'id': _productId});
+    _resumeIfActive();
+  }
+
   Future<void> _share() async {
+    _pause();
     final slug = (_product['slug'] as String?) ?? '';
-    Share.share('${UellowApi.instance.baseUrl}/shop/$slug');
     setState(() => _shares += 1);
     try {
       await http.post(Uri.parse('${UellowApi.instance.baseUrl}'
           '/api/mobile/v2/videos/$_videoId/share'));
     } catch (_) {}
+    try {
+      await Share.share('${UellowApi.instance.baseUrl}/shop/$slug');
+    } catch (_) {}
+    _resumeIfActive();
   }
 
   void _openComments() {
+    _pause();
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -478,7 +503,7 @@ class _ReelSlideState extends State<_ReelSlide> {
         videoId: _videoId, ar: widget.ar,
         onAdded: () { if (mounted) setState(() => _comments += 1); },
       ),
-    );
+    ).whenComplete(_resumeIfActive);
   }
 
   @override
@@ -580,7 +605,7 @@ class _ReelSlideState extends State<_ReelSlide> {
           ]),
           const SizedBox(height: 8),
           GestureDetector(
-            onTap: () => UellowRouter.goProduct(context, _productId),
+            onTap: _goProduct,
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
               decoration: BoxDecoration(color: UellowColors.yellow,
@@ -610,7 +635,7 @@ class _ReelSlideState extends State<_ReelSlide> {
             onTap: _openComments),
         const SizedBox(height: 14),
         _RailBtn(icon: Icons.shopping_cart_outlined, label: '',
-            onTap: () => UellowRouter.goProduct(context, _productId)),
+            onTap: _goProduct),
         const SizedBox(height: 14),
         _RailBtn(icon: Icons.reply, label: _shares > 0 ? _fmt(_shares) : '',
             onTap: _share),
