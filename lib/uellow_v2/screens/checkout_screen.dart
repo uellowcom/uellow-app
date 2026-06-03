@@ -521,6 +521,28 @@ class _AddressList extends StatelessWidget {
     // Only the selected address is shown; tap opens a picker.
     final current = addresses.firstWhere(
       (a) => a['id'] == selected, orElse: () => addresses.first);
+    // v2.1.19 — an INCOMPLETE address (e.g. fresh OTP signup) opens the
+    // completion form on the SAME record directly. This edit path only
+    // exists while the address is incomplete — a one-time completion.
+    if (!addrComplete(current)) {
+      return GestureDetector(
+        onTap: () async {
+          await showModalBottomSheet(
+            context: context, isScrollControlled: true,
+            backgroundColor: Colors.transparent,
+            builder: (_) => AddressFormSheet(
+              initial: UellowAddress.fromJson(current),
+              onSaved: () {},
+            ),
+          );
+          final state = context.findAncestorStateOfType<_CheckoutScreenState>();
+          if (state != null && state.mounted) {
+            state.setState(() { state._data = state._bootstrap(); });
+          }
+        },
+        child: _addrCard(current, selected: true, showChevron: true),
+      );
+    }
     return GestureDetector(
       onTap: () => _openPicker(context),
       child: _addrCard(current, selected: true, showChevron: true),

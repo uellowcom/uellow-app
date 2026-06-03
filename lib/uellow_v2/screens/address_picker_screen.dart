@@ -90,17 +90,26 @@ class _AddressPickerScreenState extends State<AddressPickerScreen> {
     } catch (_) { _wv = null; }
   }
 
+  Map<String, dynamic> _reverseDetails = const {};
+
   Future<void> _reverseGeocode() async {
     try {
       final r = await http.get(Uri.parse(
         'https://nominatim.openstreetmap.org/reverse?format=jsonv2'
+        '&addressdetails=1'
         '&lat=$_lat&lon=$_lng&accept-language=${UellowApi.instance.lang}'),
         headers: {'User-Agent': 'UellowApp/2.0 (support@uellow.com)'},
       ).timeout(const Duration(seconds: 6));
       if (r.statusCode == 200) {
         final j = jsonDecode(r.body) as Map<String, dynamic>;
         final display = (j['display_name'] as String?) ?? '';
-        if (mounted) setState(() => _reverseAddress = display);
+        if (mounted) setState(() {
+          _reverseAddress = display;
+          // v2.1.19 — structured pieces so the form can split governorate
+          // (state) from city and prefill the street.
+          _reverseDetails = (j['address'] as Map?)?.cast<String, dynamic>()
+              ?? const {};
+        });
       }
     } catch (_) {}
   }
@@ -173,6 +182,7 @@ map.on('move',function(){
       backgroundColor: Colors.transparent,
       builder: (_) => _AddressForm(
         lat: _lat, lng: _lng, reverseAddress: _reverseAddress,
+        reverseDetails: _reverseDetails,
         onSaved: (newId) {
           widget.onSaved?.call();
           // Pop the address picker AND pass the new id back to the caller
@@ -256,11 +266,13 @@ class _AddressCard extends StatelessWidget {
 class _AddressForm extends StatefulWidget {
   const _AddressForm({
     required this.lat, required this.lng, required this.reverseAddress,
+    this.reverseDetails = const {},
     required this.onSaved,
   });
   final double lat;
   final double lng;
   final String reverseAddress;
+  final Map<String, dynamic> reverseDetails;
   final void Function(int? newAddressId) onSaved;
   @override
   State<_AddressForm> createState() => _AddressFormState();
@@ -272,8 +284,12 @@ class _AddressFormState extends State<_AddressForm> {
   final _phone = TextEditingController();
   final _email = TextEditingController();
   final _country = TextEditingController(text: 'Kuwait');
+  final _governorate = TextEditingController();
   final _city = TextEditingController();
   final _area = TextEditingController();
+  // v2.1.19 — phone country dial code (flag + searchable picker).
+  String _dialFlag = '🇰🇼';
+  String _dialCode = '965';
   final _block = TextEditingController();
   final _street = TextEditingController();
   final _building = TextEditingController();
@@ -286,12 +302,35 @@ class _AddressFormState extends State<_AddressForm> {
   @override
   void initState() {
     super.initState();
-    // Pre-fill from reverse-geocode if it parsed cleanly.
-    final parts = widget.reverseAddress.split(',').map((s) => s.trim()).toList();
-    if (parts.length >= 3) {
-      _street.text = parts[0];
-      _area.text = parts.length > 1 ? parts[1] : '';
-      _city.text = parts.length > 2 ? parts[parts.length - 3] : '';
+    // v2.1.19 — pre-fill from the STRUCTURED reverse-geocode: the map
+    // detects governorate (state) and city separately.
+    final d = widget.reverseDetails;
+    String pick(List<String> keys) {
+      for (final k in keys) {
+        final v = (d[k] ?? '').toString().trim();
+        if (v.isNotEmpty) return v;
+      }
+      return '';
+    }
+    _street.text = pick(['road', 'pedestrian', 'footway']);
+    _governorate.text = pick(['state', 'province', 'region', 'county']);
+    _city.text = pick(['city', 'town', 'suburb', 'village',
+        'neighbourhood', 'city_district']);
+    final cn = pick(['country']);
+    if (cn.isNotEmpty) _country.text = cn;
+    if (_street.text.isEmpty || _city.text.isEmpty) {
+      // Fallback to the old display_name split.
+      final parts = widget.reverseAddress.split(',')
+          .map((s) => s.trim()).toList();
+      if (parts.length >= 3) {
+        if (_street.text.isEmpty) _street.text = parts[0];
+        if (_city.text.isEmpty) _city.text = parts[1];
+      }
+    }
+    // Rebuild on every keystroke so field colors react live.
+    for (final c in [_name, _phone, _email, _country, _governorate,
+        _city, _area, _block, _street, _building, _floor, _apt, _notes]) {
+      c.addListener(() { if (mounted) setState(() {}); });
     }
   }
 
@@ -316,9 +355,11 @@ class _AddressFormState extends State<_AddressForm> {
 
   Future<void> _save() async {
     final ar = UellowApi.instance.lang == 'ar';
-    if (_phone.text.trim().isEmpty || _name.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(
-          ar ? 'الاسم والهاتف مطلوبان' : 'Name and phone are required')));
+    if (_phone.text.trim().isEmpty || _name.text.trim().isEmpty
+        || _city.text.trim().isEmpty || _street.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(ar
+          ? 'الحقول الحمراء مطلوبة: الاسم، الهاتف، المدينة، الشارع'
+          : 'Red fields are required: name, phone, city, street')));
       return;
     }
     setState(() => _busy = true);
@@ -329,14 +370,23 @@ class _AddressFormState extends State<_AddressForm> {
         if (_floor.text.trim().isNotEmpty) 'Floor ${_floor.text.trim()}',
         if (_apt.text.trim().isNotEmpty) 'Apt ${_apt.text.trim()}',
       ].join(', ');
+      // Phone: prepend the picked dial code unless the user typed one.
+      var rawPhone = _phone.text.trim();
+      if (!rawPhone.startsWith('+') && !rawPhone.startsWith('00')) {
+        rawPhone = '+$_dialCode${rawPhone.replaceAll(RegExp(r'[^0-9]'), '')}';
+      }
+      final street2x = [
+        if (_area.text.trim().isNotEmpty) _area.text.trim(),
+        if (street2.isNotEmpty) street2,
+      ].join(', ');
       final body = {
         'name': _name.text.trim(),
-        'phone': _phone.text.trim(),
+        'phone': rawPhone,
         'email': _email.text.trim(),
         'street': _street.text.trim(),
-        'street2': street2,
+        'street2': street2x,
         'city': _city.text.trim(),
-        'state': _area.text.trim(),
+        'state': _governorate.text.trim(),
         'country_code': _countryCode(_country.text.trim()),
         'type': 'delivery',
         'address_label': _label.text.trim(),
@@ -432,27 +482,34 @@ class _AddressFormState extends State<_AddressForm> {
             // ── Recipient
             _section(ar ? 'بيانات المستلم' : 'Recipient', Icons.person_outline),
             _f(ar ? 'الاسم الكامل' : 'Full name', _name,
-                icon: Icons.person_outline,
+                icon: Icons.person_outline, required: true,
                 hint: ar ? 'مثال: علي محمد' : 'e.g. John Smith'),
-            _f(ar ? 'رقم الهاتف' : 'Phone number', _phone,
-                type: TextInputType.phone,
-                icon: Icons.phone_outlined,
-                hint: '+965 9999 9999'),
+            _phoneField(ar),
             _f(ar ? 'البريد الإلكتروني (اختياري)' : 'Email (optional)', _email,
                 type: TextInputType.emailAddress,
                 icon: Icons.alternate_email),
             // ── Delivery location
             _section(ar ? 'موقع التوصيل' : 'Delivery location', Icons.map_outlined),
-            _f(ar ? 'الدولة' : 'Country', _country, icon: Icons.public),
-            _f(ar ? 'المحافظة / المدينة' : 'Governorate / City', _city,
-                icon: Icons.location_city_outlined),
-            _f(ar ? 'المنطقة' : 'Area', _area,
+            _f(ar ? 'الدولة' : 'Country', _country, icon: Icons.public,
+                required: true),
+            Row(children: [
+              Expanded(child: _f(ar ? 'المحافظة' : 'Governorate', _governorate,
+                  icon: Icons.account_balance_outlined, padded: false,
+                  required: true)),
+              const SizedBox(width: 10),
+              Expanded(child: _f(ar ? 'المدينة' : 'City', _city,
+                  icon: Icons.location_city_outlined, padded: false,
+                  required: true)),
+            ]),
+            const SizedBox(height: 10),
+            _f(ar ? 'المنطقة (اختياري)' : 'Area (optional)', _area,
                 icon: Icons.place_outlined),
             Row(children: [
               Expanded(child: _f(ar ? 'القطعة' : 'Block', _block, padded: false)),
               const SizedBox(width: 10),
               Expanded(flex: 2,
-                  child: _f(ar ? 'الشارع' : 'Street', _street, padded: false)),
+                  child: _f(ar ? 'الشارع' : 'Street', _street, padded: false,
+                      required: true)),
             ]),
             const SizedBox(height: 10),
             Row(children: [
@@ -569,9 +626,17 @@ class _AddressFormState extends State<_AddressForm> {
     );
   }
 
+  // v2.1.19 — live status colors: filled → green, required+empty → red,
+  // optional+empty → yellow. Cells have a light-grey background.
+  Color _fieldColor(TextEditingController c, bool required) {
+    if (c.text.trim().isNotEmpty) return UellowColors.success;
+    return required ? UellowColors.danger : const Color(0xFFD9A406);
+  }
+
   Widget _f(String label, TextEditingController c,
       {TextInputType? type, int lines = 1, bool padded = true,
-      IconData? icon, String? hint}) {
+      IconData? icon, String? hint, bool required = false}) {
+    final col = _fieldColor(c, required);
     final field = TextField(
       controller: c,
       keyboardType: type,
@@ -579,19 +644,197 @@ class _AddressFormState extends State<_AddressForm> {
       style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600),
       decoration: InputDecoration(
         labelText: label,
+        labelStyle: TextStyle(fontSize: 12.5, color: col,
+            fontWeight: FontWeight.w700),
         hintText: hint,
         hintStyle: const TextStyle(fontSize: 12, color: UellowColors.muted),
-        prefixIcon: icon != null ? Icon(icon, size: 18,
-            color: UellowColors.muted) : null,
+        prefixIcon: icon != null ? Icon(icon, size: 18, color: col) : null,
         prefixIconConstraints: const BoxConstraints(minWidth: 38),
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(11)),
+        filled: true,
+        fillColor: const Color(0xFFF4F5F7),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(11),
+          borderSide: BorderSide(color: col, width: 1.3)),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(11),
+          borderSide: BorderSide(color: col, width: 1.3)),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(11),
-          borderSide: const BorderSide(color: UellowColors.darkBrown, width: 1.5)),
+          borderSide: BorderSide(color: col, width: 2)),
         isDense: true,
         contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
       ),
     );
     return padded ? Padding(padding: const EdgeInsets.only(bottom: 10), child: field) : field;
+  }
+
+  // ── Phone with country dial code (flag + searchable picker) ─────────
+  static const _dials = [
+    ('🇰🇼', '965', 'Kuwait', 'الكويت'),
+    ('🇸🇦', '966', 'Saudi Arabia', 'السعودية'),
+    ('🇶🇦', '974', 'Qatar', 'قطر'),
+    ('🇦🇪', '971', 'UAE', 'الإمارات'),
+    ('🇧🇭', '973', 'Bahrain', 'البحرين'),
+    ('🇴🇲', '968', 'Oman', 'عُمان'),
+    ('🇪🇬', '20', 'Egypt', 'مصر'),
+    ('🇺🇸', '1', 'United States', 'أمريكا'),
+    ('🇯🇴', '962', 'Jordan', 'الأردن'),
+    ('🇱🇧', '961', 'Lebanon', 'لبنان'),
+    ('🇮🇶', '964', 'Iraq', 'العراق'),
+    ('🇸🇾', '963', 'Syria', 'سوريا'),
+    ('🇵🇸', '970', 'Palestine', 'فلسطين'),
+    ('🇾🇪', '967', 'Yemen', 'اليمن'),
+    ('🇹🇷', '90', 'Turkey', 'تركيا'),
+    ('🇮🇳', '91', 'India', 'الهند'),
+    ('🇵🇰', '92', 'Pakistan', 'باكستان'),
+    ('🇧🇩', '880', 'Bangladesh', 'بنغلاديش'),
+    ('🇵🇭', '63', 'Philippines', 'الفلبين'),
+    ('🇱🇰', '94', 'Sri Lanka', 'سريلانكا'),
+    ('🇳🇵', '977', 'Nepal', 'نيبال'),
+    ('🇮🇩', '62', 'Indonesia', 'إندونيسيا'),
+    ('🇲🇦', '212', 'Morocco', 'المغرب'),
+    ('🇩🇿', '213', 'Algeria', 'الجزائر'),
+    ('🇹🇳', '216', 'Tunisia', 'تونس'),
+    ('🇱🇾', '218', 'Libya', 'ليبيا'),
+    ('🇸🇩', '249', 'Sudan', 'السودان'),
+    ('🇬🇧', '44', 'United Kingdom', 'بريطانيا'),
+    ('🇫🇷', '33', 'France', 'فرنسا'),
+    ('🇩🇪', '49', 'Germany', 'ألمانيا'),
+    ('🇮🇹', '39', 'Italy', 'إيطاليا'),
+    ('🇪🇸', '34', 'Spain', 'إسبانيا'),
+    ('🇨🇦', '1', 'Canada', 'كندا'),
+    ('🇦🇺', '61', 'Australia', 'أستراليا'),
+    ('🇨🇳', '86', 'China', 'الصين'),
+    ('🇯🇵', '81', 'Japan', 'اليابان'),
+    ('🇰🇷', '82', 'South Korea', 'كوريا الجنوبية'),
+    ('🇮🇷', '98', 'Iran', 'إيران'),
+    ('🇪🇹', '251', 'Ethiopia', 'إثيوبيا'),
+    ('🇰🇪', '254', 'Kenya', 'كينيا'),
+    ('🇳🇬', '234', 'Nigeria', 'نيجيريا'),
+    ('🇧🇷', '55', 'Brazil', 'البرازيل'),
+    ('🇷🇺', '7', 'Russia', 'روسيا'),
+    ('🇺🇦', '380', 'Ukraine', 'أوكرانيا'),
+    ('🇬🇷', '30', 'Greece', 'اليونان'),
+    ('🇳🇱', '31', 'Netherlands', 'هولندا'),
+    ('🇸🇪', '46', 'Sweden', 'السويد'),
+    ('🇨🇭', '41', 'Switzerland', 'سويسرا'),
+    ('🇦🇹', '43', 'Austria', 'النمسا'),
+    ('🇧🇪', '32', 'Belgium', 'بلجيكا'),
+    ('🇲🇾', '60', 'Malaysia', 'ماليزيا'),
+    ('🇹🇭', '66', 'Thailand', 'تايلاند'),
+    ('🇸🇬', '65', 'Singapore', 'سنغافورة'),
+    ('🇿🇦', '27', 'South Africa', 'جنوب أفريقيا'),
+    ('🇲🇽', '52', 'Mexico', 'المكسيك'),
+    ('🇦🇷', '54', 'Argentina', 'الأرجنتين'),
+  ];
+
+  Widget _phoneField(bool ar) {
+    final col = _fieldColor(_phone, true);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: TextField(
+        controller: _phone,
+        keyboardType: TextInputType.phone,
+        style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600),
+        decoration: InputDecoration(
+          labelText: ar ? 'رقم الهاتف' : 'Phone number',
+          labelStyle: TextStyle(fontSize: 12.5, color: col,
+              fontWeight: FontWeight.w700),
+          hintText: '9999 9999',
+          hintStyle: const TextStyle(fontSize: 12, color: UellowColors.muted),
+          // Flag + dial code opens the searchable country picker.
+          prefixIcon: InkWell(
+            onTap: _openDialPicker,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                Text(_dialFlag, style: const TextStyle(fontSize: 16)),
+                const SizedBox(width: 4),
+                Text('+$_dialCode', style: const TextStyle(fontSize: 12.5,
+                    fontWeight: FontWeight.w800, color: UellowColors.ink)),
+                const Icon(Icons.arrow_drop_down, size: 16,
+                    color: UellowColors.muted),
+                Container(width: 1, height: 22, color: UellowColors.border,
+                    margin: const EdgeInsets.only(left: 4)),
+              ]),
+            ),
+          ),
+          prefixIconConstraints: const BoxConstraints(minWidth: 38),
+          filled: true,
+          fillColor: const Color(0xFFF4F5F7),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(11),
+            borderSide: BorderSide(color: col, width: 1.3)),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(11),
+            borderSide: BorderSide(color: col, width: 1.3)),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(11),
+            borderSide: BorderSide(color: col, width: 2)),
+          isDense: true,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        ),
+      ),
+    );
+  }
+
+  void _openDialPicker() {
+    final ar = UellowApi.instance.lang == 'ar';
+    showModalBottomSheet(
+      context: context, isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) {
+        String q = '';
+        return StatefulBuilder(builder: (ctx, setS) {
+          final list = q.isEmpty ? _dials : _dials.where((d) {
+            final needle = q.toLowerCase();
+            return d.$3.toLowerCase().contains(needle)
+                || d.$4.contains(q) || d.$2.contains(needle.replaceAll('+', ''));
+          }).toList();
+          return SizedBox(
+            height: MediaQuery.of(ctx).size.height * 0.7,
+            child: Column(children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 14, 16, 6),
+                child: TextField(
+                  autofocus: true,
+                  onChanged: (v) => setS(() => q = v),
+                  style: const TextStyle(color: UellowColors.ink),
+                  decoration: InputDecoration(
+                    hintText: ar ? 'ابحث عن الدولة أو الكود…'
+                                 : 'Search country or code…',
+                    prefixIcon: const Icon(Icons.search, color: UellowColors.muted),
+                    fillColor: const Color(0xFFF4F5F7), filled: true,
+                    border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                    isDense: true,
+                  ),
+                ),
+              ),
+              Expanded(child: ListView.builder(
+                itemCount: list.length,
+                itemBuilder: (_, i) {
+                  final d = list[i];
+                  return ListTile(
+                    dense: true,
+                    leading: Text(d.$1, style: const TextStyle(fontSize: 20)),
+                    title: Text(ar ? d.$4 : d.$3,
+                        style: const TextStyle(fontWeight: FontWeight.w700)),
+                    trailing: Text('+${d.$2}', style: const TextStyle(
+                        fontWeight: FontWeight.w800, color: UellowColors.muted)),
+                    onTap: () {
+                      setState(() { _dialFlag = d.$1; _dialCode = d.$2; });
+                      Navigator.pop(ctx);
+                    },
+                  );
+                },
+              )),
+            ]),
+          );
+        });
+      },
+    );
   }
 }
