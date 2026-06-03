@@ -23,7 +23,6 @@ import '../services/first_launch_service.dart';
 import '../theme/uellow_l10n.dart';
 import '../theme/uellow_theme.dart';
 import 'address_picker_screen.dart';
-import 'addresses_screen.dart';
 import 'auth_screen.dart';
 import 'order_confirmation_screen.dart';
 import 'webview_screen.dart';
@@ -40,11 +39,23 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   int? _selectedCarrierId;
   int? _selectedPaymentId;
   bool _placing = false;
+  // v2.1.20 — guest checkout: opt-in after a lose-perks warning; only
+  // offered when the per-website backend setting enables it.
+  bool _guestMode = false;
+  bool _guestAllowed = false;
 
   @override
   void initState() {
     super.initState();
     _data = _bootstrap();
+    _loadGuestFlag();
+  }
+
+  void _loadGuestFlag() async {
+    try {
+      final s = await UellowApi.instance.settings.get();
+      if (mounted) setState(() => _guestAllowed = s.guestCheckout);
+    } catch (_) {}
   }
 
   Future<_CheckoutData> _bootstrap() async {
@@ -89,8 +100,9 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       }
     }
 
+    final guestQ = _guestMode ? '?guest=1' : '';
     final results = await Future.wait([
-      safeGet('$base/api/mobile/v2/orders/checkout/summary', needAuth: true),
+      safeGet('$base/api/mobile/v2/orders/checkout/summary$guestQ', needAuth: true),
       safeGet('$base/api/mobile/v2/orders/shipping-methods', needAuth: false),
       safeGet(pmUrl, needAuth: false),
       safeGet('$base/api/mobile/v2/orders/checkout/geoip', needAuth: true),
@@ -165,6 +177,52 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     return out;
   }
 
+  Future<void> _confirmGuestCheckout() async {
+    final ar = UellowApi.instance.lang == 'ar';
+    await showDialog(context: context, builder: (dctx) => AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      title: Text(ar ? 'المتابعة كزائر؟' : 'Continue as guest?',
+          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900,
+              color: UellowColors.darkBrown)),
+      content: Text(ar
+          ? 'بدون حساب ستفقد: متابعة حالة الطلب، نقاط الولاء والمكافآت، '
+            'حفظ العناوين، وسجلّ مشترياتك. يمكنك إنشاء حساب في ثوانٍ.'
+          : 'Without an account you lose: order tracking, loyalty points '
+            'and rewards, saved addresses, and your purchase history. '
+            'Creating an account takes seconds.',
+          style: const TextStyle(fontSize: 13, height: 1.5)),
+      actionsAlignment: MainAxisAlignment.spaceBetween,
+      actions: [
+        TextButton(
+          onPressed: () {
+            Navigator.pop(dctx);
+            setState(() {
+              _guestMode = true;
+              _data = _bootstrap();
+            });
+          },
+          child: Text(ar ? 'الاستمرار كزائر' : 'Continue as guest',
+              style: const TextStyle(color: UellowColors.muted,
+                  fontSize: 12.5, fontWeight: FontWeight.w600)),
+        ),
+        ElevatedButton.icon(
+          onPressed: () async {
+            Navigator.pop(dctx);
+            final ok = await showAuthSheet(context);
+            if (ok && mounted) setState(() => _data = _bootstrap());
+          },
+          icon: const Icon(Icons.login, size: 15),
+          label: Text(ar ? 'تسجيل الدخول' : 'Sign in',
+              style: const TextStyle(fontWeight: FontWeight.w900)),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: UellowColors.yellow,
+            foregroundColor: UellowColors.darkBrown,
+          ),
+        ),
+      ],
+    ));
+  }
+
   Future<void> _placeOrder(_CheckoutData d) async {
     if (_placing) return;
     // v2.1.18 — the order can only be placed with a COMPLETE address
@@ -201,16 +259,11 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           ElevatedButton.icon(
             onPressed: () async {
               Navigator.pop(dctx);
-              final initial = cur == null
-                  ? null : UellowAddress.fromJson(cur);
-              await showModalBottomSheet(
-                context: context, isScrollControlled: true,
-                backgroundColor: Colors.transparent,
-                builder: (_) => AddressFormSheet(
-                  initial: initial,
-                  onSaved: () {},
+              await Navigator.push(context, MaterialPageRoute(
+                builder: (_) => AddressPickerScreen(
+                  editing: cur == null ? null : UellowAddress.fromJson(cur),
                 ),
-              );
+              ));
               if (mounted) setState(() { _data = _bootstrap(); });
             },
             icon: const Icon(Icons.add_location_alt_outlined, size: 16),
@@ -231,6 +284,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         deliveryAddressId: _selectedAddressId,
         carrierId: _selectedCarrierId ?? 0,
         paymentMethod: _paymentCodeOf(d, _selectedPaymentId),
+        guest: _guestMode,
       );
       if (!mounted) return;
       // v2.0.85 — honor paymentRequired + paymentUrl. For non-COD
@@ -341,6 +395,24 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                       backgroundColor: UellowColors.yellow,
                       foregroundColor: UellowColors.darkBrown,
                       padding: const EdgeInsets.symmetric(horizontal: 26, vertical: 12),
+                    ),
+                  ),
+                  // v2.1.20 — quiet, professional guest option (only when
+                  // the backend setting allows it).
+                  if (_guestAllowed) Padding(
+                    padding: const EdgeInsets.only(top: 10),
+                    child: TextButton(
+                      onPressed: _confirmGuestCheckout,
+                      style: TextButton.styleFrom(
+                        foregroundColor: UellowColors.muted,
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 6),
+                      ),
+                      child: Text(ar ? 'الاستكمال كزائر' : 'Continue as guest',
+                          style: const TextStyle(fontSize: 12.5,
+                              fontWeight: FontWeight.w600,
+                              decoration: TextDecoration.underline,
+                              decorationColor: UellowColors.muted)),
                     ),
                   ),
                 ]),
@@ -527,14 +599,13 @@ class _AddressList extends StatelessWidget {
     if (!addrComplete(current)) {
       return GestureDetector(
         onTap: () async {
-          await showModalBottomSheet(
-            context: context, isScrollControlled: true,
-            backgroundColor: Colors.transparent,
-            builder: (_) => AddressFormSheet(
-              initial: UellowAddress.fromJson(current),
-              onSaved: () {},
+          // v2.1.20 — full add-address flow (map → detailed form) that
+          // UPDATES this same record, not the small dialog.
+          await Navigator.push(context, MaterialPageRoute(
+            builder: (_) => AddressPickerScreen(
+              editing: UellowAddress.fromJson(current),
             ),
-          );
+          ));
           final state = context.findAncestorStateOfType<_CheckoutScreenState>();
           if (state != null && state.mounted) {
             state.setState(() { state._data = state._bootstrap(); });

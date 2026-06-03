@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../api/uellow_api.dart';
+import 'address_picker_screen.dart';
 import '../../api/uellow_models.dart';
 import '../theme/uellow_theme.dart';
 
@@ -121,9 +122,24 @@ class _AddressesScreenState extends State<AddressesScreen> {
               _reload();
             } else if (v == 'edit') {
               _addNew(initial: a);
+            } else if (v == 'default') {
+              // v2.1.20 — primary address: preselected everywhere.
+              try {
+                await UellowApi.instance.addresses.setDefault(a.id);
+                await UellowApi.instance.tokenStore.writeAddressId(a.id);
+              } catch (_) {}
+              _reload();
             }
           },
           itemBuilder: (_) => [
+            if (!a.isDefault) PopupMenuItem(value: 'default',
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  const Icon(Icons.star_outline, size: 16,
+                      color: UellowColors.warn),
+                  const SizedBox(width: 6),
+                  Text(UellowApi.instance.lang == 'ar'
+                      ? 'تعيين كعنوان أساسي' : 'Set as primary'),
+                ])),
             PopupMenuItem(value: 'edit',
                 child: Text(UellowApi.instance.lang == 'ar' ? 'تعديل' : 'Edit')),
             PopupMenuItem(value: 'delete',
@@ -155,6 +171,12 @@ class _AddressesScreenState extends State<AddressesScreen> {
   }
 
   void _addNew({UellowAddress? initial}) {
+    // v2.1.20 — editing opens the SAME detailed form used when adding a
+    // new address (governorate/city, status colors, dial-code picker).
+    if (initial != null) {
+      showDetailedAddressEdit(context, address: initial, onSaved: _reload);
+      return;
+    }
     showModalBottomSheet(
       context: context, isScrollControlled: true,
       backgroundColor: Colors.transparent,

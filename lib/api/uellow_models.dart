@@ -1327,6 +1327,7 @@ class UellowAppSettings {
   final String supportEmail;
   final String supportPhone;
   final String whatsapp;
+  final bool guestCheckout;
   final bool forceUpdate;
   final String minVersion;
   final bool maintenance;
@@ -1338,7 +1339,8 @@ class UellowAppSettings {
   const UellowAppSettings({
     required this.appName, this.logoUrl, required this.primaryColor,
     required this.darkColor, required this.supportEmail, required this.supportPhone,
-    required this.whatsapp, required this.forceUpdate, required this.minVersion,
+    required this.whatsapp, this.guestCheckout = false,
+    required this.forceUpdate, required this.minVersion,
     required this.maintenance, required this.maintenanceMessage,
     required this.social, required this.urls,
     required this.features, required this.website,
@@ -1351,6 +1353,7 @@ class UellowAppSettings {
         supportEmail: (j['support_email'] ?? '').toString(),
         supportPhone: (j['support_phone'] ?? '').toString(),
         whatsapp: (j['whatsapp'] ?? '').toString(),
+        guestCheckout: j['guest_checkout'] == true,
         forceUpdate: (j['force_update'] ?? false) as bool,
         minVersion: (j['min_version'] ?? '').toString(),
         maintenance: (j['maintenance'] ?? false) as bool,

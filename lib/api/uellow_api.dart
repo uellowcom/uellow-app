@@ -844,12 +844,14 @@ class _OrdersApi {
     int? invoiceAddressId,
     int? carrierId,
     String? paymentMethod,
+    bool guest = false,
   }) async {
-    final res = await _c._post(EP.checkoutConfirm, auth: true, body: {
+    final res = await _c._post(EP.checkoutConfirm, auth: !guest, body: {
       if (deliveryAddressId != null) 'delivery_address_id': deliveryAddressId,
       if (invoiceAddressId  != null) 'invoice_address_id': invoiceAddressId,
       if (carrierId         != null) 'carrier_id': carrierId,
       if (paymentMethod     != null) 'payment_method': paymentMethod,
+      if (guest) 'guest': 1,
     });
     return UellowCheckoutConfirm.fromJson(res['data'] as Map<String, dynamic>);
   }
@@ -867,7 +869,14 @@ class _AddressesApi {
   }
 
   Future<UellowAddress> create(Map<String, dynamic> data) async {
-    final res = await _c._post(EP.addressesCreate, auth: true, body: data);
+    // v2.1.20 — guests create an ad-hoc address attached to their cart
+    // (server allows it only when guest checkout is enabled).
+    final token = await _c.tokenStore.readToken();
+    final body = {
+      ...data,
+      if (token == null || token.isEmpty) 'guest': 1,
+    };
+    final res = await _c._post(EP.addressesCreate, auth: false, body: body);
     return UellowAddress.fromJson(
         res['data']['address'] as Map<String, dynamic>);
   }
@@ -881,6 +890,13 @@ class _AddressesApi {
   Future<bool> delete(int id) async {
     final res = await _c._post('${EP.addresses}/$id/delete', auth: true);
     return res['data']?['deleted'] == true;
+  }
+
+  // v2.1.20 — mark one address as the primary/default delivery address.
+  Future<UellowAddress> setDefault(int id) async {
+    final res = await _c._post('${EP.addresses}/$id/set-default', auth: true);
+    return UellowAddress.fromJson(
+        res['data']['address'] as Map<String, dynamic>);
   }
 }
 

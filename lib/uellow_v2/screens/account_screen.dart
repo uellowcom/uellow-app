@@ -946,8 +946,9 @@ class _ActionTiles extends StatelessWidget {
     return GridView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
+      // v2.1.20 — bigger tiles per request (icons were tiny).
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 4, crossAxisSpacing: 2, mainAxisSpacing: 8, childAspectRatio: 0.95,
+        crossAxisCount: 4, crossAxisSpacing: 2, mainAxisSpacing: 10, childAspectRatio: 0.82,
       ),
       itemCount: _tiles.length,
       itemBuilder: (_, i) {
@@ -960,18 +961,18 @@ class _ActionTiles extends StatelessWidget {
           borderRadius: BorderRadius.circular(12),
           child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
             Container(
-              width: 38, height: 38,
+              width: 54, height: 54,
               decoration: BoxDecoration(
                 color: Colors.white,
                 border: Border.all(color: UellowColors.border, width: 1),
-                borderRadius: BorderRadius.circular(11),
+                borderRadius: BorderRadius.circular(14),
               ),
-              child: Icon(icon, size: 15, color: UellowColors.darkBrown),
+              child: Icon(icon, size: 26, color: UellowColors.darkBrown),
             ),
             const SizedBox(height: 6),
             Text(label, textAlign: TextAlign.center,
                 maxLines: 1, overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 10.5,
+                style: const TextStyle(fontSize: 11.5,
                     fontWeight: FontWeight.w700, color: UellowColors.text)),
           ]),
         );

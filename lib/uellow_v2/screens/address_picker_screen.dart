@@ -24,14 +24,19 @@ import 'package:image_picker/image_picker.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
 import '../../api/uellow_api.dart';
+import '../../api/uellow_models.dart';
 import '../theme/uellow_theme.dart';
 
 class AddressPickerScreen extends StatefulWidget {
-  const AddressPickerScreen({super.key, this.onSaved});
+  const AddressPickerScreen({super.key, this.onSaved, this.editing});
   /// Legacy callback (kept for compatibility with checkout). Modern
   /// callers should `await Navigator.push` and read the returned address
   /// id (or null on cancel).
   final VoidCallback? onSaved;
+  /// v2.1.20 — when set, the full flow (map → detailed form) UPDATES this
+  /// existing record instead of creating a new one (OTP-signup address
+  /// completion uses this).
+  final UellowAddress? editing;
   @override
   State<AddressPickerScreen> createState() => _AddressPickerScreenState();
 }
@@ -183,6 +188,7 @@ map.on('move',function(){
       builder: (_) => _AddressForm(
         lat: _lat, lng: _lng, reverseAddress: _reverseAddress,
         reverseDetails: _reverseDetails,
+        editing: widget.editing,
         onSaved: (newId) {
           widget.onSaved?.call();
           // Pop the address picker AND pass the new id back to the caller
@@ -265,17 +271,35 @@ class _AddressCard extends StatelessWidget {
 
 class _AddressForm extends StatefulWidget {
   const _AddressForm({
-    required this.lat, required this.lng, required this.reverseAddress,
+    this.lat = 0, this.lng = 0, this.reverseAddress = '',
     this.reverseDetails = const {},
+    this.editing,
     required this.onSaved,
   });
   final double lat;
   final double lng;
   final String reverseAddress;
   final Map<String, dynamic> reverseDetails;
+  // v2.1.20 — when set, the form EDITS this existing record (profile →
+  // edit address opens the same detailed form as add-new).
+  final UellowAddress? editing;
   final void Function(int? newAddressId) onSaved;
   @override
   State<_AddressForm> createState() => _AddressFormState();
+}
+
+/// Open the detailed address form (same one used after the map pin) to
+/// EDIT an existing record. Used by the profile / addresses screen.
+Future<void> showDetailedAddressEdit(BuildContext context,
+    {required UellowAddress address, required VoidCallback onSaved}) {
+  return showModalBottomSheet(
+    context: context, isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    builder: (_) => _AddressForm(
+      editing: address,
+      onSaved: (_) => onSaved(),
+    ),
+  );
 }
 
 class _AddressFormState extends State<_AddressForm> {
@@ -302,6 +326,53 @@ class _AddressFormState extends State<_AddressForm> {
   @override
   void initState() {
     super.initState();
+    // v2.1.20 — edit mode: prefill everything from the existing record.
+    final e = widget.editing;
+    if (e != null) {
+      _name.text = e.name;
+      _street.text = e.street;
+      _area.text = e.street2;
+      _city.text = e.city;
+      _governorate.text = e.state;
+      if (e.country.isNotEmpty) _country.text = e.country;
+      // Came through the map? Its detection wins for location fields.
+      if (widget.lat != 0 || widget.lng != 0) {
+        final d0 = widget.reverseDetails;
+        String pick0(List<String> keys) {
+          for (final k in keys) {
+            final v = (d0[k] ?? '').toString().trim();
+            if (v.isNotEmpty) return v;
+          }
+          return '';
+        }
+        final st = pick0(['road', 'pedestrian', 'footway']);
+        final gv = pick0(['state', 'province', 'region', 'county']);
+        final ct = pick0(['city', 'town', 'suburb', 'village',
+            'neighbourhood', 'city_district']);
+        final cn = pick0(['country']);
+        if (st.isNotEmpty) _street.text = st;
+        if (gv.isNotEmpty) _governorate.text = gv;
+        if (ct.isNotEmpty) _city.text = ct;
+        if (cn.isNotEmpty) _country.text = cn;
+      }
+      // Split a known dial code off the stored phone.
+      var ph = e.phone.replaceAll(' ', '');
+      if (ph.startsWith('+')) {
+        for (final d0 in _AddressFormState._dials) {
+          if (ph.startsWith('+${d0.$2}')) {
+            _dialFlag = d0.$1; _dialCode = d0.$2;
+            ph = ph.substring(d0.$2.length + 1);
+            break;
+          }
+        }
+      }
+      _phone.text = ph;
+      for (final c in [_name, _phone, _email, _country, _governorate,
+          _city, _area, _block, _street, _building, _floor, _apt, _notes]) {
+        c.addListener(() { if (mounted) setState(() {}); });
+      }
+      return;
+    }
     // v2.1.19 — pre-fill from the STRUCTURED reverse-geocode: the map
     // detects governorate (state) and city separately.
     final d = widget.reverseDetails;
@@ -395,6 +466,16 @@ class _AddressFormState extends State<_AddressForm> {
         'notes': _notes.text.trim(),
         if (_photoBytes != null) 'landmark_photo': base64Encode(_photoBytes!),
       };
+      if (widget.editing != null) {
+        if (widget.lat == 0 && widget.lng == 0) {
+          body.remove('lat'); body.remove('lng');   // keep stored pin
+        }
+        await UellowApi.instance.addresses.update(widget.editing!.id, body);
+        if (!mounted) return;
+        Navigator.pop(context);
+        widget.onSaved(widget.editing!.id);
+        return;
+      }
       final created = await UellowApi.instance.addresses.create(body);
       if (!mounted) return;
       // Persist as the default-selected address so the calling screen
