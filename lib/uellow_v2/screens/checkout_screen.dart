@@ -588,6 +588,10 @@ class _ShippingMethodList extends StatelessWidget {
           : UellowMoney.fromJson(Map<String, dynamic>.from(priceMap));
       final zone = m['zone'] as Map?;
       final cutoff = zone?['cutoff_time'] as String? ?? '';
+      // v2.0.97 — informational per-zone delivery window (no pricing impact).
+      final winMap = zone?['delivery_window'] as Map?;
+      final window = (winMap?[lang] as String?)
+          ?? (winMap?['en'] as String?) ?? '';
       return GestureDetector(
         onTap: () => onSelect(id),
         child: Container(
@@ -621,6 +625,17 @@ class _ShippingMethodList extends StatelessWidget {
                 padding: const EdgeInsets.only(top: 2),
                 child: Text(lang == 'ar' ? 'اطلب قبل $cutoff' : 'Order before $cutoff',
                     style: const TextStyle(fontSize: 11, color: UellowColors.muted)),
+              ),
+              if (window.isNotEmpty) Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  const Icon(Icons.schedule, size: 11, color: UellowColors.muted),
+                  const SizedBox(width: 3),
+                  Flexible(child: Text(
+                      lang == 'ar' ? 'نافذة التوصيل: $window' : 'Delivery window: $window',
+                      maxLines: 1, overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 11, color: UellowColors.muted))),
+                ]),
               ),
             ])),
             Text(price?.format() ?? '—', style: const TextStyle(
