@@ -190,8 +190,10 @@ class _AuthScreenState extends State<AuthScreen> {
         ]),
         const SizedBox(height: 8),
         SizedBox(width: double.infinity, child: _socialBtn(
-            'Phone OTP', Icons.phone_outlined, UellowColors.darkBrown,
-            () => _socialPending('Phone OTP'))),
+            UellowApi.instance.lang.toLowerCase().startsWith('ar')
+                ? 'رمز لمرة واحدة (OTP)' : 'One-time code (OTP)',
+            Icons.password_outlined, UellowColors.darkBrown,
+            _otpFlow)),
         const SizedBox(height: 16),
         Text(T.t('account.terms'),
             style: const TextStyle(color: UellowColors.text, fontSize: 11),
@@ -285,6 +287,121 @@ class _AuthScreenState extends State<AuthScreen> {
         ]),
       ),
     );
+  }
+
+  // v2.1.16 — email OTP sign-in: ask for email (or account phone), send a
+  // 6-digit code, verify, and complete exactly like a password login.
+  Future<void> _otpFlow() async {
+    final ar = UellowApi.instance.lang.toLowerCase().startsWith('ar');
+    final target = TextEditingController(text: _email.text);
+    final codeCtl = TextEditingController();
+    bool sent = false; bool busy = false; String? err; String maskedTo = '';
+    final done = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => StatefulBuilder(builder: (ctx, setS) {
+        Future<void> send() async {
+          setS(() { busy = true; err = null; });
+          try {
+            maskedTo = await UellowApi.instance.auth
+                .otpEmailRequest(target.text.trim());
+            setS(() { sent = true; busy = false; });
+          } on UellowApiException catch (e) {
+            setS(() { err = e.message; busy = false; });
+          }
+        }
+        Future<void> verify() async {
+          setS(() { busy = true; err = null; });
+          try {
+            await UellowApi.instance.auth.otpEmailVerify(
+                emailOrPhone: target.text.trim(), code: codeCtl.text.trim());
+            if (ctx.mounted) Navigator.of(ctx).pop(true);
+          } on UellowApiException catch (e) {
+            setS(() { err = e.message; busy = false; });
+          }
+        }
+        return Padding(
+          padding: EdgeInsets.fromLTRB(20, 18, 20,
+              MediaQuery.of(ctx).viewInsets.bottom + 24),
+          child: Column(mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(ar ? 'الدخول برمز لمرة واحدة' : 'Sign in with a one-time code',
+                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900,
+                    color: UellowColors.darkBrown)),
+            const SizedBox(height: 4),
+            Text(sent
+                ? (ar ? 'أرسلنا الرمز إلى $maskedTo' : 'We sent a code to $maskedTo')
+                : (ar ? 'أدخل بريدك الإلكتروني وسنرسل لك رمز دخول'
+                      : 'Enter your email and we will send you a sign-in code'),
+                style: const TextStyle(fontSize: 12, color: UellowColors.muted)),
+            const SizedBox(height: 14),
+            if (!sent) TextField(
+              controller: target,
+              keyboardType: TextInputType.emailAddress,
+              decoration: InputDecoration(
+                hintText: 'you@example.com',
+                fillColor: UellowColors.yellowFaint, filled: true,
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+            ) else TextField(
+              controller: codeCtl,
+              keyboardType: TextInputType.number,
+              maxLength: 6,
+              style: const TextStyle(fontSize: 22, letterSpacing: 10,
+                  fontWeight: FontWeight.w900),
+              textAlign: TextAlign.center,
+              decoration: InputDecoration(
+                counterText: '', hintText: '••••••',
+                fillColor: UellowColors.yellowFaint, filled: true,
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
+            if (err != null) Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(err!, style: const TextStyle(
+                  color: UellowColors.danger, fontSize: 12)),
+            ),
+            const SizedBox(height: 14),
+            SizedBox(width: double.infinity, child: ElevatedButton(
+              onPressed: busy ? null : (sent ? verify : send),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: UellowColors.yellow,
+                foregroundColor: UellowColors.darkBrown,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: const RoundedRectangleBorder(
+                    borderRadius: BorderRadius.all(Radius.circular(12))),
+              ),
+              child: busy
+                  ? const SizedBox(width: 18, height: 18,
+                      child: CircularProgressIndicator(
+                          color: UellowColors.darkBrown, strokeWidth: 2))
+                  : Text(sent
+                      ? (ar ? 'تأكيد الرمز' : 'Verify code')
+                      : (ar ? 'إرسال الرمز' : 'Send code'),
+                      style: const TextStyle(
+                          fontWeight: FontWeight.w900, fontSize: 14)),
+            )),
+            if (sent) TextButton(
+              onPressed: busy ? null : send,
+              child: Text(ar ? 'إعادة إرسال الرمز' : 'Resend code',
+                  style: const TextStyle(fontSize: 12,
+                      color: UellowColors.darkBrown,
+                      fontWeight: FontWeight.w700)),
+            ),
+          ]),
+        );
+      }),
+    );
+    if (done == true && mounted) {
+      if (widget.asSheet) {
+        Navigator.of(context).pop(true);
+      } else {
+        Navigator.of(context).pushReplacementNamed('/home');
+      }
+    }
   }
 
   void _socialPending(String name) {

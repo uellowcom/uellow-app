@@ -1,7 +1,7 @@
 name: uellow
 description: Uellow Marketplace — v2 mobile app
 publish_to: 'none'
-version: 2.1.15+115
+version: 2.1.16+116
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
@@ -39,6 +39,7 @@ flutter:
   uses-material-design: true
   assets:
     - assets/images/logo.png
+    - assets/images/pay_knet.png
   fonts:
     - family: Tajawal
       fonts:

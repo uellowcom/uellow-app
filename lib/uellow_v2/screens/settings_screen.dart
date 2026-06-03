@@ -183,6 +183,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (apiBase != null && apiBase.isNotEmpty) {
         await UellowApi.instance.setBaseUrl(apiBase);
       }
+      // v2.1.16 — store the website id for per-website API scoping.
+      final wid = website?['id'] as int?;
+      if (wid != null && wid > 0) {
+        await UellowApi.instance.tokenStore.writeWebsiteId(wid);
+      }
     }
     // setLang() bumps a ValueNotifier that the root MaterialApp listens
     // to — the entire app re-keys and rebuilds with the new Directionality

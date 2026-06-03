@@ -797,13 +797,9 @@ class _PaymentMethodGrid extends StatelessWidget {
               color: UellowColors.successDk, fontSize: 13)),
         ]);
       case 'knet':
-        return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-          decoration: BoxDecoration(color: const Color(0xFF005DAA),
-              borderRadius: BorderRadius.circular(4)),
-          child: const Text('KNET', style: TextStyle(color: Colors.white,
-              fontWeight: FontWeight.w900, fontSize: 13, letterSpacing: 0.5)),
-        );
+        // v2.1.16 — the real KNET logo (bundled asset).
+        return Image.asset('assets/images/pay_knet.png',
+            height: 22, fit: BoxFit.contain);
       case 'card':
         return Row(mainAxisSize: MainAxisSize.min, children: [
           const Text('VISA', style: TextStyle(color: Color(0xFF1A1F71),

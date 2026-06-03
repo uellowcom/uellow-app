@@ -318,12 +318,17 @@ class _VideoTile extends StatelessWidget {
   // tile isn't a featureless black square.
   final String? fallbackImage;
   String get _thumb {
+    // v2.1.16 — the PRODUCT image is the video cover (per request), with
+    // the video's own thumbnail as the fallback. Absolute (Bunny CDN)
+    // thumbnail URLs are used as-is — prefixing baseUrl broke them.
+    if (fallbackImage != null && fallbackImage!.isNotEmpty) return fallbackImage!;
     if (video.thumbnail.isNotEmpty) {
-      return '${UellowApi.instance.baseUrl}${video.thumbnail}';
+      return video.thumbnail.startsWith('http')
+          ? video.thumbnail
+          : '${UellowApi.instance.baseUrl}${video.thumbnail}';
     }
     final m = RegExp(r'embed/([a-zA-Z0-9_-]{11})').firstMatch(video.embedUrl);
     if (m != null) return 'https://i.ytimg.com/vi/${m.group(1)}/hqdefault.jpg';
-    if (fallbackImage != null && fallbackImage!.isNotEmpty) return fallbackImage!;
     return '';
   }
   @override
@@ -709,11 +714,11 @@ class _BrandBlock extends StatelessWidget {
         child: Padding(
           padding: const EdgeInsets.fromLTRB(18, 14, 18, 14),
           child: Row(children: [
-            // v2.0.91 — brand logo: white background (was brown bg color),
-            // BoxFit.cover so the logo fills the area instead of fitting
-            // with negative space around it.
+            // v2.1.16 — brand logo: white background + BoxFit.contain so the
+            // WHOLE logo is visible inside the square (cover was cropping it).
             Container(
               width: 52, height: 52,
+              padding: const EdgeInsets.all(4),
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(10),
@@ -721,7 +726,7 @@ class _BrandBlock extends StatelessWidget {
               ),
               clipBehavior: Clip.antiAlias,
               child: (brand.image != null && brand.image!.isNotEmpty)
-                ? CachedNetworkImage(imageUrl: brand.image!, fit: BoxFit.cover,
+                ? CachedNetworkImage(imageUrl: brand.image!, fit: BoxFit.contain,
                     errorWidget: (_, __, ___) => _initial(name))
                 : _initial(name),
             ),
@@ -1475,7 +1480,7 @@ class _BulkPricing extends StatelessWidget {
       borderRadius: BorderRadius.circular(12),
       child: Stack(clipBehavior: Clip.none, children: [
         Container(
-          padding: EdgeInsets.fromLTRB(6, best ? 18 : 12, 6, 12),
+          padding: EdgeInsets.fromLTRB(6, (best || selected) ? 18 : 12, 6, 12),
           decoration: BoxDecoration(
             color: highlightDark ? UellowColors.darkBrown : Colors.white,
             border: Border.all(
@@ -1521,8 +1526,11 @@ class _BulkPricing extends StatelessWidget {
             ],
           ]),
         ),
+        // v2.1.16 — chips sit INSIDE the tile's top edge: the old negative
+        // offsets put them outside the box where the horizontal list
+        // clipped them, so they never showed.
         // SELECTED chip (top-right) — overrides BEST chip when both apply
-        if (selected) Positioned(top: -6, right: -4, child: Container(
+        if (selected) Positioned(top: 3, right: 3, child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
           decoration: BoxDecoration(
             color: UellowColors.yellow,
@@ -1532,7 +1540,7 @@ class _BulkPricing extends StatelessWidget {
           ),
           child: const Icon(Icons.check, size: 10, color: UellowColors.darkBrown),
         )),
-        if (best && !selected) Positioned(top: -8, left: 0, right: 0, child: Center(
+        if (best && !selected) Positioned(top: 2, left: 0, right: 0, child: Center(
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
           decoration: BoxDecoration(
@@ -1601,14 +1609,19 @@ class _DescriptionBlock extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final lang = UellowApi.instance.lang;
-    final raw = product.descriptionHtml.current(lang).isNotEmpty
-        ? _stripHtml(product.descriptionHtml.current(lang))
-        : _stripHtml(product.descriptionShort.current(lang));
+    // v2.1.16 — keep the raw HTML so embedded <img> tags render as images
+    // (the website-description tab supports pictures).
+    final html = product.descriptionHtml.current(lang).isNotEmpty
+        ? product.descriptionHtml.current(lang)
+        : product.descriptionShort.current(lang);
     final ar = lang == 'ar';
-    final body = raw.isEmpty
-        ? (ar ? 'لا يوجد وصف لهذا المنتج.' : 'No description provided for this product.')
-        : raw;
-    final long = body.length > 240;
+    final plain = _stripHtml(html);
+    final hasImages = RegExp(r'<img', caseSensitive: false).hasMatch(html);
+    final widgets = plain.isEmpty && !hasImages
+        ? <Widget>[Text(ar ? 'لا يوجد وصف لهذا المنتج.'
+            : 'No description provided for this product.', style: UT.body)]
+        : _htmlToWidgets(html);
+    final long = plain.length > 240 || hasImages;
     return Container(
       color: Colors.white, margin: const EdgeInsets.only(top: 8),
       padding: const EdgeInsets.all(16),
@@ -1620,7 +1633,9 @@ class _DescriptionBlock extends StatelessWidget {
             constraints: const BoxConstraints(maxHeight: 200),
             child: SingleChildScrollView(
               physics: const NeverScrollableScrollPhysics(),
-              child: Text(body, style: UT.body),
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: widgets),
             ),
           ),
           if (long) Positioned(bottom: 0, left: 0, right: 0, height: 70,
@@ -1639,7 +1654,7 @@ class _DescriptionBlock extends StatelessWidget {
           SizedBox(width: double.infinity, child: ElevatedButton(
             onPressed: () => showModalBottomSheet(
               context: context, isScrollControlled: true, backgroundColor: Colors.transparent,
-              builder: (_) => _DescriptionDialog(text: body),
+              builder: (_) => _DescriptionDialog(html: html),
             ),
             style: ElevatedButton.styleFrom(
               backgroundColor: UellowColors.yellowSoft,
@@ -1657,6 +1672,44 @@ class _DescriptionBlock extends StatelessWidget {
   }
 }
 
+/// v2.1.16 — minimal HTML renderer for product descriptions: text chunks
+/// become Text widgets, <img src> tags become cached images (relative
+/// Odoo /web/image paths get the API base URL prefixed).
+List<Widget> _htmlToWidgets(String html) {
+  final out = <Widget>[];
+  final imgRe = RegExp(r'<img[^>]*?src\s*=\s*"([^"]+)"[^>]*>', caseSensitive: false);
+  var last = 0;
+  void addText(String chunk) {
+    final t = _stripHtml(chunk);
+    if (t.isNotEmpty) {
+      out.add(Padding(
+        padding: const EdgeInsets.only(bottom: 6),
+        child: Text(t, style: UT.body),
+      ));
+    }
+  }
+  for (final m in imgRe.allMatches(html)) {
+    addText(html.substring(last, m.start));
+    var src = (m.group(1) ?? '').replaceAll('&amp;', '&');
+    if (src.startsWith('/')) src = '${UellowApi.instance.baseUrl}$src';
+    if (src.startsWith('http')) {
+      out.add(Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(10),
+          child: CachedNetworkImage(
+            imageUrl: src, fit: BoxFit.contain, width: double.infinity,
+            errorWidget: (_, __, ___) => const SizedBox.shrink(),
+          ),
+        ),
+      ));
+    }
+    last = m.end;
+  }
+  addText(html.substring(last));
+  return out;
+}
+
 String _stripHtml(String s) {
   var t = s.replaceAll(RegExp(r'<\s*br\s*/?\s*>'), '\n');
   t = t.replaceAll(RegExp(r'</\s*(p|div|li|h\d)\s*>'), '\n');
@@ -1668,8 +1721,8 @@ String _stripHtml(String s) {
 }
 
 class _DescriptionDialog extends StatelessWidget {
-  const _DescriptionDialog({required this.text});
-  final String text;
+  const _DescriptionDialog({required this.html});
+  final String html;
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -1682,7 +1735,9 @@ class _DescriptionDialog extends StatelessWidget {
         _SheetHeader(title: UellowApi.instance.lang == 'ar' ? 'الوصف' : 'Description'),
         Flexible(child: SingleChildScrollView(
           padding: const EdgeInsets.fromLTRB(18, 12, 18, 30),
-          child: Text(text, style: UT.body),
+          child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: _htmlToWidgets(html)),
         )),
       ]),
     );
@@ -1851,13 +1906,14 @@ class _ReviewsBlockState extends State<_ReviewsBlock> {
               customBorder: const StadiumBorder(),
               onTap: () => _openWriteReview(context),
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                // v2.1.16 — slimmer pill + smaller font per request.
+                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
                 child: Row(mainAxisSize: MainAxisSize.min, children: [
-                  const Icon(Icons.star_rounded, size: 14, color: UellowColors.darkBrown),
-                  const SizedBox(width: 4),
+                  const Icon(Icons.star_rounded, size: 12, color: UellowColors.darkBrown),
+                  const SizedBox(width: 3),
                   Text(T.t('product.write_review'),
-                      style: const TextStyle(fontSize: 11,
-                          fontWeight: FontWeight.w900, color: UellowColors.darkBrown,
+                      style: const TextStyle(fontSize: 9.5,
+                          fontWeight: FontWeight.w800, color: UellowColors.darkBrown,
                           letterSpacing: -0.1)),
                 ]),
               ),

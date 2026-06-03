@@ -238,6 +238,12 @@ class UellowApi {
     if (cartToken != null && cartToken.isNotEmpty) {
       headers['X-Cart-Token'] = cartToken;
     }
+    // v2.1.16 — multi-website: scope every call to the selected website
+    // (settings, builder pages, payment methods, carts…).
+    final siteId = await tokenStore.readWebsiteId();
+    if (siteId != null && siteId > 0) {
+      headers['X-Website-Id'] = '$siteId';
+    }
 
     http.Response resp;
     try {
@@ -406,6 +412,27 @@ class _AuthApi {
       if (phone     != null) 'phone': phone,
       if (deviceId  != null) 'device_id': deviceId,
       if (pushToken != null) 'push_token': pushToken,
+    });
+    return _saveAuth(res);
+  }
+
+  // v2.1.16 — email OTP (no SMS provider needed): request a 6-digit
+  // code, then verify it. Verify returns the same auth payload as login.
+  Future<String> otpEmailRequest(String emailOrPhone) async {
+    final res = await _c._post('/api/mobile/v2/auth/otp/email/request',
+        body: {'email_or_phone': emailOrPhone});
+    return ((res['data'] as Map?)?['to'] ?? '').toString();
+  }
+
+  Future<UellowAuthResult> otpEmailVerify({
+    required String emailOrPhone,
+    required String code,
+    String? name,
+  }) async {
+    final res = await _c._post('/api/mobile/v2/auth/otp/email/verify', body: {
+      'email_or_phone': emailOrPhone,
+      'code': code,
+      if (name != null && name.isNotEmpty) 'name': name,
     });
     return _saveAuth(res);
   }

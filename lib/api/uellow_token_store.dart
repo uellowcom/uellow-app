@@ -15,6 +15,7 @@ class UellowTokenStore {
   static const _kCart   = 'uellow_cart_token_v2';
   static const _kBase   = 'uellow_api_base_v2';
   static const _kAddr   = 'uellow_address_id_v2';
+  static const _kSite   = 'uellow_website_id_v2';
 
   final SharedPreferences _prefs;
 
@@ -43,6 +44,13 @@ class UellowTokenStore {
   Future<String?> readBaseUrl() async => _prefs.getString(_kBase);
   Future<void> writeBaseUrl(String url) async {
     await _prefs.setString(_kBase, url);
+  }
+
+  // v2.1.16 — selected website id (multi-website: every API call carries
+  // X-Website-Id so settings/pages/payments are scoped per website).
+  Future<int?> readWebsiteId() async => _prefs.getInt(_kSite);
+  Future<void> writeWebsiteId(int id) async {
+    await _prefs.setInt(_kSite, id);
   }
 
   Future<int?> readAddressId() async => _prefs.getInt(_kAddr);

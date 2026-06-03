@@ -118,6 +118,12 @@ class _SplashScreenState extends State<SplashScreen> {
     if (apiBase != null && apiBase.isNotEmpty) {
       await UellowApi.instance.setBaseUrl(apiBase);
     }
+    // v2.1.16 — remember the website id so every request is scoped to it
+    // (per-website settings, builder pages, payment methods…).
+    final wid = website?['id'] as int?;
+    if (wid != null && wid > 0) {
+      await UellowApi.instance.tokenStore.writeWebsiteId(wid);
+    }
     if (code != null) {
       try {
         final uri = Uri.parse(

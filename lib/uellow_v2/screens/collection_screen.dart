@@ -240,8 +240,12 @@ class _CollectionScreenState extends State<CollectionScreen> {
                 const Icon(Icons.search_off, size: 56, color: UellowColors.muted),
                 const SizedBox(height: 12),
                 Text(widget.searchQuery != null
-                    ? 'No products match "${widget.searchQuery}"'
-                    : 'No products in this category yet',
+                    ? (UellowApi.instance.lang == 'ar'
+                        ? 'لا توجد منتجات تطابق "${widget.searchQuery}"'
+                        : 'No products match "${widget.searchQuery}"')
+                    : (UellowApi.instance.lang == 'ar'
+                        ? 'لا توجد منتجات في هذا القسم بعد'
+                        : 'No products in this category yet'),
                     style: UT.body, textAlign: TextAlign.center),
               ]),
             ),
@@ -326,22 +330,26 @@ class _SortBar extends StatelessWidget {
         border: Border(bottom: BorderSide(color: UellowColors.border)),
       ),
       child: Row(children: [
+        // v2.1.16 — bilingual product count + sort options.
         Text.rich(TextSpan(style: const TextStyle(fontSize: 12, color: UellowColors.muted), children: [
           TextSpan(text: '$count', style: const TextStyle(
               fontWeight: FontWeight.w900, color: UellowColors.ink)),
-          const TextSpan(text: '+ products'),
+          TextSpan(text: UellowApi.instance.lang == 'ar' ? '+ منتج' : '+ products'),
         ])),
         const Spacer(),
         if (!hideSort) GestureDetector(
           onTap: () async {
+            final ar = UellowApi.instance.lang == 'ar';
             final picked = await showModalBottomSheet<String>(
               context: context,
               builder: (_) => Column(mainAxisSize: MainAxisSize.min, children: [
-                _opt(context, 'newest', 'Newest first'),
-                _opt(context, 'price_asc', 'Price: low → high'),
-                _opt(context, 'price_desc', 'Price: high → low'),
-                _opt(context, 'popular', 'Most popular'),
-                _opt(context, 'top_rated', 'Top rated'),
+                _opt(context, 'newest', ar ? 'الأحدث أولاً' : 'Newest first'),
+                _opt(context, 'price_asc',
+                    ar ? 'السعر: من الأقل للأعلى' : 'Price: low → high'),
+                _opt(context, 'price_desc',
+                    ar ? 'السعر: من الأعلى للأقل' : 'Price: high → low'),
+                _opt(context, 'popular', ar ? 'الأكثر رواجاً' : 'Most popular'),
+                _opt(context, 'top_rated', ar ? 'الأعلى تقييماً' : 'Top rated'),
               ]),
             );
             if (picked != null) onSort(picked);
