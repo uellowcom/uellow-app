@@ -228,9 +228,9 @@ class UellowApi {
     if (token != null && token.isNotEmpty) {
       headers['Authorization'] = 'Bearer $token';
     } else if (requireAuth) {
-      throw const UellowApiException(
+      throw UellowApiException(
         code: 'AUTH_REQUIRED',
-        message: 'You must be logged in.',
+        message: lang == 'ar' ? 'يجب تسجيل الدخول.' : 'You must be logged in.',
         statusCode: 401,
       );
     }
@@ -271,13 +271,15 @@ class UellowApi {
     } on SocketException catch (e) {
       throw UellowApiException(
         code: 'NETWORK_ERROR',
-        message: 'No internet connection: ${e.message}',
+        message: lang == 'ar'
+            ? 'لا يوجد اتصال بالإنترنت: ${e.message}'
+            : 'No internet connection: ${e.message}',
         statusCode: 0,
       );
     } on TimeoutException {
-      throw const UellowApiException(
+      throw UellowApiException(
         code: 'TIMEOUT',
-        message: 'Request timed out',
+        message: lang == 'ar' ? 'انتهت مهلة الطلب' : 'Request timed out',
         statusCode: 0,
       );
     } on HttpException catch (e) {
@@ -298,7 +300,9 @@ class UellowApi {
     } catch (_) {
       throw UellowApiException(
         code: 'BAD_RESPONSE',
-        message: 'Server returned non-JSON (status ${resp.statusCode})',
+        message: lang == 'ar'
+            ? 'استجابة غير صالحة من الخادم (الحالة ${resp.statusCode})'
+            : 'Server returned non-JSON (status ${resp.statusCode})',
         statusCode: resp.statusCode,
       );
     }
@@ -308,7 +312,8 @@ class UellowApi {
       return json;
     }
     final code = (json['code'] as String?) ?? 'UNKNOWN';
-    final msg  = (json['error'] as String?) ?? 'Unknown error';
+    final msg  = (json['error'] as String?)
+        ?? (lang == 'ar' ? 'خطأ غير معروف' : 'Unknown error');
 
     // 401 → invalidate stored token + emit auth-changed
     if (resp.statusCode == 401 || code == 'AUTH_REQUIRED') {
@@ -344,14 +349,18 @@ class UellowApi {
     if (token != null && token.isNotEmpty) {
       headers['Authorization'] = 'Bearer $token';
     } else if (auth) {
-      throw const UellowApiException(
-        code: 'AUTH_REQUIRED', message: 'You must be logged in.', statusCode: 401);
+      throw UellowApiException(
+        code: 'AUTH_REQUIRED',
+        message: lang == 'ar' ? 'يجب تسجيل الدخول.' : 'You must be logged in.',
+        statusCode: 401);
     }
     final resp = await _http.get(url, headers: headers).timeout(const Duration(seconds: 30));
     if (resp.statusCode != 200) {
       throw UellowApiException(
         code: 'BAD_STATUS',
-        message: 'Server returned ${resp.statusCode}',
+        message: lang == 'ar'
+            ? 'أرجع الخادم الحالة ${resp.statusCode}'
+            : 'Server returned ${resp.statusCode}',
         statusCode: resp.statusCode);
     }
     return resp.bodyBytes;

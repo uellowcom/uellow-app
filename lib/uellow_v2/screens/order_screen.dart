@@ -1040,10 +1040,11 @@ class _RateDialogState extends State<_RateDialog> {
                     border: Border.all(color: UellowColors.yellow, width: 1.5),
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: const Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                    Icon(Icons.add_a_photo_outlined, color: UellowColors.darkBrown, size: 22),
-                    SizedBox(height: 2),
-                    Text('Add', style: TextStyle(fontSize: 9.5,
+                  child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                    const Icon(Icons.add_a_photo_outlined, color: UellowColors.darkBrown, size: 22),
+                    const SizedBox(height: 2),
+                    Text(UellowApi.instance.lang == 'ar' ? 'إضافة' : 'Add',
+                        style: const TextStyle(fontSize: 9.5,
                         color: UellowColors.darkBrown, fontWeight: FontWeight.w800)),
                   ]),
                 ),
