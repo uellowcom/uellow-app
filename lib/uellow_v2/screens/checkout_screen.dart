@@ -155,6 +155,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     setState(() => _placing = true);
     try {
       final result = await UellowApi.instance.orders.checkoutConfirm(
+        deliveryAddressId: _selectedAddressId,
         carrierId: _selectedCarrierId ?? 0,
         paymentMethod: _paymentCodeOf(d, _selectedPaymentId),
       );
@@ -1002,25 +1003,25 @@ class _PlaceOrderBar extends StatelessWidget {
         SizedBox(width: double.infinity, child: ElevatedButton(
           onPressed: busy ? null : onPress,
           style: ElevatedButton.styleFrom(
-            backgroundColor: UellowColors.success,
-            foregroundColor: Colors.white,
+            backgroundColor: UellowColors.yellow,
+            foregroundColor: UellowColors.darkBrown,
             padding: const EdgeInsets.symmetric(vertical: 16),
             elevation: 4,
-            shadowColor: UellowColors.success.withValues(alpha: 0.4),
+            shadowColor: UellowColors.yellow.withValues(alpha: 0.4),
             shape: const RoundedRectangleBorder(
                 borderRadius: BorderRadius.all(Radius.circular(14))),
           ),
           child: busy
             ? const SizedBox(width: 18, height: 18,
-                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                child: CircularProgressIndicator(strokeWidth: 2, color: UellowColors.darkBrown))
             : Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                const Icon(Icons.check_circle_outline, size: 18, color: Colors.white),
+                const Icon(Icons.check_circle_outline, size: 18, color: UellowColors.darkBrown),
                 const SizedBox(width: 8),
                 Text(ar
                     ? 'تأكيد الطلب${total != null ? " · ${total!.format()}" : ""}'
                     : 'Place order${total != null ? " · ${total!.format()}" : ""}',
                     style: const TextStyle(fontSize: 15,
-                        fontWeight: FontWeight.w900, color: Colors.white)),
+                        fontWeight: FontWeight.w900, color: UellowColors.darkBrown)),
               ]),
         )),
         const SizedBox(height: 8),

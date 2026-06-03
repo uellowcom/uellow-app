@@ -82,6 +82,19 @@ class _AuthScreenState extends State<AuthScreen> {
               Align(alignment: Alignment.centerRight, child: IconButton(
                 icon: const Icon(Icons.close, color: UellowColors.darkBrown),
                 onPressed: () => Navigator.of(context).maybePop(false),
+              ))
+            else
+              // Full page (e.g. after logout): give a way back to browsing
+              // so the user isn't trapped on the login screen.
+              Align(alignment: Alignment.centerLeft, child: TextButton.icon(
+                onPressed: () => Navigator.of(context)
+                    .pushNamedAndRemoveUntil('/home', (_) => false),
+                icon: const Icon(Icons.arrow_back, color: UellowColors.darkBrown, size: 18),
+                label: Text(
+                    UellowApi.instance.lang.toLowerCase().startsWith('ar')
+                        ? 'تصفّح كضيف' : 'Browse as guest',
+                    style: const TextStyle(color: UellowColors.darkBrown,
+                        fontWeight: FontWeight.w800)),
               )),
             _logo(),
             const SizedBox(height: 24),
