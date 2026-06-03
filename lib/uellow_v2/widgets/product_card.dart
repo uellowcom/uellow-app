@@ -9,6 +9,8 @@
 //   • Availability pill (right) — discount % NOT repeated here
 //   • Bottom: save amount + (optional) rating
 // =============================================================================
+import 'dart:async';
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
@@ -28,6 +30,7 @@ class ProductCard extends StatefulWidget {
     this.compact = false,
     this.hideSavePill = false,
     this.hideDiscount = false,
+    this.rich = false,
   });
 
   final UellowProductCard product;
@@ -42,6 +45,9 @@ class ProductCard extends StatefulWidget {
   final bool compact;
   final bool hideSavePill;
   final bool hideDiscount;
+  // v2.1.26 — rich layout (category page): coins row, rating+price-trend
+  // row, auto-rotating info ticker, availability/FREE/video bottom row.
+  final bool rich;
 
   @override
   State<ProductCard> createState() => _ProductCardState();
@@ -71,7 +77,11 @@ class _ProductCardState extends State<ProductCard> {
           ],
         ),
         clipBehavior: Clip.antiAlias,
-        child: widget.inFlashSale
+        child: widget.rich
+          ? _RichLayout(product: product, lang: lang,
+              hasDiscount: hasDiscount, discountPct: discountPct,
+              saveAmount: saveAmount, faved: _faved, onFav: _toggleFav)
+          : widget.inFlashSale
           ? _FlashLayout(product: product, lang: lang,
               hasDiscount: hasDiscount, discountPct: discountPct,
               saveAmount: saveAmount, faved: _faved, onFav: _toggleFav)
@@ -642,5 +652,266 @@ class _AvailPill extends StatelessWidget {
           style: TextStyle(color: fg, fontSize: 9.5,
               fontWeight: FontWeight.w900, letterSpacing: 0.5)),
     );
+  }
+}
+
+
+// ─── Rich layout (v2.1.26 — category page) ──────────────────────────
+// image → promo coins → name(2) → price row → rating + price-trend →
+// rotating info ticker → availability / FREE / video bottom row.
+
+class _RichLayout extends StatelessWidget {
+  const _RichLayout({
+    required this.product, required this.lang,
+    required this.hasDiscount, required this.discountPct,
+    required this.saveAmount, required this.faved, required this.onFav,
+  });
+  final UellowProductCard product;
+  final String lang;
+  final bool hasDiscount;
+  final int discountPct;
+  final double saveAmount;
+  final bool faved;
+  final VoidCallback onFav;
+
+  @override
+  Widget build(BuildContext context) {
+    final ar = lang.toLowerCase().startsWith('ar');
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _Image(product: product, hasDiscount: hasDiscount,
+            discountPct: discountPct, faved: faved, onFav: onFav),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(8, 5, 8, 7),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            // ── promo coins ──
+            SizedBox(height: 16, child: _CoinsRow(product: product, ar: ar)),
+            const SizedBox(height: 2),
+            // ── name (2 lines) ──
+            SizedBox(height: 30, child: Text(product.name.current(lang),
+                maxLines: 2, overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 11, height: 1.25,
+                    color: UellowColors.ink, fontWeight: FontWeight.w700))),
+            const SizedBox(height: 3),
+            // ── price row ──
+            Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
+              Text(product.price.amount.toStringAsFixed(3),
+                  style: const TextStyle(fontSize: 13.5,
+                      fontWeight: FontWeight.w900,
+                      color: UellowColors.ink, letterSpacing: -0.3)),
+              const SizedBox(width: 3),
+              Text(product.price.displaySymbol(lang),
+                  style: const TextStyle(fontSize: 9,
+                      fontWeight: FontWeight.w700, color: UellowColors.muted)),
+              if (hasDiscount) ...[
+                const SizedBox(width: 5),
+                Flexible(child: MidStrikePrice(
+                    text: product.comparePrice!.amount.toStringAsFixed(3),
+                    fontSize: 9, color: Colors.black87)),
+                const SizedBox(width: 4),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1.5),
+                  decoration: BoxDecoration(color: UellowColors.danger,
+                      borderRadius: BorderRadius.circular(3)),
+                  child: Text('-$discountPct%', style: const TextStyle(
+                      color: Colors.white, fontSize: 8.5,
+                      fontWeight: FontWeight.w900, height: 1.0)),
+                ),
+              ],
+            ]),
+            const SizedBox(height: 3),
+            // ── rating + price-intelligence ──
+            SizedBox(height: 14, child: Row(children: [
+              const Icon(Icons.star_rounded, size: 12, color: Color(0xFFFFC107)),
+              const SizedBox(width: 2),
+              Text(product.rating.avg > 0
+                      ? product.rating.avg.toStringAsFixed(1) : '—',
+                  style: const TextStyle(fontSize: 10,
+                      fontWeight: FontWeight.w800, color: UellowColors.ink)),
+              if (product.rating.count > 0) ...[
+                const SizedBox(width: 2),
+                Text('(${product.rating.count})', style: const TextStyle(
+                    fontSize: 9, color: UellowColors.muted)),
+              ],
+              if (product.priceTrend != null) ...[
+                const SizedBox(width: 6),
+                Builder(builder: (_) {
+                  final t = product.priceTrend!;
+                  final down = t['direction'] == 'down'
+                      || t['is_lowest'] == true;
+                  final color = down
+                      ? UellowColors.successDk : UellowColors.danger;
+                  final pct = (t['change_pct'] as num?)?.toDouble() ?? 0;
+                  return Row(mainAxisSize: MainAxisSize.min, children: [
+                    Icon(down ? Icons.arrow_downward : Icons.arrow_upward,
+                        size: 10, color: color),
+                    if (pct > 0) Text('${pct.toStringAsFixed(0)}%',
+                        style: TextStyle(fontSize: 9,
+                            fontWeight: FontWeight.w800, color: color)),
+                  ]);
+                }),
+              ],
+            ])),
+            const SizedBox(height: 2),
+            // ── rotating info ticker ──
+            SizedBox(height: 14, child: _InfoTicker(
+                product: product, ar: ar,
+                saveAmount: hasDiscount ? saveAmount : 0)),
+            const SizedBox(height: 4),
+            // ── bottom: availability + FREE + video ──
+            SizedBox(height: 17, child: Row(children: [
+              Expanded(child: Align(
+                  alignment: AlignmentDirectional.centerStart,
+                  child: _AvailPill(product: product))),
+              if (product.badges.contains('free_shipping')) Container(
+                margin: const EdgeInsetsDirectional.only(start: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                decoration: BoxDecoration(
+                  color: UellowColors.yellow,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Row(mainAxisSize: MainAxisSize.min, children: const [
+                  Icon(Icons.local_shipping_outlined, size: 10,
+                      color: UellowColors.darkBrown),
+                  SizedBox(width: 2),
+                  Text('FREE', style: TextStyle(fontSize: 8,
+                      fontWeight: FontWeight.w900,
+                      color: UellowColors.darkBrown, letterSpacing: 0.4)),
+                ]),
+              ),
+              if (product.hasVideo) Container(
+                margin: const EdgeInsetsDirectional.only(start: 4),
+                padding: const EdgeInsets.all(2.5),
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.75),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.play_arrow_rounded,
+                    size: 10, color: Colors.white),
+              ),
+            ])),
+          ]),
+        ),
+      ],
+    );
+  }
+}
+
+class _CoinsRow extends StatelessWidget {
+  const _CoinsRow({required this.product, required this.ar});
+  final UellowProductCard product;
+  final bool ar;
+  @override
+  Widget build(BuildContext context) {
+    final coins = <Widget>[];
+    void coin(String emoji, String label, Color bg, Color fg) {
+      coins.add(Container(
+        margin: const EdgeInsetsDirectional.only(end: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+        decoration: BoxDecoration(
+          color: bg, borderRadius: BorderRadius.circular(999)),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Text(emoji, style: const TextStyle(fontSize: 8)),
+          const SizedBox(width: 2),
+          Text(label, style: TextStyle(fontSize: 7.5,
+              fontWeight: FontWeight.w900, color: fg, letterSpacing: 0.2)),
+        ]),
+      ));
+    }
+    if (product.priceTrend?['is_lowest'] == true) {
+      coin('🔥', ar ? 'أقل سعر' : 'LOWEST', const Color(0xFFFFF3E0),
+          const Color(0xFFBF360C));
+    }
+    if (product.badges.contains('sale')) {
+      coin('⚡', ar ? 'عرض' : 'SALE', const Color(0xFFFFEBEE),
+          const Color(0xFFC62828));
+    }
+    if ((product.rank?['rank'] ?? 99) == 1) {
+      coin('🏆', ar ? 'الأفضل' : 'BEST', const Color(0xFFFFF8E1),
+          const Color(0xFF8B6508));
+    }
+    if (product.badges.contains('new')) {
+      coin('✨', ar ? 'جديد' : 'NEW', const Color(0xFFE3F2FD),
+          const Color(0xFF1565C0));
+    }
+    if (coins.isEmpty) return const SizedBox.shrink();
+    return ListView(scrollDirection: Axis.horizontal,
+        physics: const NeverScrollableScrollPhysics(), children: coins);
+  }
+}
+
+/// Vertically rotating one-line ticker (slides up every ~2.4 s) with the
+/// card's soft facts: save amount, fast delivery, views, sales, rank.
+class _InfoTicker extends StatefulWidget {
+  const _InfoTicker({required this.product, required this.ar,
+      required this.saveAmount});
+  final UellowProductCard product;
+  final bool ar;
+  final double saveAmount;
+  @override
+  State<_InfoTicker> createState() => _InfoTickerState();
+}
+
+class _InfoTickerState extends State<_InfoTicker> {
+  late final List<String> _items;
+  int _i = 0;
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    final p = widget.product;
+    final ar = widget.ar;
+    _items = [
+      if (widget.saveAmount > 0)
+        (ar ? '💰 وفّر ${widget.saveAmount.toStringAsFixed(3)} ${p.price.displaySymbol("ar")}'
+            : '💰 Save ${widget.saveAmount.toStringAsFixed(3)} ${p.price.displaySymbol("en")}'),
+      ar ? '🚚 توصيل سريع' : '🚚 Fast delivery',
+      if (p.viewCount > 0)
+        (ar ? '👁 ${_fmt(p.viewCount)} مشاهدة' : '👁 ${_fmt(p.viewCount)} views'),
+      if (p.soldCount > 0)
+        (ar ? '🛒 ${_fmt(p.soldCount)} عملية بيع' : '🛒 ${_fmt(p.soldCount)} sold'),
+      if (p.rank != null)
+        (ar ? '🏆 الأفضل في ${_short((p.rank!['category'] as Map?)?['ar'] ?? '')}'
+            : '🏆 Best in ${_short((p.rank!['category'] as Map?)?['en'] ?? '')}'),
+    ];
+    if (_items.length > 1) {
+      _timer = Timer.periodic(const Duration(milliseconds: 2400), (_) {
+        if (mounted) setState(() => _i = (_i + 1) % _items.length);
+      });
+    }
+  }
+
+  String _fmt(int n) => n >= 1000
+      ? '${(n / 1000).toStringAsFixed(n >= 10000 ? 0 : 1)}K' : '$n';
+  String _short(Object s) {
+    final t = s.toString();
+    return t.length > 16 ? '${t.substring(0, 15)}…' : t;
+  }
+
+  @override
+  void dispose() { _timer?.cancel(); super.dispose(); }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_items.isEmpty) return const SizedBox.shrink();
+    return ClipRect(child: AnimatedSwitcher(
+      duration: const Duration(milliseconds: 380),
+      transitionBuilder: (child, anim) => SlideTransition(
+        position: Tween<Offset>(
+          begin: const Offset(0, 1), end: Offset.zero).animate(anim),
+        child: FadeTransition(opacity: anim, child: child),
+      ),
+      child: Align(
+        key: ValueKey(_i),
+        alignment: AlignmentDirectional.centerStart,
+        child: Text(_items[_i],
+            maxLines: 1, overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontSize: 9.5,
+                fontWeight: FontWeight.w500,   // deliberately NOT bold
+                color: UellowColors.text)),
+      ),
+    ));
   }
 }
