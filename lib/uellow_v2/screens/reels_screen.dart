@@ -25,6 +25,7 @@ import 'package:video_player/video_player.dart';
 import '../../api/uellow_api.dart';
 import '../router/uellow_router.dart';
 import '../theme/uellow_theme.dart';
+import '../widgets/uellow_bottom_nav.dart';
 
 class ReelsScreen extends StatefulWidget {
   const ReelsScreen({super.key});
@@ -90,6 +91,10 @@ class _ReelsScreenState extends State<ReelsScreen> {
     final ar = UellowApi.instance.lang.toLowerCase().startsWith('ar');
     return Scaffold(
       backgroundColor: Colors.black,
+      // v2.0.91 — Reels screen gets the standard bottom nav so users
+      // can jump to Home / Shop / Beena / Cart / Account without going
+      // back. Active tab = reels.
+      bottomNavigationBar: const UellowBottomNav(active: UNavTab.reels),
       body: SafeArea(child: Stack(children: [
         if (_items.isEmpty && _loading)
           const Center(child: CircularProgressIndicator(color: Colors.white))
