@@ -246,6 +246,7 @@ Widget _renderBlock(BuildContext c, Map<String, dynamic> b, DynTheme t) {
       break;
     case 'image-banner':   inner = ImageBannerBlock(p: p, t: t, ar: ar); break;
     case 'reels-strip':    inner = ReelsStripBlock(p: p, data: data, t: t, ar: ar); break;
+    case 'occasion-header': inner = OccasionHeaderBlock(p: p, t: t, ar: ar); break;
     case 'story-bubbles':  inner = StoryBubblesBlock(p: p, t: t, ar: ar); break;
     case 'lookbook':       inner = LookbookBlock(p: p, t: t, ar: ar); break;
     case 'sticky-cta':     inner = StickyCtaBlock(p: p, t: t, ar: ar); break;

@@ -3827,6 +3827,175 @@ void _openBannerLink(BuildContext context, Map<String, dynamic>? link) {
   }
 }
 
+// ─── OCCASION HEADER — themed full-width seasonal / event header ─────────────
+// v2.0.96 — Builder block 'occasion-header'. All content lives in props; the
+// builder ships preset themes (Ramadan, Eid al-Fitr / al-Adha, Black Friday,
+// White Wednesday, Kuwait National Day, New Year, Summer/Winter, Back to
+// School) that pre-fill gradient + emoji + pattern + bilingual copy. Props:
+//   titleEn/Ar, subtitleEn/Ar, cta_textEn/Ar, cta_link {type,value},
+//   variant (banner|compact|ribbon), accent, accent2, text_color,
+//   icon (emoji), pattern (dots|lines|grid|mesh|waves|confetti|lanterns),
+//   height, bg_image(/_ar), show_countdown + event_end (ISO).
+class OccasionHeaderBlock extends StatelessWidget {
+  const OccasionHeaderBlock({super.key, required this.p, required this.t, required this.ar});
+  final Map<String, dynamic> p;
+  final DynTheme t;
+  final bool ar;
+
+  String _txt(String key, [String fallback = '']) {
+    final en = p['${key}En']?.toString() ?? fallback;
+    if (!ar) return en;
+    final a = p['${key}Ar']?.toString();
+    return (a != null && a.isNotEmpty) ? a : en;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final title = _txt('title', 'Special Occasion');
+    final subtitle = _txt('subtitle');
+    final ctaText = _txt('cta_text');
+    final icon = p['icon']?.toString() ?? '';
+    final variant = (p['variant'] as String?) ?? 'banner';
+    final accent = _parseColor(p['accent']) ?? const Color(0xFFE63946);
+    final accent2 = _parseColor(p['accent2']) ?? accent.withOpacity(0.65);
+    final textColor = _parseColor(p['text_color']) ?? Colors.white;
+    final pattern = (p['pattern'] as String?) ?? 'none';
+    final bgImage = pickLocalizedImage(p, ar, key: 'bg_image');
+    final showCountdown = p['show_countdown'] == true;
+    final eventEnd = p['event_end']?.toString() ?? '';
+    final link = (p['cta_link'] as Map?)?.cast<String, dynamic>();
+    final height = ((p['height'] as num?)?.toDouble() ?? 130).clamp(70, 260).toDouble();
+
+    // RIBBON — slim single-line accent ribbon
+    if (variant == 'ribbon') {
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        child: GestureDetector(
+          onTap: link == null ? null : () => _openBannerLink(context, link),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(colors: [accent, accent2]),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(children: [
+              if (icon.isNotEmpty) ...[
+                Text(icon, style: const TextStyle(fontSize: 18)),
+                const SizedBox(width: 8),
+              ],
+              Expanded(child: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: textColor, fontWeight: FontWeight.w900, fontSize: 14))),
+              if (showCountdown && eventEnd.isNotEmpty)
+                _MiniCountdown(endIso: eventEnd, accent: accent),
+            ]),
+          ),
+        ),
+      );
+    }
+
+    final isCompact = variant == 'compact';
+    final h = isCompact ? (height * 0.72).clamp(64, 170).toDouble() : height;
+
+    final content = Stack(fit: StackFit.expand, children: [
+      // Background — gradient, or cover image with gradient fallback on error
+      if (bgImage.isEmpty)
+        DecoratedBox(decoration: BoxDecoration(gradient: LinearGradient(
+            begin: Alignment.topLeft, end: Alignment.bottomRight,
+            colors: [accent, accent2]))),
+      if (bgImage.isNotEmpty)
+        CachedNetworkImage(imageUrl: bgImage, fit: BoxFit.cover,
+            placeholder: (_, __) => DecoratedBox(
+                decoration: BoxDecoration(gradient: LinearGradient(colors: [accent, accent2]))),
+            errorWidget: (_, __, ___) => DecoratedBox(
+                decoration: BoxDecoration(gradient: LinearGradient(colors: [accent, accent2])))),
+      // Decorative pattern overlay (lanterns/confetti/waves/…)
+      if (pattern != 'none')
+        _BackgroundLayer(color: null, pattern: pattern, imageUrl: '', patternColor: textColor),
+      // Legibility veil when a photo is behind the text
+      if (bgImage.isNotEmpty)
+        DecoratedBox(decoration: BoxDecoration(gradient: LinearGradient(
+          begin: ar ? Alignment.centerRight : Alignment.centerLeft,
+          end: ar ? Alignment.centerLeft : Alignment.centerRight,
+          colors: [Colors.black.withOpacity(0.45), Colors.black.withOpacity(0.05)]))),
+      Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(children: [
+          if (icon.isNotEmpty && !isCompact) ...[
+            Text(icon, style: const TextStyle(fontSize: 38)),
+            const SizedBox(width: 14),
+          ],
+          Expanded(child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (icon.isNotEmpty && isCompact) ...[
+                Text(icon, style: const TextStyle(fontSize: 22)),
+                const SizedBox(height: 2),
+              ],
+              Text(title, maxLines: 2, overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: textColor, fontSize: isCompact ? 16 : 22,
+                      fontWeight: FontWeight.w900, height: 1.1,
+                      shadows: const [Shadow(color: Colors.black26, blurRadius: 4)])),
+              if (subtitle.isNotEmpty) ...[
+                const SizedBox(height: 4),
+                Text(subtitle, maxLines: 2, overflow: TextOverflow.ellipsis,
+                    style: TextStyle(color: textColor.withValues(alpha: 0.92),
+                        fontSize: isCompact ? 11.5 : 13, fontWeight: FontWeight.w600,
+                        shadows: const [Shadow(color: Colors.black26, blurRadius: 3)])),
+              ],
+              if (showCountdown && eventEnd.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Align(alignment: ar ? Alignment.centerRight : Alignment.centerLeft,
+                    child: _MiniCountdown(endIso: eventEnd, accent: accent)),
+              ],
+            ],
+          )),
+          if (ctaText.isNotEmpty) ...[
+            const SizedBox(width: 12),
+            _OccasionCta(text: ctaText, fg: accent, bg: textColor,
+                onTap: () => _openBannerLink(context, link)),
+          ],
+        ]),
+      ),
+    ]);
+
+    final card = ClipRRect(
+      borderRadius: BorderRadius.circular(16),
+      child: SizedBox(height: h, child: content),
+    );
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      child: (link != null && ctaText.isEmpty)
+          ? GestureDetector(onTap: () => _openBannerLink(context, link), child: card)
+          : card,
+    );
+  }
+}
+
+class _OccasionCta extends StatelessWidget {
+  const _OccasionCta({required this.text, required this.fg, required this.bg, required this.onTap});
+  final String text;
+  final Color fg, bg;
+  final VoidCallback onTap;
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: bg,
+      borderRadius: BorderRadius.circular(999),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(999),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          child: Text(text, maxLines: 1, overflow: TextOverflow.ellipsis,
+              style: TextStyle(color: fg, fontWeight: FontWeight.w900, fontSize: 12)),
+        ),
+      ),
+    );
+  }
+}
+
 // ─── REELS STRIP — circular video thumbs that open the Reels feed ───────────
 // v2.0.90 — Data shape from resolver: { items: [{ product_id, product_name,
 //                                                  thumbnail }, …] }
