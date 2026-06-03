@@ -23,6 +23,7 @@ import '../services/first_launch_service.dart';
 import '../theme/uellow_l10n.dart';
 import '../theme/uellow_theme.dart';
 import 'address_picker_screen.dart';
+import 'addresses_screen.dart';
 import 'auth_screen.dart';
 import 'order_confirmation_screen.dart';
 import 'webview_screen.dart';
@@ -315,12 +316,56 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           return;
         }
       }
+      // Guest receipt payload — the confirmation page is the guest's only
+      // record of the order, so hand it everything we know.
+      Map<String, dynamic>? gAddr;
+      String? gShip, gShipPrice, gPay;
+      if (_guestMode) {
+        final addrs2 = ((d.summary?['addresses'] as List?) ?? const [])
+            .cast<Map>().map((a) => a.cast<String, dynamic>()).toList();
+        for (final a in addrs2) {
+          if (a['id'] == _selectedAddressId) { gAddr = a; break; }
+        }
+        gAddr ??= addrs2.isNotEmpty ? addrs2.first : null;
+        for (final m in d.shippingMethods) {
+          if (m['id'] == _selectedCarrierId) {
+            final lang2 = UellowApi.instance.lang;
+            gShip = ((m['name'] as Map?)?[lang2]
+                ?? (m['name'] as Map?)?['en'] ?? '').toString();
+            final pm2 = m['price'] as Map?;
+            if (pm2 != null) {
+              gShipPrice = '${((pm2['amount'] as num?) ?? 0).toDouble().toStringAsFixed(3)} ${pm2['symbol'] ?? 'KD'}';
+            }
+            break;
+          }
+        }
+        for (final m in d.paymentMethods) {
+          if (m['id'] == _selectedPaymentId) {
+            final lang2 = UellowApi.instance.lang;
+            final nm = m['name'];
+            gPay = nm is Map
+                ? (nm[lang2] ?? nm['en'] ?? '').toString()
+                : (nm ?? '').toString();
+            break;
+          }
+        }
+      }
       Navigator.pushReplacementNamed(context, Routes.orderConfirm,
         arguments: OrderConfirmationArgs(
           success: true,
           orderId: result.orderId,
           orderName: result.orderName,
           summary: d.summary,
+          // Cashback only exists for ONLINE payments (backend sends it
+          // only then; cash orders get nothing).
+          cashbackAmount:
+              result.cashbackAmount > 0 ? result.cashbackAmount : null,
+          cashbackCurrency: result.cashbackCurrency,
+          guest: _guestMode,
+          guestAddress: gAddr,
+          guestShipping: gShip,
+          guestShippingPrice: gShipPrice,
+          guestPayment: gPay,
         ));
     } on UellowApiException catch (e) {
       if (!mounted) return;
@@ -498,6 +543,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         addresses: addrs,
         selected: _selectedAddressId,
         geoCity: geoCity,
+        guestMode: _guestMode,
         onSelect: (id) {
           setState(() => _selectedAddressId = id);
           UellowApi.instance.tokenStore.writeAddressId(id);
@@ -579,16 +625,64 @@ class _AddressList extends StatelessWidget {
   const _AddressList({
     required this.addresses, required this.selected,
     required this.onSelect, required this.geoCity,
+    this.guestMode = false,
   });
   final List<Map<String, dynamic>> addresses;
   final int? selected;
   final ValueChanged<int> onSelect;
   final String? geoCity;
+  final bool guestMode;
+
+  void _reloadCheckout(BuildContext context) {
+    final state = context.findAncestorStateOfType<_CheckoutScreenState>();
+    if (state != null && state.mounted) {
+      state.setState(() { state._data = state._bootstrap(); });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final ar = UellowApi.instance.lang == 'ar';
     if (addresses.isEmpty) {
       return _EmptyAddressCta(geoCity: geoCity);
+    }
+    // v2.1.21 — guest checkout: add buttons stay on top (side by side)
+    // and the written address shows below them with an Edit button.
+    if (guestMode) {
+      final cur = addresses.firstWhere(
+        (a) => a['id'] == selected, orElse: () => addresses.first);
+      return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        _EmptyAddressCta(geoCity: geoCity),
+        const SizedBox(height: 10),
+        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Expanded(child: _addrCard(cur, selected: true)),
+          const SizedBox(width: 8),
+          // Edit pencil — reopens the form on the SAME guest record.
+          Material(
+            color: UellowColors.yellowSoft,
+            shape: const CircleBorder(),
+            child: InkWell(
+              customBorder: const CircleBorder(),
+              onTap: () async {
+                await showModalBottomSheet(
+                  context: context, isScrollControlled: true,
+                  backgroundColor: Colors.transparent,
+                  builder: (_) => AddressFormSheet(
+                    initial: UellowAddress.fromJson(cur),
+                    onSaved: () {},
+                  ),
+                );
+                _reloadCheckout(context);
+              },
+              child: const Padding(
+                padding: EdgeInsets.all(11),
+                child: Icon(Icons.edit_outlined, size: 18,
+                    color: UellowColors.darkBrown),
+              ),
+            ),
+          ),
+        ]),
+      ]);
     }
     // Only the selected address is shown; tap opens a picker.
     final current = addresses.firstWhere(

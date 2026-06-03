@@ -11,6 +11,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../api/uellow_api.dart';
 import '../theme/uellow_theme.dart';
+import 'auth_screen.dart';
 
 class OrderConfirmationArgs {
   final bool success;
@@ -18,9 +19,22 @@ class OrderConfirmationArgs {
   final int? orderId;
   final String? failureMessage;
   final Map<String, dynamic>? summary;
+  // v2.1.21 — wallet cashback granted for paying online (null = none).
+  final double? cashbackAmount;
+  final String? cashbackCurrency;
+  // v2.1.21 — guest checkout: render the full receipt + sign-up CTA
+  // (guests can't open the order later, this page is their receipt).
+  final bool guest;
+  final Map<String, dynamic>? guestAddress;
+  final String? guestShipping;
+  final String? guestShippingPrice;
+  final String? guestPayment;
   const OrderConfirmationArgs({
     required this.success, this.orderName, this.orderId,
     this.failureMessage, this.summary,
+    this.cashbackAmount, this.cashbackCurrency,
+    this.guest = false, this.guestAddress,
+    this.guestShipping, this.guestShippingPrice, this.guestPayment,
   });
 }
 
@@ -78,7 +92,9 @@ class _OrderConfirmationScreenState extends State<OrderConfirmationScreen>
         if (widget.args.success && _ctrl != null)
           Positioned.fill(child: IgnorePointer(
               child: _Confetti(controller: _ctrl!))),
-        widget.args.success ? _success(context) : _failure(context),
+        widget.args.success
+            ? (widget.args.guest ? _guestReceipt(context) : _success(context))
+            : _failure(context),
       ])),
     );
   }
@@ -107,6 +123,38 @@ class _OrderConfirmationScreenState extends State<OrderConfirmationScreen>
           : "We'll text you the moment it ships",
           textAlign: TextAlign.center, style: UT.body)),
       const SizedBox(height: 22),
+      // v2.1.21 — online-payment cashback congratulation (green banner).
+      if ((widget.args.cashbackAmount ?? 0) > 0) Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: UellowColors.successBg,
+          border: Border.all(color: UellowColors.success, width: 1.5),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(children: [
+          const Text('🎁', style: TextStyle(fontSize: 26)),
+          const SizedBox(width: 12),
+          Expanded(child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(ar ? 'مبروك! 🎉' : 'Congratulations! 🎉',
+                style: const TextStyle(fontSize: 14,
+                    fontWeight: FontWeight.w900,
+                    color: UellowColors.successDk)),
+            const SizedBox(height: 2),
+            Text(ar
+                ? 'تم وضع مبلغ ${widget.args.cashbackAmount!.toStringAsFixed(3)} '
+                  '${widget.args.cashbackCurrency ?? "KWD"} في محفظتك '
+                  'لأنك دفعت أونلاين'
+                : '${widget.args.cashbackAmount!.toStringAsFixed(3)} '
+                  '${widget.args.cashbackCurrency ?? "KWD"} was added to '
+                  'your wallet for paying online',
+                style: const TextStyle(fontSize: 12.5,
+                    color: UellowColors.successDk, height: 1.4,
+                    fontWeight: FontWeight.w600)),
+          ])),
+        ]),
+      ),
       if (order.isNotEmpty) Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
@@ -137,6 +185,182 @@ class _OrderConfirmationScreenState extends State<OrderConfirmationScreen>
       ),
       const SizedBox(height: 30),
       _ctaRow(context),
+    ]);
+  }
+
+  // ── Guest receipt: full order details + sign-up CTA ────────────────
+  Widget _guestReceipt(BuildContext context) {
+    final ar = UellowApi.instance.lang == 'ar';
+    final cart = (widget.args.summary?['cart'] as Map?)?.cast<String, dynamic>();
+    final lines = ((cart?['lines'] as List?) ?? const [])
+        .cast<Map>().map((l) => l.cast<String, dynamic>()).toList();
+    final totals = (cart?['totals'] as Map?)?.cast<String, dynamic>();
+    String money(Map? m) {
+      if (m == null) return '—';
+      final a = (m['amount'] as num?)?.toDouble() ?? 0;
+      return '${a.toStringAsFixed(3)} ${(m['symbol'] ?? 'KD')}';
+    }
+    final a = widget.args.guestAddress;
+    Widget row(String k, String v, {bool bold = false}) => Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+        Text(k, style: TextStyle(fontSize: bold ? 14 : 12.5,
+            color: bold ? UellowColors.ink : UellowColors.muted,
+            fontWeight: bold ? FontWeight.w900 : FontWeight.w600)),
+        Text(v, style: TextStyle(fontSize: bold ? 15 : 12.5,
+            color: UellowColors.ink,
+            fontWeight: bold ? FontWeight.w900 : FontWeight.w700)),
+      ]),
+    );
+    Widget card(String title, IconData icon, List<Widget> children) => Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border.all(color: UellowColors.border),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Icon(icon, size: 15, color: UellowColors.darkBrown),
+          const SizedBox(width: 6),
+          Text(title, style: const TextStyle(fontSize: 12.5,
+              fontWeight: FontWeight.w900, color: UellowColors.darkBrown)),
+        ]),
+        const SizedBox(height: 8),
+        ...children,
+      ]),
+    );
+    return ListView(padding: const EdgeInsets.fromLTRB(20, 30, 20, 30), children: [
+      Center(child: Container(
+        width: 88, height: 88,
+        decoration: BoxDecoration(
+          color: UellowColors.successBg, shape: BoxShape.circle,
+          boxShadow: [BoxShadow(color: UellowColors.success.withValues(alpha: 0.3),
+              blurRadius: 20, offset: const Offset(0, 6))],
+        ),
+        alignment: Alignment.center,
+        child: const Icon(Icons.check_circle, size: 58, color: UellowColors.success),
+      )),
+      const SizedBox(height: 14),
+      Center(child: Text(ar ? 'تم استلام طلبك! 🎉' : 'Order received! 🎉',
+          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900,
+              color: UellowColors.ink))),
+      const SizedBox(height: 4),
+      Center(child: Text(
+          ar ? 'احتفظ بهذه الصفحة — هذا إيصال طلبك كزائر'
+             : 'Keep this page — this is your guest order receipt',
+          textAlign: TextAlign.center,
+          style: const TextStyle(fontSize: 12, color: UellowColors.muted))),
+      const SizedBox(height: 18),
+      // Order number
+      card(ar ? 'رقم الطلب' : 'Order number', Icons.receipt_long_outlined, [
+        Text(widget.args.orderName ?? '—', style: const TextStyle(
+            fontSize: 18, fontWeight: FontWeight.w900,
+            color: UellowColors.darkBrown, letterSpacing: 0.5)),
+      ]),
+      // Items
+      if (lines.isNotEmpty) card(ar ? 'المنتجات' : 'Items',
+          Icons.shopping_bag_outlined, [
+        for (final l in lines) Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: Row(children: [
+            Expanded(child: Text(
+                ((l['name'] as Map?)?[ar ? 'ar' : 'en']
+                    ?? (l['name'] as Map?)?['en'] ?? '').toString(),
+                maxLines: 2, overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 12.5,
+                    fontWeight: FontWeight.w700, color: UellowColors.ink))),
+            const SizedBox(width: 8),
+            Text('×${((l['qty'] as num?) ?? 1).toInt()}',
+                style: const TextStyle(fontSize: 12,
+                    color: UellowColors.muted, fontWeight: FontWeight.w800)),
+            const SizedBox(width: 10),
+            Text(money((l['total'] as Map?)?.cast<String, dynamic>()),
+                style: const TextStyle(fontSize: 12.5,
+                    fontWeight: FontWeight.w900, color: UellowColors.ink)),
+          ]),
+        ),
+        const Divider(height: 16, color: UellowColors.border),
+        row(ar ? 'المجموع الفرعي' : 'Subtotal',
+            money((totals?['subtotal'] as Map?)?.cast<String, dynamic>())),
+        if (widget.args.guestShippingPrice != null)
+          row(ar ? 'التوصيل' : 'Delivery', widget.args.guestShippingPrice!),
+        row(ar ? 'الإجمالي' : 'Total',
+            money((totals?['total'] as Map?)?.cast<String, dynamic>()),
+            bold: true),
+      ]),
+      // Address
+      if (a != null) card(ar ? 'عنوان التوصيل' : 'Delivery address',
+          Icons.location_on_outlined, [
+        Text((a['name'] ?? '').toString(), style: const TextStyle(
+            fontSize: 13, fontWeight: FontWeight.w800, color: UellowColors.ink)),
+        const SizedBox(height: 2),
+        Text([a['street'], a['street2'], a['city'], a['country']]
+                .where((s) => s != null && '$s'.isNotEmpty).join(', '),
+            style: const TextStyle(fontSize: 12, color: UellowColors.text)),
+        if ((a['phone'] ?? '').toString().isNotEmpty) Padding(
+          padding: const EdgeInsets.only(top: 2),
+          child: Text((a['phone'] ?? '').toString(),
+              style: const TextStyle(fontSize: 11.5, color: UellowColors.muted)),
+        ),
+      ]),
+      // Shipping + payment
+      card(ar ? 'الشحن والدفع' : 'Shipping & payment',
+          Icons.local_shipping_outlined, [
+        if (widget.args.guestShipping != null)
+          row(ar ? 'وسيلة التوصيل' : 'Delivery method', widget.args.guestShipping!),
+        if (widget.args.guestPayment != null)
+          row(ar ? 'طريقة الدفع' : 'Payment', widget.args.guestPayment!),
+      ]),
+      const SizedBox(height: 8),
+      // Sign-up CTA — convert the guest
+      Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: UellowColors.yellowSoft,
+          border: Border.all(color: UellowColors.yellow, width: 1.5),
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Column(children: [
+          Text(ar ? '✨ أنشئ حساباً لمتابعة طلبك'
+                  : '✨ Create an account to track this order',
+              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w900,
+                  color: UellowColors.darkBrown)),
+          const SizedBox(height: 4),
+          Text(ar
+              ? 'تابع حالة التوصيل، اجمع نقاط الولاء، واحفظ عنوانك للمرات القادمة'
+              : 'Track delivery, earn loyalty points, and save your address',
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 11.5, color: UellowColors.text)),
+          const SizedBox(height: 12),
+          SizedBox(width: double.infinity, child: ElevatedButton.icon(
+            onPressed: () async { await showAuthSheet(context); },
+            icon: const Icon(Icons.login, size: 16),
+            label: Text(ar ? 'تسجيل الدخول / حساب جديد' : 'Sign in / Register',
+                style: const TextStyle(fontWeight: FontWeight.w900)),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: UellowColors.yellow,
+              foregroundColor: UellowColors.darkBrown,
+              padding: const EdgeInsets.symmetric(vertical: 13),
+            ),
+          )),
+        ]),
+      ),
+      const SizedBox(height: 12),
+      SizedBox(width: double.infinity, child: OutlinedButton.icon(
+        onPressed: () => Navigator.of(context)
+            .pushNamedAndRemoveUntil('/home', (_) => false),
+        icon: const Icon(Icons.storefront_outlined, size: 16,
+            color: UellowColors.darkBrown),
+        label: Text(ar ? 'متابعة التسوق' : 'Continue shopping',
+            style: const TextStyle(color: UellowColors.ink,
+                fontWeight: FontWeight.w800)),
+        style: OutlinedButton.styleFrom(
+          padding: const EdgeInsets.symmetric(vertical: 13),
+          side: const BorderSide(color: UellowColors.border, width: 1.5),
+        ),
+      )),
     ]);
   }
 

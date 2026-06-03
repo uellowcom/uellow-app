@@ -1407,7 +1407,8 @@ class _BulkPricing extends StatelessWidget {
         // cramped equal-Expanded row to a horizontally-scrollable strip.
         // 3 tiles peek-fit at typical phone widths so the user sees there
         // are more to swipe to.
-        if (tiers.length <= 3)
+        // v2.1.21 — tighter grid: up to 4 small tiles share one row.
+        if (tiers.length <= 4)
           Row(children: List.generate(tiers.length, (i) {
             final t = tiers[i];
             final nextMin = i < tiers.length - 1 ? tiers[i + 1].minQty - 1 : null;
@@ -1415,7 +1416,7 @@ class _BulkPricing extends StatelessWidget {
                 ? '${t.minQty}–$nextMin'
                 : '${t.minQty}+';
             return Expanded(child: Padding(
-              padding: EdgeInsets.only(right: i < tiers.length - 1 ? 6 : 0),
+              padding: EdgeInsets.only(right: i < tiers.length - 1 ? 4 : 0),
               child: _tier(qtyLabel: qtyLabel, price: t.price, sym: t.currency,
                   save: t.savePct, best: i == bestIdx && tiers.length > 1,
                   selected: i == activeIdx,
@@ -1425,13 +1426,13 @@ class _BulkPricing extends StatelessWidget {
           }))
         else
           SizedBox(
-            height: 118,
+            height: 112,
             child: ListView.separated(
               padding: EdgeInsets.zero,
               scrollDirection: Axis.horizontal,
               physics: const ClampingScrollPhysics(),
               itemCount: tiers.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 6),
+              separatorBuilder: (_, __) => const SizedBox(width: 4),
               itemBuilder: (_, i) {
                 final t = tiers[i];
                 final nextMin = i < tiers.length - 1 ? tiers[i + 1].minQty - 1 : null;
@@ -1439,7 +1440,7 @@ class _BulkPricing extends StatelessWidget {
                     ? '${t.minQty}–$nextMin'
                     : '${t.minQty}+';
                 return SizedBox(
-                  width: (MediaQuery.of(context).size.width - 28 - 14 - 12) / 3,
+                  width: (MediaQuery.of(context).size.width - 28 - 14 - 12) / 4,
                   child: _tier(qtyLabel: qtyLabel, price: t.price,
                       sym: t.currency, save: t.savePct,
                       best: i == bestIdx,
@@ -1480,7 +1481,7 @@ class _BulkPricing extends StatelessWidget {
       borderRadius: BorderRadius.circular(12),
       child: Stack(clipBehavior: Clip.none, children: [
         Container(
-          padding: EdgeInsets.fromLTRB(6, (best || selected) ? 18 : 12, 6, 12),
+          padding: EdgeInsets.fromLTRB(4, (best || selected) ? 17 : 10, 4, 10),
           decoration: BoxDecoration(
             color: highlightDark ? UellowColors.darkBrown : Colors.white,
             border: Border.all(
@@ -1500,12 +1501,12 @@ class _BulkPricing extends StatelessWidget {
                 borderRadius: BorderRadius.circular(999),
               ),
               child: Text('$qtyLabel ${ar ? "قطعة" : "pcs"}',
-                  style: const TextStyle(fontSize: 10,
+                  style: const TextStyle(fontSize: 9,
                       fontWeight: FontWeight.w900, color: UellowColors.darkBrown)),
             ),
             const SizedBox(height: 8),
             Text(price.toStringAsFixed(3), style: TextStyle(
-                fontSize: 17, fontWeight: FontWeight.w900,
+                fontSize: 14.5, fontWeight: FontWeight.w900,
                 color: highlightDark ? UellowColors.yellowLight : UellowColors.darkBrown)),
             Text('$sym ${ar ? "/ قطعة" : "/ pc"}',
                 style: TextStyle(fontSize: 10,

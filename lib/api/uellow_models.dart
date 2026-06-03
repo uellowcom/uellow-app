@@ -1002,9 +1002,13 @@ class UellowCheckoutConfirm {
   final String orderName;
   final bool paymentRequired;
   final String? paymentUrl;
+  // v2.1.21 — wallet cashback promised for paying online.
+  final double cashbackAmount;
+  final String cashbackCurrency;
   const UellowCheckoutConfirm({
     required this.orderId, required this.orderName,
     required this.paymentRequired, this.paymentUrl,
+    this.cashbackAmount = 0, this.cashbackCurrency = 'KWD',
   });
   factory UellowCheckoutConfirm.fromJson(Map<String, dynamic> j) =>
       UellowCheckoutConfirm(
@@ -1012,6 +1016,10 @@ class UellowCheckoutConfirm {
         orderName: (j['order_name'] ?? '').toString(),
         paymentRequired: (j['payment_required'] ?? false) as bool,
         paymentUrl: j['payment_url'] as String?,
+        cashbackAmount:
+            ((j['cashback'] as Map?)?['amount'] as num?)?.toDouble() ?? 0,
+        cashbackCurrency:
+            ((j['cashback'] as Map?)?['currency'] ?? 'KWD').toString(),
       );
 }
 

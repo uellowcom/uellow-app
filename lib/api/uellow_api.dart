@@ -882,7 +882,12 @@ class _AddressesApi {
   }
 
   Future<UellowAddress> update(int id, Map<String, dynamic> data) async {
-    final res = await _c._post('${EP.addresses}/$id/update', auth: true, body: data);
+    final token = await _c.tokenStore.readToken();
+    final body = {
+      ...data,
+      if (token == null || token.isEmpty) 'guest': 1,
+    };
+    final res = await _c._post('${EP.addresses}/$id/update', auth: false, body: body);
     return UellowAddress.fromJson(
         res['data']['address'] as Map<String, dynamic>);
   }
