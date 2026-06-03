@@ -56,10 +56,12 @@ class _WishlistScreenState extends State<WishlistScreen> {
               );
             }),
             const SizedBox(width: 6),
-            const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text('My Wishlist', style: UT.h1),
-              SizedBox(height: 2),
-              Text('12 items · 2 on sale · 1 price dropped', style: UT.small),
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(UellowApi.instance.lang.toLowerCase().startsWith('ar')
+                  ? 'قائمة المفضلة' : 'My Wishlist', style: UT.h1),
+              const SizedBox(height: 2),
+              Text(UellowApi.instance.lang.toLowerCase().startsWith('ar')
+                  ? 'منتجاتك المحفوظة' : 'Your saved products', style: UT.small),
             ])),
           ]),
         ),
@@ -115,7 +117,10 @@ class _WishlistScreenState extends State<WishlistScreen> {
     );
   }
 
-  static const _filters = ['All','In stock','On sale','Price drop','Recently added'];
+  // v2.0.91 — filter labels per language
+  List<String> get _filters => UellowApi.instance.lang.toLowerCase().startsWith('ar')
+      ? const ['الكل','متاح','تخفيضات','هبوط السعر','أُضيف مؤخراً']
+      : const ['All','In stock','On sale','Price drop','Recently added'];
 
   Widget _empty() {
     return ListView(children: [

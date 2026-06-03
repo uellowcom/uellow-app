@@ -27,6 +27,7 @@ class ProductCard extends StatefulWidget {
     this.onTap,
     this.compact = false,
     this.hideSavePill = false,
+    this.hideDiscount = false,
   });
 
   final UellowProductCard product;
@@ -35,8 +36,12 @@ class ProductCard extends StatefulWidget {
   final VoidCallback? onTap;
   // v2.0.79 — compact: smaller name + price + rating gap (shop screen
   // "All products" grid). hideSavePill: drop the bottom Save+Avail row.
+  // v2.0.91 — hideDiscount: also drops the inline discount % pill, the
+  // strikethrough compare price, AND the discount image badge for the
+  // shop screen "Products" + "Recently arrived" rows per spec.
   final bool compact;
   final bool hideSavePill;
+  final bool hideDiscount;
 
   @override
   State<ProductCard> createState() => _ProductCardState();
@@ -71,11 +76,12 @@ class _ProductCardState extends State<ProductCard> {
               hasDiscount: hasDiscount, discountPct: discountPct,
               saveAmount: saveAmount, faved: _faved, onFav: _toggleFav)
           : _StdLayout(product: product, lang: lang,
-              hasDiscount: hasDiscount, discountPct: discountPct,
+              // v2.0.91 — when hideDiscount is set, pretend there is no
+              // discount AT ALL so the image badge + inline pill + struck
+              // compare price all vanish.
+              hasDiscount: widget.hideDiscount ? false : hasDiscount,
+              discountPct: widget.hideDiscount ? 0 : discountPct,
               saveAmount: saveAmount,
-              // v2.0.79 — `hideSavePill` overrides showStockLabel as well;
-              // when callers pass `compact: true` we typically don't want
-              // any of the bottom summary row.
               showStockLabel: widget.hideSavePill ? false : widget.showStockLabel,
               hideSavePill: widget.hideSavePill,
               compact: widget.compact,
@@ -431,11 +437,12 @@ class _Image extends StatelessWidget {
                   color: Color(0x40000000), blurRadius: 4, offset: Offset(0, 2),
                 )],
               ),
-              child: Row(mainAxisSize: MainAxisSize.min, children: const [
-                Icon(Icons.play_arrow_rounded, color: Colors.white, size: 12),
-                SizedBox(width: 2),
-                Text('VIDEO',
-                    style: TextStyle(color: Colors.white, fontSize: 9,
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 12),
+                const SizedBox(width: 2),
+                Text(UellowApi.instance.lang.toLowerCase().startsWith('ar')
+                    ? 'فيديو' : 'VIDEO',
+                    style: const TextStyle(color: Colors.white, fontSize: 9,
                         fontWeight: FontWeight.w900, letterSpacing: 0.4)),
               ]),
             ),
@@ -556,16 +563,20 @@ class _AvailPill extends StatelessWidget {
   Widget build(BuildContext context) {
     final qty = product.qtyAvailable;
     final allowOos = product.allowOutOfStockOrder;
+    final ar = UellowApi.instance.lang.toLowerCase().startsWith('ar');
     Color bg, fg; String text;
-    // Continue-sale → always show GREEN "Available" even at 0 qty.
     if (allowOos) {
-      bg = UellowColors.successBg; fg = UellowColors.successDk; text = 'Available';
+      bg = UellowColors.successBg; fg = UellowColors.successDk;
+      text = ar ? 'متاح' : 'Available';
     } else if (qty != null && qty <= 0) {
-      bg = UellowColors.dangerBg; fg = UellowColors.dangerDk; text = 'OUT';
+      bg = UellowColors.dangerBg; fg = UellowColors.dangerDk;
+      text = ar ? 'نفد' : 'OUT';
     } else if (qty != null && qty <= 5) {
-      bg = UellowColors.warnBg; fg = UellowColors.warn; text = 'Only $qty';
+      bg = UellowColors.warnBg; fg = UellowColors.warn;
+      text = ar ? 'بقي $qty' : 'Only $qty';
     } else {
-      bg = UellowColors.successBg; fg = UellowColors.successDk; text = 'Available';
+      bg = UellowColors.successBg; fg = UellowColors.successDk;
+      text = ar ? 'متاح' : 'Available';
     }
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),

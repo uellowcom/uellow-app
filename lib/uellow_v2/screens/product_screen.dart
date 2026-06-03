@@ -705,11 +705,13 @@ class _BrandBlock extends StatelessWidget {
         child: Padding(
           padding: const EdgeInsets.fromLTRB(18, 14, 18, 14),
           child: Row(children: [
-            // Brand logo
+            // v2.0.91 — brand logo: white background (was brown bg color),
+            // BoxFit.cover so the logo fills the area instead of fitting
+            // with negative space around it.
             Container(
-              width: 48, height: 48,
+              width: 52, height: 52,
               decoration: BoxDecoration(
-                color: UellowColors.bg,
+                color: Colors.white,
                 borderRadius: BorderRadius.circular(10),
                 border: Border.all(color: UellowColors.border),
               ),
@@ -880,53 +882,49 @@ class _FulfilledByUellowCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ar = UellowApi.instance.lang == 'ar';
+    // v2.0.91 — shorter, slimmer card (was a 3-line block with a 44px
+    // logo tile). Logo + single inline caption now fit in ~36px height.
     return Container(
       color: Colors.white,
-      padding: const EdgeInsets.fromLTRB(18, 0, 18, 12),
+      padding: const EdgeInsets.fromLTRB(18, 0, 18, 8),
       child: Container(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
         decoration: BoxDecoration(
           color: UellowColors.yellowSoft,
-          border: Border.all(color: UellowColors.yellow, width: 1.2),
-          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: UellowColors.yellow, width: 1),
+          borderRadius: BorderRadius.circular(10),
         ),
         child: Row(children: [
           Container(
-            width: 44, height: 44,
+            width: 28, height: 28,
             decoration: BoxDecoration(
               color: UellowColors.yellow,
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: UellowColors.darkBrown, width: 1.5),
+              borderRadius: BorderRadius.circular(7),
+              border: Border.all(color: UellowColors.darkBrown, width: 1),
             ),
             alignment: Alignment.center,
-            child: const Text('uellow.',
-                style: TextStyle(fontSize: 11.5,
+            child: const Text('u.',
+                style: TextStyle(fontSize: 13,
                     fontWeight: FontWeight.w900,
                     color: UellowColors.darkBrown, letterSpacing: -0.5)),
           ),
-          const SizedBox(width: 12),
-          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Row(children: [
-              const Icon(Icons.verified_outlined, size: 11,
-                  color: UellowColors.muted),
-              const SizedBox(width: 3),
-              Text(ar ? 'تم بواسطة' : 'FULFILLED BY',
-                  style: const TextStyle(fontSize: 9.5,
-                      fontWeight: FontWeight.w900, color: UellowColors.muted,
-                      letterSpacing: 0.6)),
-            ]),
-            const SizedBox(height: 2),
-            Text('Uellow',
-                style: const TextStyle(fontWeight: FontWeight.w900,
-                    fontSize: 14.5, color: UellowColors.darkBrown)),
-            const SizedBox(height: 1),
-            Text(ar
-                ? 'الشحن والاستبدال وخدمة العملاء من يلو مباشرةً'
-                : 'Shipping, returns & support handled directly by Uellow',
+          const SizedBox(width: 9),
+          const Icon(Icons.verified_outlined, size: 12,
+              color: UellowColors.muted),
+          const SizedBox(width: 4),
+          Expanded(child: Text.rich(TextSpan(children: [
+            TextSpan(text: ar ? 'تم بواسطة ' : 'Fulfilled by ',
+                style: const TextStyle(fontSize: 11,
+                    color: UellowColors.muted, fontWeight: FontWeight.w700)),
+            const TextSpan(text: 'Uellow',
+                style: TextStyle(fontWeight: FontWeight.w900,
+                    fontSize: 12.5, color: UellowColors.darkBrown)),
+            TextSpan(text: ar
+                ? '  —  شحن واستبدال مباشر'
+                : '  —  shipping, returns, support',
                 style: const TextStyle(fontSize: 10.5,
-                    color: UellowColors.muted, fontWeight: FontWeight.w600,
-                    height: 1.3)),
-          ])),
+                    color: UellowColors.muted, fontWeight: FontWeight.w600)),
+          ]), maxLines: 1, overflow: TextOverflow.ellipsis)),
         ]),
       ),
     );

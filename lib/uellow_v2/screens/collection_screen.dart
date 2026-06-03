@@ -182,11 +182,12 @@ class _CollectionScreenState extends State<CollectionScreen> {
   @override
   Widget build(BuildContext context) {
     final lang = UellowApi.instance.lang;
+    final ar = lang.toLowerCase().startsWith('ar');
     final title = widget.searchQuery != null && widget.searchQuery!.isNotEmpty
-        ? 'Results for "${widget.searchQuery}"'
+        ? (ar ? 'نتائج "${widget.searchQuery}"' : 'Results for "${widget.searchQuery}"')
         : widget.brandName != null && widget.brandName!.isNotEmpty
           ? widget.brandName!
-          : (_category?.name.current(lang) ?? 'Products');
+          : (_category?.name.current(lang) ?? (ar ? 'منتجات' : 'Products'));
     final subs = _category?.children ?? const <UellowCategory>[];
     return Scaffold(
       backgroundColor: UellowColors.bg,
@@ -245,10 +246,12 @@ class _CollectionScreenState extends State<CollectionScreen> {
               ]),
             ),
           ),
-          if (!_hasMore && _items.isNotEmpty) const SliverToBoxAdapter(
-            child: Padding(padding: EdgeInsets.all(20),
-                child: Center(child: Text('—  end of results  —',
-                    style: TextStyle(color: UellowColors.muted)))),
+          if (!_hasMore && _items.isNotEmpty) SliverToBoxAdapter(
+            child: Padding(padding: const EdgeInsets.all(20),
+                child: Center(child: Text(
+                    UellowApi.instance.lang.toLowerCase().startsWith('ar')
+                        ? '— نهاية النتائج —' : '—  end of results  —',
+                    style: const TextStyle(color: UellowColors.muted)))),
           ),
         ],
       )),
@@ -356,8 +359,10 @@ class _SortBar extends StatelessWidget {
           child: Row(children: [
             const Icon(Icons.tune, size: 14, color: UellowColors.darkBrown),
             const SizedBox(width: 3),
-            const Text('Filter', style: TextStyle(fontSize: 12,
-                fontWeight: FontWeight.w700, color: UellowColors.darkBrown)),
+            Text(UellowApi.instance.lang.toLowerCase().startsWith('ar')
+                ? 'تصفية' : 'Filter',
+                style: const TextStyle(fontSize: 12,
+                    fontWeight: FontWeight.w700, color: UellowColors.darkBrown)),
             if (activeFilterCount > 0) Padding(
               padding: const EdgeInsets.only(left: 5),
               child: Container(

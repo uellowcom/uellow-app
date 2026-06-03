@@ -285,24 +285,28 @@ class _PeriodButtons extends StatelessWidget {
   const _PeriodButtons({required this.idx, required this.onSelect});
   final int idx;
   final ValueChanged<int> onSelect;
-  static const _labels = ['🔥 LIVE', '⏰ UPCOMING', '🏁 ENDED'];
   @override
   Widget build(BuildContext context) {
+    // v2.0.91 — localized period labels (was English-only)
+    final ar = UellowApi.instance.lang.toLowerCase().startsWith('ar');
+    final labels = ar
+        ? const ['🔥 الآن', '⏰ قريباً', '🏁 منتهية']
+        : const ['🔥 LIVE', '⏰ UPCOMING', '🏁 ENDED'];
     return Container(
       color: Colors.white,
       padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
-      child: Row(children: List.generate(_labels.length, (i) => Expanded(
+      child: Row(children: List.generate(labels.length, (i) => Expanded(
         child: GestureDetector(
           onTap: () => onSelect(i),
           child: Container(
-            margin: EdgeInsets.only(right: i < _labels.length - 1 ? 6 : 0),
+            margin: EdgeInsets.only(right: i < labels.length - 1 ? 6 : 0),
             padding: const EdgeInsets.symmetric(vertical: 10),
             decoration: BoxDecoration(
               color: i == idx ? UellowColors.darkBrown : UellowColors.border,
               borderRadius: BorderRadius.circular(10),
             ),
             alignment: Alignment.center,
-            child: Text(_labels[i], style: TextStyle(
+            child: Text(labels[i], style: TextStyle(
               color: i == idx ? UellowColors.yellowLight : UellowColors.text,
               fontWeight: FontWeight.w800, fontSize: 11.5,
             )),

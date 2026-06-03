@@ -487,8 +487,14 @@ class _LatestSlider extends StatelessWidget {
                 scrollDirection: Axis.horizontal,
                 itemCount: items.length,
                 separatorBuilder: (_, __) => const SizedBox(width: 8),
+                // v2.0.91 — shop "Recently arrived" row: clean card per
+                // user spec (no discount, no save pill, no avail badge).
                 itemBuilder: (_, i) => SizedBox(
-                  width: 140, child: ProductCard(product: items[i])),
+                  width: 140, child: ProductCard(
+                      product: items[i],
+                      compact: true,
+                      hideSavePill: true,
+                      hideDiscount: true)),
               );
             },
           ),
@@ -524,10 +530,12 @@ class _ProductsGrid extends StatelessWidget {
               childAspectRatio: 0.66,
             ),
             itemCount: items.length,
-            // v2.0.79 — shop "All products" grid: compact card,
-            // no Save/Avail row, smaller fonts, tighter rating gap.
+            // v2.0.79 + v2.0.91 — shop "All products" grid: compact
+            // card, no Save/Avail row, no discount badge/pill, smaller
+            // fonts. The clean grid the user asked for.
             itemBuilder: (_, i) => ProductCard(
-                product: items[i], compact: true, hideSavePill: true),
+                product: items[i],
+                compact: true, hideSavePill: true, hideDiscount: true),
           ),
         );
       },
