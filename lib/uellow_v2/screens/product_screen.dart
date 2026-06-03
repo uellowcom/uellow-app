@@ -7,6 +7,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
@@ -1114,37 +1115,60 @@ class _CompactDelivery extends StatefulWidget {
 
 class _CompactDeliveryState extends State<_CompactDelivery> {
   String _summary = '';
+  // v2.1.22 — schedule-aware delivery lines from /orders/delivery-eta:
+  // available-now methods show green, off-schedule ones show the next
+  // receive day ("اطلب الآن واستلم يوم السبت").
+  List<Map<String, dynamic>> _etaLines = const [];
+
   @override
-  void initState() { super.initState(); _loadAddress(); }
+  void initState() { super.initState(); _loadAddress(); _loadEta(); }
+
+  Future<void> _loadEta() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final cc = prefs.getString('uellow_country_code_v1') ?? '';
+      final r = await http.get(Uri.parse(
+          '${UellowApi.instance.baseUrl}/api/mobile/v2/orders/delivery-eta'
+          '${cc.isNotEmpty ? "?country=$cc" : ""}'))
+          .timeout(const Duration(seconds: 8));
+      final j = jsonDecode(utf8.decode(r.bodyBytes)) as Map<String, dynamic>;
+      if (j['success'] == true && mounted) {
+        setState(() => _etaLines = ((j['data']?['lines'] as List?) ?? const [])
+            .cast<Map>().map((m) => m.cast<String, dynamic>()).toList());
+      }
+    } catch (_) {}
+  }
+
   Future<void> _loadAddress() async {
-    // v2.0.77 — guests previously saw only "Choose your address". Now:
-    //   1. If signed in → use the saved-default / first address.
-    //   2. Else fall back to FirstLaunchService's cached GPS+geocode.
-    //   3. Else (no perms) fall back to a coarse country/locale label
-    //      from UellowApi so the row is never empty for a guest.
+    // v2.1.22 — "Country - City" format (per the map), as agreed.
     try {
       final addrs = await UellowApi.instance.addresses.list();
       if (addrs.isNotEmpty) {
         final savedId = await UellowApi.instance.tokenStore.readAddressId();
         final pick = addrs.firstWhere((a) => a.id == savedId,
             orElse: () => addrs.first);
-        final parts = [pick.country, pick.state, pick.city]
+        final parts = [pick.country, pick.city]
             .where((s) => s.isNotEmpty).toList();
-        if (mounted) setState(() => _summary = parts.join(' · '));
+        if (mounted) setState(() => _summary = parts.join(' - '));
         return;
       }
     } catch (_) {/* guest or 401 */}
     try {
       final fix = await FirstLaunchService.lastFix();
       if (fix != null && fix.address.isNotEmpty) {
-        // Nominatim addresses are long: "House, Street, City, Region, …"
-        // keep the last 2-3 components which usually = City · Country.
+        // Nominatim: "House, Street, City, Region, Country" — country is
+        // the LAST piece; the city sits a couple of pieces before it.
         final pieces = fix.address.split(',').map((s) => s.trim())
-            .where((s) => s.isNotEmpty).toList();
-        final tail = pieces.length > 2
-            ? pieces.sublist(pieces.length - 2).join(' · ')
-            : pieces.join(' · ');
-        if (mounted) setState(() => _summary = tail);
+            .where((s) => s.isNotEmpty && !RegExp(r'^[0-9]').hasMatch(s))
+            .toList();
+        if (pieces.isNotEmpty) {
+          final country = pieces.last;
+          final city = pieces.length >= 3
+              ? pieces[pieces.length - 3]
+              : (pieces.length >= 2 ? pieces[pieces.length - 2] : '');
+          if (mounted) setState(() => _summary =
+              city.isNotEmpty ? '$country - $city' : country);
+        }
       }
     } catch (_) {}
   }
@@ -1178,15 +1202,37 @@ class _CompactDeliveryState extends State<_CompactDelivery> {
                 style: TextStyle(fontSize: 13,
                     fontWeight: FontWeight.w800,
                     color: has ? UellowColors.darkBrown : UellowColors.ink)),
-            // v2.0.77 — small subline with delivery-time estimate.
-            const SizedBox(height: 2),
-            Text(ar
-                ? 'لو طلبت الآن، يصل خلال 3 ساعات أو اليوم التالي حسب اختيارك'
-                : 'Order now — arrives in 3 hours or next day depending on your choice',
-                maxLines: 2, overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 10.5,
-                    color: UellowColors.muted, fontWeight: FontWeight.w600,
-                    height: 1.3)),
+            // v2.1.22 — live schedule-aware lines per delivery method.
+            if (_etaLines.isEmpty) ...[
+              const SizedBox(height: 2),
+              Text(ar ? 'اختر عنوانك لمعرفة مواعيد التوصيل'
+                      : 'Pick your address to see delivery times',
+                  maxLines: 1, overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 10.5,
+                      color: UellowColors.muted, fontWeight: FontWeight.w600)),
+            ] else ...[
+              const SizedBox(height: 4),
+              for (final l in _etaLines.take(3)) Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: Row(children: [
+                  Container(width: 6, height: 6, decoration: BoxDecoration(
+                    color: l['status'] == 'now'
+                        ? UellowColors.success : const Color(0xFFD9A406),
+                    shape: BoxShape.circle,
+                  )),
+                  const SizedBox(width: 5),
+                  Flexible(child: Text(
+                    '${((l['name'] as Map?)?[ar ? 'ar' : 'en'] ?? '')}: '
+                    '${((l['text'] as Map?)?[ar ? 'ar' : 'en'] ?? '')}',
+                    maxLines: 1, overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 10.5, height: 1.3,
+                        fontWeight: FontWeight.w700,
+                        color: l['status'] == 'now'
+                            ? UellowColors.successDk : UellowColors.muted),
+                  )),
+                ]),
+              ),
+            ],
           ],
         )),
         const Icon(Icons.chevron_right, color: Color(0xFFCBB78A)),
