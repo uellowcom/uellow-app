@@ -27,6 +27,20 @@ class _WebViewScreenState extends State<WebViewScreen> {
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setBackgroundColor(UellowColors.bg)
       ..setNavigationDelegate(NavigationDelegate(
+        // Auto-close when a payment gateway redirects back to our return /
+        // cancel / status URLs (UPayments etc.), returning success/cancel.
+        onNavigationRequest: (req) {
+          final u = req.url;
+          if (u.contains('/payments/upayments/return') || u.contains('/payment/status')) {
+            if (mounted) Navigator.of(context).maybePop(true);
+            return NavigationDecision.prevent;
+          }
+          if (u.contains('/payments/upayments/cancel')) {
+            if (mounted) Navigator.of(context).maybePop(false);
+            return NavigationDecision.prevent;
+          }
+          return NavigationDecision.navigate;
+        },
         onPageFinished: (_) async {
           // Hide common Odoo website chrome so the page feels native.
           await _controller.runJavaScript(r"""
