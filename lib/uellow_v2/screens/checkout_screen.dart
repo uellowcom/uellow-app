@@ -742,6 +742,54 @@ class _PaymentMethodGrid extends StatelessWidget {
       default:             return UellowColors.darkBrown;
     }
   }
+  // Branded payment marks — recognizable, brand-coloured representations
+  // (no logo files needed). Returns null for codes without a custom mark.
+  Widget? _brandMark(String code) {
+    switch (code) {
+      case 'cod':
+        return Row(mainAxisSize: MainAxisSize.min, children: const [
+          Icon(Icons.payments_rounded, size: 20, color: UellowColors.successDk),
+          SizedBox(width: 4),
+          Text('Cash', style: TextStyle(fontWeight: FontWeight.w900,
+              color: UellowColors.successDk, fontSize: 13)),
+        ]);
+      case 'knet':
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+          decoration: BoxDecoration(color: const Color(0xFF005DAA),
+              borderRadius: BorderRadius.circular(4)),
+          child: const Text('KNET', style: TextStyle(color: Colors.white,
+              fontWeight: FontWeight.w900, fontSize: 13, letterSpacing: 0.5)),
+        );
+      case 'card':
+        return Row(mainAxisSize: MainAxisSize.min, children: [
+          const Text('VISA', style: TextStyle(color: Color(0xFF1A1F71),
+              fontWeight: FontWeight.w900, fontStyle: FontStyle.italic, fontSize: 14)),
+          const SizedBox(width: 6),
+          SizedBox(width: 26, height: 16, child: Stack(children: [
+            const Positioned(left: 0, child: CircleAvatar(radius: 8,
+                backgroundColor: Color(0xFFEB001B))),
+            Positioned(left: 10, child: CircleAvatar(radius: 8,
+                backgroundColor: const Color(0xFFF79E1B).withValues(alpha: 0.9))),
+          ])),
+        ]);
+      case 'apple_pay':
+        return Row(mainAxisSize: MainAxisSize.min, children: const [
+          Icon(Icons.apple, size: 20, color: Colors.black),
+          Text(' Pay', style: TextStyle(color: Colors.black,
+              fontWeight: FontWeight.w800, fontSize: 14)),
+        ]);
+      case 'google_pay':
+        return Row(mainAxisSize: MainAxisSize.min, children: const [
+          Text('G', style: TextStyle(color: Color(0xFF4285F4),
+              fontWeight: FontWeight.w900, fontSize: 16)),
+          Text(' Pay', style: TextStyle(color: Color(0xFF5F6368),
+              fontWeight: FontWeight.w800, fontSize: 14)),
+        ]);
+    }
+    return null;
+  }
+
   // Always-on COD fallback — surface it even if backend didn't return any.
   static const _extras = [
     {'id': -1, 'code': 'cod', 'name': 'Cash on delivery'},
@@ -795,7 +843,9 @@ class _PaymentMethodGrid extends StatelessWidget {
             alignment: Alignment.center,
             padding: const EdgeInsets.all(8),
             child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-              if (isTabby) Container(
+              if (_brandMark(code) != null)
+                SizedBox(height: 22, child: Center(child: _brandMark(code)))
+              else if (isTabby) Container(
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                 decoration: BoxDecoration(
                   color: const Color(0xFF42E0A0),  // Tabby green
