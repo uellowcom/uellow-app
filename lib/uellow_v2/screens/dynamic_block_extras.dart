@@ -3827,6 +3827,83 @@ void _openBannerLink(BuildContext context, Map<String, dynamic>? link) {
   }
 }
 
+// ─── REELS STRIP — circular video thumbs that open the Reels feed ───────────
+// v2.0.90 — Data shape from resolver: { items: [{ product_id, product_name,
+//                                                  thumbnail }, …] }
+// Tap any bubble → push /reels. Visually mimics Instagram stories.
+class ReelsStripBlock extends StatelessWidget {
+  const ReelsStripBlock({super.key, required this.p, required this.data,
+      required this.t, required this.ar});
+  final Map<String, dynamic> p;
+  final Map<String, dynamic> data;
+  final DynTheme t;
+  final bool ar;
+
+  @override
+  Widget build(BuildContext context) {
+    final items = ((data['items'] as List?) ?? const [])
+        .cast<dynamic>().map((e) => (e as Map).cast<String, dynamic>()).toList();
+    if (items.isEmpty) return const SizedBox.shrink();
+    final bubbleSize = ((p['bubble_size'] as num?)?.toDouble() ?? 62).clamp(40, 120).toDouble();
+    final ringColor = _parseColor(p['ring_color']) ?? UellowColors.yellow;
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      DynSectionHeader(props: p, theme: t, ar: ar,
+          fallbackEn: '🔥 Trending videos'),
+      SizedBox(
+        height: bubbleSize + 22,
+        child: ListView.separated(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          scrollDirection: Axis.horizontal,
+          physics: const ClampingScrollPhysics(),
+          itemCount: items.length,
+          separatorBuilder: (_, __) => const SizedBox(width: 10),
+          itemBuilder: (_, i) {
+            final it = items[i];
+            final thumb = (it['thumbnail'] as String?) ?? '';
+            final fullUrl = thumb.startsWith('http')
+                ? thumb : '${UellowApi.instance.baseUrl}$thumb';
+            return GestureDetector(
+              onTap: () => Navigator.pushNamed(context, '/reels'),
+              child: SizedBox(width: bubbleSize + 4, child: Column(children: [
+                Container(
+                  width: bubbleSize, height: bubbleSize,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle, color: Colors.white,
+                    border: Border.all(color: ringColor, width: 2.5),
+                    boxShadow: const [BoxShadow(color: Color(0x33000000),
+                        blurRadius: 6, offset: Offset(0, 2))],
+                  ),
+                  clipBehavior: Clip.antiAlias,
+                  child: Stack(fit: StackFit.expand, children: [
+                    if (thumb.isNotEmpty)
+                      CachedNetworkImage(imageUrl: fullUrl, fit: BoxFit.cover,
+                          errorWidget: (_,__,___) => Container(
+                              color: t.primary.withValues(alpha: 0.06)))
+                    else
+                      Container(color: t.primary.withValues(alpha: 0.06)),
+                    // Play badge overlay
+                    Center(child: Container(
+                      width: 22, height: 22,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.85),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.play_arrow_rounded,
+                          color: UellowColors.darkBrown, size: 16),
+                    )),
+                  ]),
+                ),
+                if (i == 0) const SizedBox(height: 2)
+                else const SizedBox(height: 4),
+              ])),
+            );
+          },
+        ),
+      ),
+    ]);
+  }
+}
+
 // ─── STICKY CTA — promo bar (inline placement) ──────────────────────────────
 class StickyCtaBlock extends StatefulWidget {
   const StickyCtaBlock({super.key, required this.p, required this.t, required this.ar});
