@@ -491,9 +491,9 @@ class _AddressList extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: selected ? UellowColors.yellowFaint : Colors.white,
+        color: selected ? UellowColors.successBg : Colors.white,
         border: Border.all(
-          color: selected ? UellowColors.yellow : UellowColors.border,
+          color: selected ? UellowColors.success : UellowColors.border,
           width: selected ? 2 : 1),
         borderRadius: BorderRadius.circular(12),
       ),
@@ -644,20 +644,20 @@ class _ShippingMethodList extends StatelessWidget {
           margin: const EdgeInsets.only(bottom: 8),
           padding: EdgeInsets.all(on ? 11 : 12),
           decoration: BoxDecoration(
-            color: on ? UellowColors.yellowFaint : Colors.white,
+            color: on ? UellowColors.successBg : Colors.white,
             border: Border.all(
-              color: on ? UellowColors.yellow : UellowColors.border,
+              color: on ? UellowColors.success : UellowColors.border,
               width: on ? 2 : 1),
             borderRadius: BorderRadius.circular(12),
           ),
           child: Row(children: [
             Icon(on ? Icons.radio_button_checked : Icons.radio_button_unchecked,
-                color: on ? UellowColors.yellow : UellowColors.muted, size: 18),
+                color: on ? UellowColors.success : UellowColors.muted, size: 18),
             const SizedBox(width: 10),
             Container(
               width: 36, height: 36,
               decoration: BoxDecoration(
-                color: on ? UellowColors.yellowLight : UellowColors.border,
+                color: on ? UellowColors.successBg : UellowColors.border,
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Icon(Icons.local_shipping_outlined, size: 18,
@@ -786,9 +786,9 @@ class _PaymentMethodGrid extends StatelessWidget {
           onTap: () => onSelect(id),
           child: Container(
             decoration: BoxDecoration(
-              color: on ? UellowColors.yellowFaint : Colors.white,
+              color: on ? UellowColors.successBg : Colors.white,
               border: Border.all(
-                color: on ? UellowColors.yellow : UellowColors.border,
+                color: on ? UellowColors.success : UellowColors.border,
                 width: on ? 2 : 1),
               borderRadius: BorderRadius.circular(12),
             ),
@@ -840,16 +840,19 @@ class _SumBlock extends StatelessWidget {
       return UellowMoney.fromJson(Map<String, dynamic>.from(m)).format();
     }
     final ar = UellowApi.instance.lang == 'ar';
+    final discAmt = ((totals?['discount'] as Map?)?['amount'] as num?)?.toDouble() ?? 0;
     return Column(children: [
       _r(ar ? 'الإجمالي قبل الخصم' : 'Subtotal', fmt('subtotal')),
       _r(ar ? 'الشحن' : 'Delivery', fmt('shipping')),
-      for (final code in coupons)
-        _r(ar ? 'كوبون $code' : 'Coupon $code',
-            '− ${fmt('discount')}', success: true),
-      if (coupons.isEmpty)
-        _r(ar ? 'الخصم' : 'Discount', '− ${fmt('discount')}', success: true),
-      // Loyalty points placeholder — wire when /loyalty/active surfaces them
-      _r(ar ? 'نقاط الولاء' : 'Loyalty points', ar ? '—' : '—'),
+      // Show the discount line only when there is an actual discount.
+      if (discAmt > 0) ...[
+        if (coupons.isNotEmpty)
+          for (final code in coupons)
+            _r(ar ? 'كوبون $code' : 'Coupon $code',
+                '− ${fmt('discount')}', success: true)
+        else
+          _r(ar ? 'الخصم' : 'Discount', '− ${fmt('discount')}', success: true),
+      ],
       const Divider(height: 24),
       Row(children: [
         Expanded(child: Text(ar ? 'الإجمالي' : 'You pay', style: const TextStyle(
