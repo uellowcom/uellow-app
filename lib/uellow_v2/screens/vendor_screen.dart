@@ -16,9 +16,6 @@ class VendorScreen extends StatefulWidget {
 
 class _VendorScreenState extends State<VendorScreen> {
   int _tab = 0;
-  static List<String> get _tabs => UellowApi.instance.lang == 'ar'
-      ? const ['الكل','جديد','الأكثر مبيعاً','⚡ فلاش','الفئات','التقييمات','حول']
-      : const ['All','New','Best sellers','⚡ Flash','Categories','Reviews','About'];
 
   @override
   Widget build(BuildContext context) {
@@ -187,7 +184,9 @@ class _StickyTabs extends SliverPersistentHeaderDelegate {
   _StickyTabs({required this.tab, required this.onChange});
   final int tab;
   final ValueChanged<int> onChange;
-  static const _tabs = ['All','New','Best sellers','⚡ Flash','Categories','Reviews','About'];
+  static List<String> get _tabs => UellowApi.instance.lang == 'ar'
+      ? const ['الكل','جديد','الأكثر مبيعاً','⚡ فلاش','الفئات','التقييمات','حول']
+      : const ['All','New','Best sellers','⚡ Flash','Categories','Reviews','About'];
 
   @override
   Widget build(BuildContext c, double s, bool o) {
