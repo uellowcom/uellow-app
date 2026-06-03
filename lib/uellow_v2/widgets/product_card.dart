@@ -447,6 +447,37 @@ class _Image extends StatelessWidget {
               ]),
             ),
           ),
+          // v2.1.24 — Best Seller rank badge (gold, Amazon-style).
+          if (product.rank != null) Positioned(
+            top: 8, left: 8, right: 8,
+            child: Align(
+              alignment: AlignmentDirectional.topStart,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                      colors: [Color(0xFFFFD700), Color(0xFFE8A800)]),
+                  borderRadius: BorderRadius.circular(6),
+                  boxShadow: const [BoxShadow(
+                    color: Color(0x44000000), blurRadius: 4, offset: Offset(0, 2),
+                  )],
+                ),
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  const Text('🏆', style: TextStyle(fontSize: 9)),
+                  const SizedBox(width: 3),
+                  Flexible(child: Text(
+                      (((product.rank!['label'] as Map?)?[
+                          UellowApi.instance.lang.toLowerCase().startsWith('ar')
+                              ? 'ar' : 'en']) ?? '').toString(),
+                      maxLines: 1, overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Color(0xFF412402), fontSize: 8.5,
+                        fontWeight: FontWeight.w900, letterSpacing: 0.2,
+                      ))),
+                ]),
+              ),
+            ),
+          ),
           // v2.0.82 — Free shipping badge (when the product is tagged)
           if (product.badges.contains('free_shipping')) Positioned(
             bottom: 8, left: 8,

@@ -418,6 +418,8 @@ class UellowProductCard {
   final UellowVendorRef? vendor;
   final bool allowOutOfStockOrder;
   final bool hasVideo;
+  // v2.1.24 — Best Seller rank badge {rank, category_id, label{en,ar}}.
+  final Map<String, dynamic>? rank;
   // v2.0.73 — sold/view counts surfaced as small badges on the product
   // card. Backend may omit them; defaults to 0 so layout stays stable.
   final int soldCount;
@@ -431,6 +433,7 @@ class UellowProductCard {
     this.vendor,
     this.allowOutOfStockOrder = true,
     this.hasVideo = false,
+    this.rank,
     this.soldCount = 0,
     this.viewCount = 0,
   });
@@ -455,12 +458,15 @@ class UellowProductCard {
             : UellowVendorRef.fromJson(j['vendor'] as Map<String, dynamic>),
         allowOutOfStockOrder: (j['allow_out_of_stock_order'] ?? true) as bool,
         hasVideo: (j['has_video'] ?? false) as bool,
+        rank: (j['rank'] as Map?)?.cast<String, dynamic>(),
         soldCount: (j['sold_count'] ?? 0) as int,
         viewCount: (j['view_count'] ?? 0) as int,
       );
 }
 
 class UellowProductFull extends UellowProductCard {
+  // v2.1.24 — all Best Seller ranks (product-page strip).
+  final List<Map<String, dynamic>> ranks;
   final UellowText descriptionShort;
   final UellowText descriptionHtml;
   final List<String> images;
@@ -500,6 +506,8 @@ class UellowProductFull extends UellowProductCard {
     this.maxQtyBuyable = 10,
     bool allowOutOfStockOrder = true,
     bool hasVideo = false,
+    Map<String, dynamic>? rank,
+    this.ranks = const [],
     this.flashEndsAt, this.flashTitle,
   }) : super(
             id: id, name: name, slug: slug, image: image, price: price,
@@ -507,7 +515,7 @@ class UellowProductFull extends UellowProductCard {
             inStock: inStock, qtyAvailable: qtyAvailable, rating: rating,
             isPublished: isPublished, badges: badges, vendor: vendor,
             allowOutOfStockOrder: allowOutOfStockOrder,
-            hasVideo: hasVideo,
+            hasVideo: hasVideo, rank: rank,
             soldCount: soldCount, viewCount: viewCount);
 
   factory UellowProductFull.fromJson(Map<String, dynamic> j) => UellowProductFull(
@@ -535,6 +543,10 @@ class UellowProductFull extends UellowProductCard {
             .map((e) => UellowProductVideo.fromJson(e as Map<String, dynamic>))
             .toList(),
         hasVideo: (j['has_video'] ?? false) as bool,
+        rank: (j['rank'] as Map?)?.cast<String, dynamic>(),
+        ranks: ((j['ranks'] as List?) ?? const [])
+            .map((e) => (e as Map).cast<String, dynamic>())
+            .toList(),
         attributes: ((j['attributes'] as List?) ?? const [])
             .map((e) => UellowAttributeLine.fromJson(e))
             .toList(),

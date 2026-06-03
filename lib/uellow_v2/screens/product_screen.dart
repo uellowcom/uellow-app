@@ -172,6 +172,9 @@ class _ProductScreenState extends State<ProductScreen> {
           onTap: () => _showDeliverySheet(context))),
       // Brand block sits below shipping info per latest spec
       if (p.brand != null) SliverToBoxAdapter(child: _BrandBlock(brand: p.brand!)),
+      // v2.1.24 — Best Seller rank strip (tappable → that category).
+      if (p.ranks.isNotEmpty)
+        SliverToBoxAdapter(child: _RankStrip(ranks: p.ranks)),
       // Show whenever there's at least one bulk tier — even a single
       // "buy 5+ → save 5%" hint is useful.
       if (p.bulkPricing.isNotEmpty)
@@ -1100,6 +1103,58 @@ class _Attributes extends StatelessWidget {
           fontWeight: FontWeight.w800, fontSize: 13,
         )),
       ),
+    );
+  }
+}
+
+// ─── Best Seller rank strip (v2.1.24) ─────────────────────────────
+
+class _RankStrip extends StatelessWidget {
+  const _RankStrip({required this.ranks});
+  final List<Map<String, dynamic>> ranks;
+  @override
+  Widget build(BuildContext context) {
+    final ar = UellowApi.instance.lang.toLowerCase().startsWith('ar');
+    return Container(
+      color: Colors.white, margin: const EdgeInsets.only(top: 8),
+      padding: const EdgeInsets.fromLTRB(18, 12, 18, 12),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        for (final r in ranks.take(3)) Padding(
+          padding: const EdgeInsets.symmetric(vertical: 3),
+          child: InkWell(
+            onTap: () {
+              final cid = r['category_id'] as int?;
+              if (cid != null) {
+                Navigator.pushNamed(context, '/collection',
+                    arguments: {'category_id': cid});
+              }
+            },
+            child: Row(children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                      colors: [Color(0xFFFFD700), Color(0xFFE8A800)]),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text('🏆 #${r['rank']}',
+                    style: const TextStyle(fontSize: 10.5,
+                        fontWeight: FontWeight.w900,
+                        color: Color(0xFF412402))),
+              ),
+              const SizedBox(width: 8),
+              Expanded(child: Text(
+                  (((r['label'] as Map?)?[ar ? 'ar' : 'en']) ?? '').toString(),
+                  maxLines: 1, overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 12.5,
+                      fontWeight: FontWeight.w800,
+                      color: UellowColors.darkBrown))),
+              Icon(ar ? Icons.chevron_left : Icons.chevron_right,
+                  size: 16, color: UellowColors.muted),
+            ]),
+          ),
+        ),
+      ]),
     );
   }
 }
