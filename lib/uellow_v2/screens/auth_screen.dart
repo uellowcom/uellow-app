@@ -307,7 +307,7 @@ class _AuthScreenState extends State<AuthScreen> {
           setS(() { busy = true; err = null; });
           try {
             maskedTo = await UellowApi.instance.auth
-                .otpEmailRequest(target.text.trim());
+                .otpSend(target.text.trim());
             setS(() { sent = true; busy = false; });
           } on UellowApiException catch (e) {
             setS(() { err = e.message; busy = false; });
@@ -316,8 +316,8 @@ class _AuthScreenState extends State<AuthScreen> {
         Future<void> verify() async {
           setS(() { busy = true; err = null; });
           try {
-            await UellowApi.instance.auth.otpEmailVerify(
-                emailOrPhone: target.text.trim(), code: codeCtl.text.trim());
+            await UellowApi.instance.auth.otpCheck(
+                target: target.text.trim(), code: codeCtl.text.trim());
             if (ctx.mounted) Navigator.of(ctx).pop(true);
           } on UellowApiException catch (e) {
             setS(() { err = e.message; busy = false; });
@@ -334,15 +334,15 @@ class _AuthScreenState extends State<AuthScreen> {
             const SizedBox(height: 4),
             Text(sent
                 ? (ar ? 'أرسلنا الرمز إلى $maskedTo' : 'We sent a code to $maskedTo')
-                : (ar ? 'أدخل بريدك الإلكتروني وسنرسل لك رمز دخول'
-                      : 'Enter your email and we will send you a sign-in code'),
+                : (ar ? 'أدخل بريدك الإلكتروني أو رقم هاتفك وسنرسل لك رمز دخول'
+                      : 'Enter your email or phone and we will send you a sign-in code'),
                 style: const TextStyle(fontSize: 12, color: UellowColors.muted)),
             const SizedBox(height: 14),
             if (!sent) TextField(
               controller: target,
               keyboardType: TextInputType.emailAddress,
               decoration: InputDecoration(
-                hintText: 'you@example.com',
+                hintText: 'you@example.com / 9XXXXXXX',
                 fillColor: UellowColors.yellowFaint, filled: true,
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
               ),

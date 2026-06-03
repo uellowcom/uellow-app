@@ -4,6 +4,8 @@
 // =============================================================================
 import 'package:flutter/material.dart';
 
+import 'package:shared_preferences/shared_preferences.dart';
+
 import '../../api/uellow_api.dart';
 import '../../api/uellow_models.dart';
 import '../theme/uellow_theme.dart';
@@ -246,7 +248,7 @@ class _AddressFormState extends State<_AddressForm> {
           _f(ar ? 'الهاتف' : 'Phone', _phone),
           _f(ar ? 'الشارع' : 'Street', _street),
           _f(ar ? 'الشارع 2 (اختياري)' : 'Street 2 (optional)', _street2),
-          _f(ar ? 'المدينة' : 'City', _city),
+          _cityPicker(ar),
           _f(ar ? 'الرمز البريدي' : 'ZIP', _zip),
           const SizedBox(height: 16),
           SizedBox(width: double.infinity, child: ElevatedButton(
@@ -266,6 +268,106 @@ class _AddressFormState extends State<_AddressForm> {
         ]),
       ),
     );
+  }
+
+  // v2.1.17 — city comes from the delivery.city list (640 map-matching
+  // cities seeded for KW/SA/QA/AE/EG/OM/US) so spelling always matches
+  // the shipping zones. Falls back to free text if the list is empty.
+  Widget _cityPicker(bool ar) {
+    return Padding(padding: const EdgeInsets.only(bottom: 10),
+        child: TextField(
+          controller: _city,
+          readOnly: true,
+          onTap: () => _openCitySheet(ar),
+          decoration: InputDecoration(
+            labelText: ar ? 'المدينة' : 'City',
+            suffixIcon: const Icon(Icons.arrow_drop_down,
+                color: UellowColors.muted),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+            isDense: true,
+          ),
+        ));
+  }
+
+  Future<void> _openCitySheet(bool ar) async {
+    final prefs = await SharedPreferences.getInstance();
+    final cc = prefs.getString('uellow_country_code_v1') ?? 'KW';
+    List<Map<String, dynamic>> all = [];
+    try {
+      all = await UellowApi.instance.shipping.cities(country: cc);
+    } catch (_) {}
+    if (!mounted) return;
+    if (all.isEmpty) {
+      // No list for this country — let the user type freely.
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(
+          ar ? 'اكتب اسم مدينتك' : 'Type your city name')));
+      setState(() {});
+      return;
+    }
+    final picked = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) {
+        String q = '';
+        return StatefulBuilder(builder: (ctx, setS) {
+          final list = q.isEmpty
+              ? all
+              : all.where((c) {
+                  final en = (c['name_en'] ?? c['name'] ?? '')
+                      .toString().toLowerCase();
+                  final arName = (c['name_ar'] ?? '').toString();
+                  return en.contains(q.toLowerCase()) || arName.contains(q);
+                }).toList();
+          return SizedBox(
+            height: MediaQuery.of(ctx).size.height * 0.75,
+            child: Column(children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 14, 16, 6),
+                child: TextField(
+                  autofocus: true,
+                  onChanged: (v) => setS(() => q = v),
+                  style: const TextStyle(color: UellowColors.ink),
+                  decoration: InputDecoration(
+                    hintText: ar ? 'ابحث عن مدينتك…' : 'Search your city…',
+                    prefixIcon: const Icon(Icons.search,
+                        color: UellowColors.muted),
+                    fillColor: UellowColors.yellowFaint, filled: true,
+                    border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                    isDense: true,
+                  ),
+                ),
+              ),
+              Expanded(child: ListView.builder(
+                itemCount: list.length,
+                itemBuilder: (_, i) {
+                  final c = list[i];
+                  final en = (c['name_en'] ?? c['name'] ?? '').toString();
+                  final arName = (c['name_ar'] ?? '').toString();
+                  return ListTile(
+                    dense: true,
+                    title: Text(ar && arName.isNotEmpty ? arName : en,
+                        style: const TextStyle(fontWeight: FontWeight.w700)),
+                    subtitle: ar && arName.isNotEmpty
+                        ? Text(en, style: const TextStyle(fontSize: 11))
+                        : (arName.isNotEmpty
+                            ? Text(arName, style: const TextStyle(fontSize: 11))
+                            : null),
+                    onTap: () => Navigator.pop(ctx, en),
+                  );
+                },
+              )),
+            ]),
+          );
+        });
+      },
+    );
+    if (picked != null && picked.isNotEmpty && mounted) {
+      setState(() => _city.text = picked);
+    }
   }
 
   Widget _f(String label, TextEditingController c) {

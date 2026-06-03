@@ -424,6 +424,27 @@ class _AuthApi {
     return ((res['data'] as Map?)?['to'] ?? '').toString();
   }
 
+  // v2.1.17 — combined channel: email OR phone (SMS). Returns the masked
+  // destination; channel is picked server-side from the target's shape.
+  Future<String> otpSend(String target) async {
+    final res = await _c._post('/api/mobile/v2/auth/otp/send',
+        body: {'target': target});
+    return ((res['data'] as Map?)?['to'] ?? '').toString();
+  }
+
+  Future<UellowAuthResult> otpCheck({
+    required String target,
+    required String code,
+    String? name,
+  }) async {
+    final res = await _c._post('/api/mobile/v2/auth/otp/check', body: {
+      'target': target,
+      'code': code,
+      if (name != null && name.isNotEmpty) 'name': name,
+    });
+    return _saveAuth(res);
+  }
+
   Future<UellowAuthResult> otpEmailVerify({
     required String emailOrPhone,
     required String code,
