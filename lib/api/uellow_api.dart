@@ -416,6 +416,15 @@ class _AuthApi {
     return _saveAuth(res);
   }
 
+  // v2.1.23 — Google sign-in: the app gets an id_token from
+  // google_sign_in and the server verifies it with Google before
+  // issuing our bearer token.
+  Future<UellowAuthResult> googleSignIn(String idToken) async {
+    final res = await _c._post('/api/mobile/v2/auth/social/google',
+        body: {'id_token': idToken});
+    return _saveAuth(res);
+  }
+
   // v2.1.16 — email OTP (no SMS provider needed): request a 6-digit
   // code, then verify it. Verify returns the same auth payload as login.
   Future<String> otpEmailRequest(String emailOrPhone) async {

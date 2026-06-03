@@ -159,18 +159,19 @@ class _CartScreenState extends State<CartScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    final ar = UellowApi.instance.lang.toLowerCase().startsWith('ar');
+    // v2.1.23 — explicit RTL for the header in Arabic: back button sits on
+    // the RIGHT, select + share flow to the LEFT. arrow_back auto-mirrors
+    // under RTL so the manual arrow_forward hack is gone.
+    return Directionality(
+      textDirection: ar ? TextDirection.rtl : TextDirection.ltr,
+      child: Scaffold(
       backgroundColor: UellowColors.bg,
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0.5,
         leading: IconButton(
-          // v2.0.76 — flip back arrow in AR so it points the natural way.
-          icon: Icon(_selectMode
-              ? Icons.close
-              : (UellowApi.instance.lang.toLowerCase().startsWith('ar')
-                  ? Icons.arrow_forward
-                  : Icons.arrow_back),
+          icon: Icon(_selectMode ? Icons.close : Icons.arrow_back,
               color: UellowColors.darkBrown),
           onPressed: () {
             if (_selectMode) {
@@ -259,7 +260,7 @@ class _CartScreenState extends State<CartScreen> {
           return _CheckoutCta(total: c.totals.total);
         },
       ),
-    );
+    ));
   }
 
   Widget _buildContent(UellowCart cart) {

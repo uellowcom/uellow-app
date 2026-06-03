@@ -42,6 +42,9 @@ class _CollectionScreenState extends State<CollectionScreen> {
   final List<UellowProductCard> _items = [];
   int _page = 1;
   bool _loading = false;
+  // v2.1.23 — only show the empty state after the FIRST load completes
+  // (it used to flash 'no products' for a second before data arrived).
+  bool _loadedOnce = false;
   bool _hasMore = true;
   String _sort = 'newest';
   final _scroll = ScrollController();
@@ -117,9 +120,10 @@ class _CollectionScreenState extends State<CollectionScreen> {
         _hasMore = page.hasNext;
         _page++;
         _loading = false;
+        _loadedOnce = true;
       });
     } catch (_) {
-      if (mounted) setState(() { _loading = false; _hasMore = false; });
+      if (mounted) setState(() { _loading = false; _loadedOnce = true; _hasMore = false; });
     }
   }
 
@@ -234,7 +238,7 @@ class _CollectionScreenState extends State<CollectionScreen> {
             child: Center(child: CircularProgressIndicator(
                 color: UellowColors.darkBrown)),
           )),
-          if (!_loading && _items.isEmpty) SliverToBoxAdapter(
+          if (!_loading && _loadedOnce && _items.isEmpty) SliverToBoxAdapter(
             child: Padding(padding: const EdgeInsets.all(40),
               child: Column(children: [
                 const Icon(Icons.search_off, size: 56, color: UellowColors.muted),

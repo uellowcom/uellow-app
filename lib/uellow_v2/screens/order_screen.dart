@@ -340,7 +340,7 @@ class _MapBoxState extends State<_MapBox> {
       final isDelivered = stage == 'delivered';
       markers.add(_pin(u['lat'], u['lng'],
           isDelivered ? '#10B981' : '#EF4444', '#FFFFFF',
-          isDelivered ? '✓' : '📍', name));
+          isDelivered ? '✓' : '🏠', name));   // v2.1.23 — house icon
       coords.add('[${u['lat']},${u['lng']}]');
     }
     final markersJs = markers.join('\n');

@@ -1155,7 +1155,8 @@ class _RecentlyViewedState extends State<_RecentlyViewed> {
                 Expanded(child: Text(ar ? 'شاهدتها مؤخراً' : 'Recently viewed',
                     style: UT.h3)),
                 GestureDetector(
-                  onTap: () => Navigator.pushNamed(context, '/category'),
+                  // v2.1.23 — opens the recently-viewed LIST (was the shop).
+                  onTap: () => Navigator.pushNamed(context, '/recently-viewed'),
                   child: Text(ar ? 'عرض الكل ›' : 'See more ›',
                       style: const TextStyle(fontSize: 11.5,
                           fontWeight: FontWeight.w800,

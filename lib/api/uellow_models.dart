@@ -1336,6 +1336,7 @@ class UellowAppSettings {
   final String supportPhone;
   final String whatsapp;
   final bool guestCheckout;
+  final String googleClientId;
   final bool forceUpdate;
   final String minVersion;
   final bool maintenance;
@@ -1348,6 +1349,7 @@ class UellowAppSettings {
     required this.appName, this.logoUrl, required this.primaryColor,
     required this.darkColor, required this.supportEmail, required this.supportPhone,
     required this.whatsapp, this.guestCheckout = false,
+    this.googleClientId = '',
     required this.forceUpdate, required this.minVersion,
     required this.maintenance, required this.maintenanceMessage,
     required this.social, required this.urls,
@@ -1362,6 +1364,7 @@ class UellowAppSettings {
         supportPhone: (j['support_phone'] ?? '').toString(),
         whatsapp: (j['whatsapp'] ?? '').toString(),
         guestCheckout: j['guest_checkout'] == true,
+        googleClientId: (j['google_client_id'] ?? '').toString(),
         forceUpdate: (j['force_update'] ?? false) as bool,
         minVersion: (j['min_version'] ?? '').toString(),
         maintenance: (j['maintenance'] ?? false) as bool,

@@ -3,6 +3,7 @@
 // Wires to UellowApi.auth.login / register / google / apple / facebook.
 // =============================================================================
 import 'package:flutter/material.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 
 import '../../api/uellow_api.dart';
 import '../theme/uellow_l10n.dart';
@@ -183,7 +184,7 @@ class _AuthScreenState extends State<AuthScreen> {
         const SizedBox(height: 14),
         Row(children: [
           Expanded(child: _socialBtn('Google', Icons.g_mobiledata, const Color(0xFF4285F4),
-              () => _socialPending('Google'))),
+              _googleFlow)),
           const SizedBox(width: 8),
           Expanded(child: _socialBtn('Apple', Icons.apple, Colors.black,
               () => _socialPending('Apple'))),
@@ -401,6 +402,58 @@ class _AuthScreenState extends State<AuthScreen> {
       } else {
         Navigator.of(context).pushReplacementNamed('/home');
       }
+    }
+  }
+
+  // v2.1.23 — real Google sign-in: needs the Google Cloud OAuth WEB
+  // client id stored in ir.config_parameter uellow_mobile.google_client_id
+  // (served via /app/settings). Falls back to a clear bilingual message
+  // until it's configured.
+  Future<void> _googleFlow() async {
+    final ar = UellowApi.instance.lang.toLowerCase().startsWith('ar');
+    String clientId = '';
+    try {
+      final s = await UellowApi.instance.settings.get();
+      clientId = s.googleClientId;
+    } catch (_) {}
+    if (clientId.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(ar
+          ? 'تسجيل جوجل سيتاح قريباً — استخدم البريد أو رمز OTP الآن'
+          : 'Google sign-in is coming soon — use email or the OTP code')));
+      return;
+    }
+    setState(() { _busy = true; _err = null; });
+    try {
+      final g = GoogleSignIn(serverClientId: clientId, scopes: ['email']);
+      final acc = await g.signIn();
+      if (acc == null) {              // user cancelled
+        if (mounted) setState(() => _busy = false);
+        return;
+      }
+      final auth = await acc.authentication;
+      final idToken = auth.idToken ?? '';
+      if (idToken.isEmpty) {
+        throw UellowApiException(
+            code: 'NO_TOKEN',
+            message: ar ? 'تعذر الحصول على توكن جوجل' : 'No Google token',
+            statusCode: 400);
+      }
+      await UellowApi.instance.auth.googleSignIn(idToken);
+      if (!mounted) return;
+      if (widget.asSheet) {
+        Navigator.of(context).pop(true);
+      } else {
+        Navigator.of(context).pushReplacementNamed('/home');
+      }
+    } on UellowApiException catch (e) {
+      if (mounted) setState(() => _err = e.message);
+    } catch (e) {
+      if (mounted) setState(() => _err = ar
+          ? 'فشل تسجيل جوجل — تأكد من إعداد Google Cloud'
+          : 'Google sign-in failed — check the Google Cloud setup');
+    } finally {
+      if (mounted) setState(() => _busy = false);
     }
   }
 

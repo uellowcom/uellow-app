@@ -882,49 +882,79 @@ class _EmptyAddressCtaState extends State<_EmptyAddressCta> {
   @override
   Widget build(BuildContext context) {
     final ar = UellowApi.instance.lang == 'ar';
+    // v2.1.23 — compact professional card: two slim equal buttons side
+    // by side; manual entry opens the form DIRECTLY (no /addresses page,
+    // which required an account and broke guest checkout).
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: UellowColors.yellowSoft,
+        color: Colors.white,
+        border: Border.all(color: UellowColors.border),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         if (widget.geoCity != null) Padding(
-          padding: const EdgeInsets.only(bottom: 10),
+          padding: const EdgeInsets.only(bottom: 8),
           child: Row(children: [
-            const Icon(Icons.public, size: 16, color: UellowColors.darkBrown),
-            const SizedBox(width: 6),
+            const Icon(Icons.public, size: 13, color: UellowColors.muted),
+            const SizedBox(width: 5),
             Flexible(child: Text(
                 ar ? 'موقعك المكتشف: ${widget.geoCity}'
                    : 'Detected location: ${widget.geoCity}',
-                style: const TextStyle(fontWeight: FontWeight.w800,
-                    color: UellowColors.darkBrown))),
+                style: const TextStyle(fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: UellowColors.muted))),
           ]),
         ),
-        Wrap(spacing: 8, runSpacing: 8, children: [
-          ElevatedButton.icon(
+        Row(children: [
+          Expanded(child: SizedBox(height: 38, child: ElevatedButton.icon(
             onPressed: _busy ? null : _detect,
             icon: _busy
-                ? const SizedBox(width: 14, height: 14,
+                ? const SizedBox(width: 12, height: 12,
                     child: CircularProgressIndicator(strokeWidth: 2,
                         color: UellowColors.darkBrown))
-                : const Icon(Icons.my_location, size: 16),
-            label: Text(ar ? 'استخدم موقعي الحالي' : 'Use my current location'),
+                : const Icon(Icons.my_location, size: 14),
+            label: Text(ar ? 'موقعي الحالي' : 'My location',
+                maxLines: 1, overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 11.5,
+                    fontWeight: FontWeight.w800)),
             style: ElevatedButton.styleFrom(
               backgroundColor: UellowColors.yellow,
               foregroundColor: UellowColors.darkBrown,
               elevation: 0,
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              shape: const RoundedRectangleBorder(
+                  borderRadius: BorderRadius.all(Radius.circular(9))),
             ),
-          ),
-          OutlinedButton.icon(
-            onPressed: () => Navigator.pushNamed(context, '/addresses'),
-            icon: const Icon(Icons.add_location_alt_outlined, size: 16),
-            label: Text(ar ? 'إدخال يدوي' : 'Enter manually'),
+          ))),
+          const SizedBox(width: 8),
+          Expanded(child: SizedBox(height: 38, child: OutlinedButton.icon(
+            onPressed: () async {
+              await showModalBottomSheet(
+                context: context, isScrollControlled: true,
+                backgroundColor: Colors.transparent,
+                builder: (_) => AddressFormSheet(onSaved: () {}),
+              );
+              if (!context.mounted) return;
+              final state =
+                  context.findAncestorStateOfType<_CheckoutScreenState>();
+              if (state != null && state.mounted) {
+                state.setState(() { state._data = state._bootstrap(); });
+              }
+            },
+            icon: const Icon(Icons.edit_location_alt_outlined, size: 14),
+            label: Text(ar ? 'إدخال يدوي' : 'Enter manually',
+                maxLines: 1, overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 11.5,
+                    fontWeight: FontWeight.w800)),
             style: OutlinedButton.styleFrom(
               foregroundColor: UellowColors.darkBrown,
-              side: const BorderSide(color: UellowColors.darkBrown, width: 1),
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              side: const BorderSide(color: UellowColors.border, width: 1.2),
+              shape: const RoundedRectangleBorder(
+                  borderRadius: BorderRadius.all(Radius.circular(9))),
             ),
-          ),
+          ))),
         ]),
       ]),
     );
