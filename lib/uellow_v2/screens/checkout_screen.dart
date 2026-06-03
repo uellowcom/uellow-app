@@ -113,6 +113,15 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     // The summary endpoint is the load-bearing one — surface its failure
     // as the screen-level error so the user sees a friendly message.
     if (out.summary == null) {
+      // v2.1.2 — distinguish "not logged in" from a generic failure so the
+      // screen can show a Sign-in CTA instead of a useless Retry on a raw
+      // "Authentication required" string.
+      final code = summary['code']?.toString() ?? '';
+      final errStr = (summary['error']?.toString() ?? '').toLowerCase();
+      if (code == 'AUTH_REQUIRED' || errStr.contains('authentication')
+          || errStr.contains('logged in')) {
+        throw Exception('AUTH_REQUIRED');
+      }
       final reason = summary['error']?.toString() ?? 'Could not load checkout';
       throw Exception(reason);
     }
@@ -210,6 +219,42 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
             // close the screen to try again.
             final ar = UellowApi.instance.lang == 'ar';
             final rawMsg = snap.hasError ? snap.error.toString() : 'no_summary';
+            // v2.1.2 — guests hit AUTH_REQUIRED on the summary endpoint; show
+            // a Sign-in CTA (Retry would just fail again) instead of a raw
+            // "Authentication required" line.
+            final isAuth = rawMsg.contains('AUTH_REQUIRED');
+            if (isAuth) {
+              return Center(child: Padding(
+                padding: const EdgeInsets.all(30),
+                child: Column(mainAxisSize: MainAxisSize.min, children: [
+                  const Icon(Icons.lock_outline, size: 56, color: UellowColors.muted),
+                  const SizedBox(height: 14),
+                  Text(ar ? 'سجّل الدخول لإتمام الطلب' : 'Sign in to complete checkout',
+                      textAlign: TextAlign.center, style: UT.h3),
+                  const SizedBox(height: 6),
+                  Text(ar
+                      ? 'تحتاج لحساب لإتمام الطلب وحفظ عناوينك وطلباتك.'
+                      : 'You need an account to place the order and keep your addresses & orders.',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontSize: 12.5, color: UellowColors.muted)),
+                  const SizedBox(height: 18),
+                  ElevatedButton.icon(
+                    onPressed: () async {
+                      await Navigator.pushNamed(context, Routes.auth);
+                      // Re-load the checkout after returning from login.
+                      if (mounted) setState(() => _data = _bootstrap());
+                    },
+                    icon: const Icon(Icons.login, size: 16),
+                    label: Text(ar ? 'تسجيل الدخول' : 'Sign in'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: UellowColors.yellow,
+                      foregroundColor: UellowColors.darkBrown,
+                      padding: const EdgeInsets.symmetric(horizontal: 26, vertical: 12),
+                    ),
+                  ),
+                ]),
+              ));
+            }
             final friendly = ar
                 ? 'تعذّر تحميل صفحة الإتمام — تحقق من اتصالك وحاول مرة أخرى'
                 : 'Could not load checkout — check your connection and try again';
