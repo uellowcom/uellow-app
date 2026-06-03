@@ -38,6 +38,11 @@ import '../screens/reels_screen.dart';
 import '../screens/free_shipping_screen.dart';
 import '../screens/delivery_coverage_screen.dart';
 
+// Shared route observer so screens (e.g. Reels) can pause heavy work when a
+// route is pushed on top of them and resume when it returns.
+final RouteObserver<ModalRoute<void>> appRouteObserver =
+    RouteObserver<ModalRoute<void>>();
+
 class Routes {
   Routes._();
   static const splash        = '/';

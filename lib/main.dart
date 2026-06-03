@@ -70,6 +70,7 @@ class _UellowAppState extends State<UellowApp> {
           initialRoute: Routes.splash,
           routes: UellowRouter.routes,
           onGenerateRoute: UellowRouter.generate,
+          navigatorObservers: [appRouteObserver],
         );
       },
     );

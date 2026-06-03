@@ -18,6 +18,7 @@ import '../../api/uellow_api.dart';
 import '../router/uellow_router.dart';
 import '../theme/uellow_theme.dart';
 import '../widgets/uellow_bottom_nav.dart';
+import 'auth_screen.dart';
 
 // Global mute state — shared by every slide so unmuting one reel unmutes all,
 // and the choice persists while the app is open. Starts muted (autoplay).
@@ -229,7 +230,7 @@ class _ReelsScreenState extends State<ReelsScreen> {
               height: 42,
               padding: const EdgeInsets.symmetric(horizontal: 14),
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.12),
+                color: Colors.white,
                 borderRadius: BorderRadius.circular(999),
               ),
               child: Center(child: TextField(
@@ -237,13 +238,14 @@ class _ReelsScreenState extends State<ReelsScreen> {
                 autofocus: true,
                 onChanged: _onSearchChanged,
                 textInputAction: TextInputAction.search,
-                style: const TextStyle(color: Colors.white, fontSize: 14),
+                style: const TextStyle(color: Colors.black, fontSize: 14),
+                cursorColor: UellowColors.darkBrown,
                 decoration: InputDecoration(
                   border: InputBorder.none,
                   isDense: true,
                   hintText: ar ? 'ابحث باسم المنتج…' : 'Search by product name…',
-                  hintStyle: const TextStyle(color: Colors.white54),
-                  icon: const Icon(Icons.search, color: Colors.white54, size: 18),
+                  hintStyle: const TextStyle(color: Colors.black45),
+                  icon: const Icon(Icons.search, color: Colors.black45, size: 18),
                 ),
               )),
             )),
@@ -330,7 +332,7 @@ class _ReelSlide extends StatefulWidget {
   State<_ReelSlide> createState() => _ReelSlideState();
 }
 
-class _ReelSlideState extends State<_ReelSlide> {
+class _ReelSlideState extends State<_ReelSlide> with RouteAware {
   VideoPlayerController? _ctrl;
   bool _initFailed = false;
   late bool _faved;
@@ -400,6 +402,19 @@ class _ReelSlideState extends State<_ReelSlide> {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final route = ModalRoute.of(context);
+    if (route != null) appRouteObserver.subscribe(this, route);
+  }
+
+  // RouteAware — play ONLY while the reels route is the visible top route.
+  @override
+  void didPushNext() => _ctrl?.pause();   // a screen opened on top of reels
+  @override
+  void didPopNext() => _resumeIfActive(); // returned to reels
+
+  @override
   void deactivate() {
     // Leaving the tab (or covering the screen) must STOP playback+audio
     // immediately, frozen at the current frame — not keep playing in the bg.
@@ -409,40 +424,20 @@ class _ReelSlideState extends State<_ReelSlide> {
 
   @override
   void dispose() {
+    appRouteObserver.unsubscribe(this);
     reelsMuted.removeListener(_applyMute);
     _ctrl?.dispose();
     super.dispose();
   }
 
-  Future<Map<String, String>> _authHeaders() async {
-    final token = await UellowApi.instance.tokenStore.readToken();
-    return {
-      'Accept': 'application/json',
-      'Content-Type': 'application/json',
-      if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
-    };
-  }
-
   Future<void> _toggleFav() async {
-    final ar = widget.ar;
-    final token = await UellowApi.instance.tokenStore.readToken();
+    var token = await UellowApi.instance.tokenStore.readToken();
     if (token == null || token.isEmpty) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        duration: const Duration(seconds: 3),
-        content: Text(ar
-            ? 'سجّل الدخول أو أنشئ حساباً للحفظ في المفضلة'
-            : 'Sign in or create an account to save to wishlist'),
-        action: SnackBarAction(
-          label: ar ? 'تسجيل الدخول' : 'Sign in',
-          onPressed: () async {
-            _pause();
-            await Navigator.pushNamed(context, Routes.auth);
-            _resumeIfActive();
-          },
-        ),
-      ));
-      return;
+      // Login as a DIALOG — keeps the user on the reel.
+      final ok = await showAuthSheet(context);
+      if (!ok || !mounted) return;
+      token = await UellowApi.instance.tokenStore.readToken();
+      if (token == null || token.isEmpty) return;
     }
     final wasFaved = _faved;
     setState(() {
@@ -718,9 +713,12 @@ class _CommentsSheet extends StatefulWidget {
 
 class _CommentsSheetState extends State<_CommentsSheet> {
   final _ctrl = TextEditingController();
+  final _inputFocus = FocusNode();
   List<Map<String, dynamic>> _comments = [];
   bool _loading = true;
   bool _sending = false;
+  int? _replyToId;          // when set, the next send is a reply
+  String? _replyToAuthor;
 
   @override
   void initState() {
@@ -731,8 +729,19 @@ class _CommentsSheetState extends State<_CommentsSheet> {
   @override
   void dispose() {
     _ctrl.dispose();
+    _inputFocus.dispose();
     super.dispose();
   }
+
+  void _startReply(Map<String, dynamic> c) {
+    setState(() {
+      _replyToId = (c['id'] as num?)?.toInt();
+      _replyToAuthor = (c['author'] ?? '').toString();
+    });
+    _inputFocus.requestFocus();
+  }
+
+  void _cancelReply() => setState(() { _replyToId = null; _replyToAuthor = null; });
 
   Future<void> _load() async {
     try {
@@ -753,19 +762,16 @@ class _CommentsSheetState extends State<_CommentsSheet> {
   }
 
   Future<void> _send() async {
-    final ar = widget.ar;
     final text = _ctrl.text.trim();
     if (text.isEmpty || _sending) return;
-    final token = await UellowApi.instance.tokenStore.readToken();
+    var token = await UellowApi.instance.tokenStore.readToken();
     if (token == null || token.isEmpty) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(ar ? 'سجّل الدخول للتعليق' : 'Sign in to comment'),
-        action: SnackBarAction(label: ar ? 'دخول' : 'Sign in',
-            onPressed: () => Navigator.pushNamed(context, Routes.auth)),
-      ));
-      return;
+      final ok = await showAuthSheet(context);
+      if (!ok || !mounted) return;
+      token = await UellowApi.instance.tokenStore.readToken();
+      if (token == null || token.isEmpty) return;
     }
+    final replyTo = _replyToId;
     setState(() => _sending = true);
     try {
       final r = await http.post(
@@ -776,18 +782,84 @@ class _CommentsSheetState extends State<_CommentsSheet> {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',
         },
-        body: jsonEncode({'body': text}),
+        body: jsonEncode({'body': text, if (replyTo != null) 'parent_id': replyTo}),
       ).timeout(const Duration(seconds: 12));
       final body = jsonDecode(utf8.decode(r.bodyBytes)) as Map<String, dynamic>;
       if (body['success'] == true && mounted) {
+        final created = (body['data'] as Map).cast<String, dynamic>();
         setState(() {
-          _comments.insert(0, (body['data'] as Map).cast<String, dynamic>());
+          if (replyTo != null) {
+            final parent = _comments.firstWhere(
+                (x) => (x['id'] as num?)?.toInt() == replyTo, orElse: () => {});
+            if (parent.isNotEmpty) {
+              final reps = (parent['replies'] as List?)?.cast<Map<String, dynamic>>()
+                  ?? <Map<String, dynamic>>[];
+              reps.add(created);
+              parent['replies'] = reps;
+            }
+          } else {
+            _comments.insert(0, created);
+          }
           _ctrl.clear();
+          _replyToId = null;
+          _replyToAuthor = null;
         });
         widget.onAdded();
       }
     } catch (_) {}
     if (mounted) setState(() => _sending = false);
+  }
+
+  Widget _commentTile(Map<String, dynamic> c, {bool isReply = false}) {
+    final ar = widget.ar;
+    final seller = c['is_seller'] == true;
+    final replies = (c['replies'] as List?)?.cast<Map<String, dynamic>>() ?? const [];
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        CircleAvatar(radius: isReply ? 13 : 16,
+            backgroundColor: seller ? UellowColors.darkBrown : UellowColors.yellowSoft,
+            child: Icon(seller ? Icons.storefront : Icons.person,
+                size: isReply ? 14 : 18,
+                color: seller ? UellowColors.yellowLight : UellowColors.darkBrown)),
+        const SizedBox(width: 10),
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            Flexible(child: Text((c['author'] ?? '').toString(),
+                maxLines: 1, overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 12.5))),
+            if (seller) ...[
+              const SizedBox(width: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                decoration: BoxDecoration(color: UellowColors.yellow,
+                    borderRadius: BorderRadius.circular(4)),
+                child: Text(ar ? 'المتجر' : 'Store',
+                    style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w900,
+                        color: UellowColors.darkBrown)),
+              ),
+            ],
+          ]),
+          const SizedBox(height: 2),
+          Text((c['body'] ?? '').toString(),
+              style: const TextStyle(fontSize: 13, color: UellowColors.ink)),
+          if (!isReply) GestureDetector(
+            onTap: () => _startReply(c),
+            child: Padding(padding: const EdgeInsets.only(top: 4),
+                child: Text(ar ? 'رد' : 'Reply',
+                    style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w800,
+                        color: UellowColors.muted))),
+          ),
+        ])),
+      ]),
+      if (replies.isNotEmpty) Padding(
+        padding: EdgeInsetsDirectional.only(start: 38, top: 8),
+        child: Column(children: [
+          for (final rr in replies) Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: _commentTile(rr, isReply: true)),
+        ]),
+      ),
+    ]);
   }
 
   @override
@@ -815,33 +887,35 @@ class _CommentsSheetState extends State<_CommentsSheet> {
               : ListView.separated(
                   padding: const EdgeInsets.all(14),
                   itemCount: _comments.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 12),
-                  itemBuilder: (_, i) {
-                    final c = _comments[i];
-                    return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      const CircleAvatar(radius: 16,
-                          backgroundColor: UellowColors.yellowSoft,
-                          child: Icon(Icons.person, size: 18, color: UellowColors.darkBrown)),
-                      const SizedBox(width: 10),
-                      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                        Text((c['author'] ?? '').toString(),
-                            style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 12.5)),
-                        const SizedBox(height: 2),
-                        Text((c['body'] ?? '').toString(),
-                            style: const TextStyle(fontSize: 13, color: UellowColors.ink)),
-                      ])),
-                    ]);
-                  },
+                  separatorBuilder: (_, __) => const Divider(height: 22),
+                  itemBuilder: (_, i) => _commentTile(_comments[i]),
                 )),
+          if (_replyToId != null) Container(
+            color: UellowColors.yellowSoft,
+            padding: const EdgeInsets.fromLTRB(16, 6, 8, 6),
+            child: Row(children: [
+              Expanded(child: Text(
+                  '${ar ? "رد على" : "Replying to"} ${_replyToAuthor ?? ''}',
+                  maxLines: 1, overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 12, color: UellowColors.darkBrown,
+                      fontWeight: FontWeight.w700))),
+              GestureDetector(onTap: _cancelReply,
+                  child: const Icon(Icons.close, size: 16, color: UellowColors.darkBrown)),
+            ]),
+          ),
           SafeArea(top: false, child: Padding(
             padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
             child: Row(children: [
               Expanded(child: TextField(
                 controller: _ctrl,
+                focusNode: _inputFocus,
                 textInputAction: TextInputAction.send,
                 onSubmitted: (_) => _send(),
+                style: const TextStyle(color: Colors.black),
                 decoration: InputDecoration(
-                  hintText: ar ? 'أضف تعليقاً…' : 'Add a comment…',
+                  hintText: _replyToId != null
+                      ? (ar ? 'اكتب ردك…' : 'Write your reply…')
+                      : (ar ? 'أضف تعليقاً…' : 'Add a comment…'),
                   filled: true, fillColor: UellowColors.border.withValues(alpha: 0.4),
                   contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                   border: OutlineInputBorder(

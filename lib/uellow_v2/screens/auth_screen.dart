@@ -10,9 +10,25 @@ import '../theme/uellow_theme.dart';
 import '../widgets/uellow_logo.dart';
 
 class AuthScreen extends StatefulWidget {
-  const AuthScreen({super.key});
+  const AuthScreen({super.key, this.asSheet = false});
+  // When shown as a modal sheet, success pops with `true` and the caller stays
+  // on the same page (instead of redirecting to /home).
+  final bool asSheet;
   @override
   State<AuthScreen> createState() => _AuthScreenState();
+}
+
+/// Show the login/register flow as a DIALOG that keeps the user on the
+/// current page. Returns true when authentication succeeded.
+Future<bool> showAuthSheet(BuildContext context) async {
+  final r = await showModalBottomSheet<bool>(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    useSafeArea: true,
+    builder: (_) => const AuthScreen(asSheet: true),
+  );
+  return r == true;
 }
 
 class _AuthScreenState extends State<AuthScreen> {
@@ -36,7 +52,11 @@ class _AuthScreenState extends State<AuthScreen> {
         );
       }
       if (!mounted) return;
-      Navigator.of(context).pushReplacementNamed('/home');
+      if (widget.asSheet) {
+        Navigator.of(context).pop(true);     // stay on the current page
+      } else {
+        Navigator.of(context).pushReplacementNamed('/home');
+      }
     } on UellowApiException catch (e) {
       setState(() => _err = e.message);
     } finally {
@@ -46,23 +66,43 @@ class _AuthScreenState extends State<AuthScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft, end: Alignment.bottomRight,
-            colors: [Color(0xFFFFD340), UellowColors.yellow, Color(0xFFC99000)],
-          ),
+    final content = Container(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft, end: Alignment.bottomRight,
+          colors: [Color(0xFFFFD340), UellowColors.yellow, Color(0xFFC99000)],
         ),
-        child: SafeArea(
-          child: ListView(padding: const EdgeInsets.fromLTRB(24, 40, 24, 30), children: [
+      ),
+      child: SafeArea(
+        top: !widget.asSheet,
+        child: ListView(
+          padding: EdgeInsets.fromLTRB(24, widget.asSheet ? 16 : 40, 24, 30),
+          children: [
+            if (widget.asSheet)
+              Align(alignment: Alignment.centerRight, child: IconButton(
+                icon: const Icon(Icons.close, color: UellowColors.darkBrown),
+                onPressed: () => Navigator.of(context).maybePop(false),
+              )),
             _logo(),
             const SizedBox(height: 24),
             _card(),
-          ]),
+          ],
         ),
       ),
     );
+    if (widget.asSheet) {
+      return Padding(
+        padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+        child: ClipRRect(
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(22)),
+          child: SizedBox(
+            height: MediaQuery.of(context).size.height * 0.9,
+            child: content,
+          ),
+        ),
+      );
+    }
+    return Scaffold(body: content);
   }
 
   Widget _logo() {

@@ -23,6 +23,7 @@ import '../services/first_launch_service.dart';
 import '../theme/uellow_l10n.dart';
 import '../theme/uellow_theme.dart';
 import 'address_picker_screen.dart';
+import 'auth_screen.dart';
 import 'order_confirmation_screen.dart';
 
 class CheckoutScreen extends StatefulWidget {
@@ -240,9 +241,9 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                   const SizedBox(height: 18),
                   ElevatedButton.icon(
                     onPressed: () async {
-                      await Navigator.pushNamed(context, Routes.auth);
-                      // Re-load the checkout after returning from login.
-                      if (mounted) setState(() => _data = _bootstrap());
+                      // Login as a DIALOG; stay on checkout and reload on success.
+                      final ok = await showAuthSheet(context);
+                      if (ok && mounted) setState(() => _data = _bootstrap());
                     },
                     icon: const Icon(Icons.login, size: 16),
                     label: Text(ar ? 'تسجيل الدخول' : 'Sign in'),
