@@ -174,7 +174,11 @@ class _ProductScreenState extends State<ProductScreen> {
       // Show whenever there's at least one bulk tier — even a single
       // "buy 5+ → save 5%" hint is useful.
       if (p.bulkPricing.isNotEmpty)
-        SliverToBoxAdapter(child: _BulkPricing(tiers: p.bulkPricing)),
+        SliverToBoxAdapter(child: _BulkPricing(
+          tiers: p.bulkPricing,
+          currentQty: _qty,
+          onTierTap: (minQty) => setState(() => _qty = minQty),
+        )),
       SliverToBoxAdapter(child: _DescriptionBlock(product: p)),
       SliverToBoxAdapter(child: _SpecsBlock(product: p,
           onOpen: () => _showSpecsDialog(context, p))),
@@ -1320,11 +1324,31 @@ class _DeliveryDialogState extends State<_DeliveryDialog> {
 // ─── Bulk pricing ─────────────────────────────────────────────────
 
 class _BulkPricing extends StatelessWidget {
-  const _BulkPricing({required this.tiers});
+  // v2.0.92 — tap-to-select: tapping a tier bumps the screen's qty
+  // to that tier's minQty so the existing ATC / Buy Now CTA bar
+  // automatically uses the right quantity. The currently-active tier
+  // (the one matching the qty) is highlighted.
+  const _BulkPricing({
+    required this.tiers,
+    required this.currentQty,
+    required this.onTierTap,
+  });
   final List<UellowBulkTier> tiers;
+  final int currentQty;
+  final ValueChanged<int> onTierTap;
+
+  /// Returns the index of the tier whose qty range covers `qty`.
+  int _activeTierIndex() {
+    for (int i = tiers.length - 1; i >= 0; i--) {
+      if (currentQty >= tiers[i].minQty) return i;
+    }
+    return -1;
+  }
+
   @override
   Widget build(BuildContext context) {
     final ar = UellowApi.instance.lang == 'ar';
+    final activeIdx = _activeTierIndex();
     final bestIdx = tiers.indexWhere((t) => t.savePct >= tiers.map((x) => x.savePct).reduce((a,b)=>a>b?a:b));
     return Container(
       margin: const EdgeInsets.fromLTRB(14, 8, 14, 0),
@@ -1384,6 +1408,8 @@ class _BulkPricing extends StatelessWidget {
               padding: EdgeInsets.only(right: i < tiers.length - 1 ? 6 : 0),
               child: _tier(qtyLabel: qtyLabel, price: t.price, sym: t.currency,
                   save: t.savePct, best: i == bestIdx && tiers.length > 1,
+                  selected: i == activeIdx,
+                  onTap: () => onTierTap(t.minQty),
                   capped: t.capped, ar: ar),
             ));
           }))
@@ -1403,11 +1429,13 @@ class _BulkPricing extends StatelessWidget {
                     ? '${t.minQty}–$nextMin'
                     : '${t.minQty}+';
                 return SizedBox(
-                  // ~3 tiles across visible screen width — peek hints at more
                   width: (MediaQuery.of(context).size.width - 28 - 14 - 12) / 3,
                   child: _tier(qtyLabel: qtyLabel, price: t.price,
                       sym: t.currency, save: t.savePct,
-                      best: i == bestIdx, capped: t.capped, ar: ar),
+                      best: i == bestIdx,
+                      selected: i == activeIdx,
+                      onTap: () => onTierTap(t.minQty),
+                      capped: t.capped, ar: ar),
                 );
               },
             ),
@@ -1432,53 +1460,74 @@ class _BulkPricing extends StatelessWidget {
     );
   }
   Widget _tier({required String qtyLabel, required double price, required String sym,
-      required int save, bool best = false, bool capped = false, required bool ar}) {
-    return Stack(clipBehavior: Clip.none, children: [
-      Container(
-        padding: EdgeInsets.fromLTRB(6, best ? 18 : 12, 6, 12),
-        decoration: BoxDecoration(
-          color: best ? UellowColors.darkBrown : Colors.white,
-          border: Border.all(
-              color: best ? UellowColors.darkBrown : UellowColors.border,
-              width: best ? 2 : 1),
-          borderRadius: BorderRadius.circular(12),
-          boxShadow: best ? [BoxShadow(
-              color: UellowColors.darkBrown.withValues(alpha: 0.18),
-              blurRadius: 10, offset: const Offset(0, 4))] : null,
-        ),
-        child: Column(children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-            decoration: BoxDecoration(
-              color: best ? UellowColors.yellow : UellowColors.yellowSoft,
-              borderRadius: BorderRadius.circular(999),
-            ),
-            child: Text('$qtyLabel ${ar ? "قطعة" : "pcs"}',
-                style: const TextStyle(fontSize: 10,
-                    fontWeight: FontWeight.w900, color: UellowColors.darkBrown)),
+      required int save, bool best = false, bool capped = false, required bool ar,
+      bool selected = false, VoidCallback? onTap}) {
+    // v2.0.92 — selected tier wins over "best" for visual emphasis. Tapping
+    // bumps qty so ATC / Buy Now use the right quantity.
+    final highlightDark = selected || best;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Stack(clipBehavior: Clip.none, children: [
+        Container(
+          padding: EdgeInsets.fromLTRB(6, best ? 18 : 12, 6, 12),
+          decoration: BoxDecoration(
+            color: highlightDark ? UellowColors.darkBrown : Colors.white,
+            border: Border.all(
+                color: selected ? UellowColors.yellow
+                    : (best ? UellowColors.darkBrown : UellowColors.border),
+                width: (selected || best) ? 2.5 : 1),
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: highlightDark ? [BoxShadow(
+                color: UellowColors.darkBrown.withValues(alpha: 0.18),
+                blurRadius: 10, offset: const Offset(0, 4))] : null,
           ),
-          const SizedBox(height: 8),
-          Text(price.toStringAsFixed(3), style: TextStyle(
-              fontSize: 17, fontWeight: FontWeight.w900,
-              color: best ? UellowColors.yellowLight : UellowColors.darkBrown)),
-          Text('$sym ${ar ? "/ قطعة" : "/ pc"}',
-              style: TextStyle(fontSize: 10,
-                  color: best ? UellowColors.yellowLight.withValues(alpha: 0.7) : UellowColors.muted)),
-          if (save > 0) ...[
-            const SizedBox(height: 8),
+          child: Column(children: [
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
               decoration: BoxDecoration(
-                color: UellowColors.success,
-                borderRadius: BorderRadius.circular(4)),
-              child: Text(ar ? 'وفّر $save%' : 'Save $save%',
-                  style: const TextStyle(fontSize: 9.5,
-                      color: Colors.white, fontWeight: FontWeight.w900)),
+                color: highlightDark ? UellowColors.yellow : UellowColors.yellowSoft,
+                borderRadius: BorderRadius.circular(999),
+              ),
+              child: Text('$qtyLabel ${ar ? "قطعة" : "pcs"}',
+                  style: const TextStyle(fontSize: 10,
+                      fontWeight: FontWeight.w900, color: UellowColors.darkBrown)),
             ),
-          ],
-        ]),
-      ),
-      if (best) Positioned(top: -8, left: 0, right: 0, child: Center(
+            const SizedBox(height: 8),
+            Text(price.toStringAsFixed(3), style: TextStyle(
+                fontSize: 17, fontWeight: FontWeight.w900,
+                color: highlightDark ? UellowColors.yellowLight : UellowColors.darkBrown)),
+            Text('$sym ${ar ? "/ قطعة" : "/ pc"}',
+                style: TextStyle(fontSize: 10,
+                    color: highlightDark
+                        ? UellowColors.yellowLight.withValues(alpha: 0.7)
+                        : UellowColors.muted)),
+            if (save > 0) ...[
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: UellowColors.success,
+                  borderRadius: BorderRadius.circular(4)),
+                child: Text(ar ? 'وفّر $save%' : 'Save $save%',
+                    style: const TextStyle(fontSize: 9.5,
+                        color: Colors.white, fontWeight: FontWeight.w900)),
+              ),
+            ],
+          ]),
+        ),
+        // SELECTED chip (top-right) — overrides BEST chip when both apply
+        if (selected) Positioned(top: -6, right: -4, child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+          decoration: BoxDecoration(
+            color: UellowColors.yellow,
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(color: Colors.white, width: 1.2),
+            boxShadow: const [BoxShadow(color: Color(0x33000000), blurRadius: 4)],
+          ),
+          child: const Icon(Icons.check, size: 10, color: UellowColors.darkBrown),
+        )),
+        if (best && !selected) Positioned(top: -8, left: 0, right: 0, child: Center(
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
           decoration: BoxDecoration(
@@ -1496,7 +1545,7 @@ class _BulkPricing extends StatelessWidget {
           ]),
         ),
       )),
-    ]);
+    ]));
   }
 }
 
