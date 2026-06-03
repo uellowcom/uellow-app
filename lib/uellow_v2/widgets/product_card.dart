@@ -440,6 +440,31 @@ class _Image extends StatelessWidget {
               ]),
             ),
           ),
+          // v2.0.82 — Free shipping badge (when the product is tagged)
+          if (product.badges.contains('free_shipping')) Positioned(
+            bottom: 8, left: 8,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+              decoration: BoxDecoration(
+                color: UellowColors.yellow,
+                borderRadius: BorderRadius.circular(6),
+                boxShadow: const [BoxShadow(
+                  color: Color(0x33000000), blurRadius: 4, offset: Offset(0, 2),
+                )],
+              ),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                const Icon(Icons.local_shipping_outlined, size: 11,
+                    color: UellowColors.darkBrown),
+                const SizedBox(width: 3),
+                Text(UellowApi.instance.lang.toLowerCase().startsWith('ar')
+                    ? 'شحن مجاني' : 'FREE SHIP',
+                    style: const TextStyle(
+                      color: UellowColors.darkBrown, fontSize: 9,
+                      fontWeight: FontWeight.w900, letterSpacing: 0.3,
+                    )),
+              ]),
+            ),
+          ),
           Positioned(bottom: 8, right: 8,
             child: _HeartBtn(filled: faved, onTap: onFav)),
         ],
