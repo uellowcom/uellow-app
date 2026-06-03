@@ -182,7 +182,15 @@ class _ReelSlideState extends State<_ReelSlide> {
     if (url == null) return;     // embed/tiktok-only — no inline player
     if (_ctrl != null) return;
     try {
-      _ctrl = VideoPlayerController.networkUrl(Uri.parse(url));
+      // v2.0.99 — Bunny Stream serves HLS (.m3u8). Without an explicit
+      // formatHint, ExoPlayer falls back to extension-sniffing, which
+      // silently fails when the CDN URL carries query params or redirects.
+      // Detect HLS from the mime or the .m3u8 path and hint it explicitly.
+      final mime = _video['mime']?.toString().toLowerCase() ?? '';
+      final isHls = mime.contains('mpegurl') || mime.contains('hls')
+          || Uri.parse(url).path.toLowerCase().endsWith('.m3u8');
+      _ctrl = VideoPlayerController.networkUrl(Uri.parse(url),
+          formatHint: isHls ? VideoFormat.hls : null);
       await _ctrl!.initialize();
       _ctrl!
         ..setLooping(true)
