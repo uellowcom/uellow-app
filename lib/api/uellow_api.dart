@@ -102,6 +102,7 @@ class UellowApi {
     notifications = _NotificationsApi(this);
     beena         = _BeenaApi(this);
     settings      = _SettingsApi(this);
+    shipping      = _ShippingApi(this);
   }
 
   /// Singleton. Initialize once at app start via [UellowApi.init].
@@ -192,6 +193,7 @@ class UellowApi {
   late final _NotificationsApi notifications;
   late final _BeenaApi beena;
   late final _SettingsApi settings;
+  late final _ShippingApi shipping;
 
   // ─── Auth listener (lets ui react to 401 / logout) ───────────────────
 
@@ -1021,5 +1023,32 @@ class _SettingsApi {
     final res = await _c._get(EP.appVersionCheck,
         query: {'version': version, 'platform': _c._platform});
     return UellowVersionCheck.fromJson(res['data'] as Map<String, dynamic>);
+  }
+}
+
+// v2.0.89 — Shipping Pro endpoints (cities typeahead + carrier quote)
+class _ShippingApi {
+  _ShippingApi(this._c);
+  final UellowApi _c;
+
+  /// Typeahead lookup. country defaults to KW; `q` is a fuzzy partial.
+  Future<List<Map<String, dynamic>>> cities(
+      {String country = 'KW', String? q}) async {
+    final res = await _c._get(
+      '/api/mobile/v2/shipping/cities',
+      query: {'country': country, if (q != null && q.isNotEmpty) 'q': q},
+    );
+    return (res['data'] as List).cast<Map<String, dynamic>>();
+  }
+
+  /// Available carriers for a city + payment method. Backend filters by
+  /// time window so a 3-hour driver only shows up between 14:00 and 21:00.
+  Future<List<Map<String, dynamic>>> quote(
+      {required int cityId, required String payment}) async {
+    final res = await _c._get(
+      '/api/mobile/v2/shipping/quote',
+      query: {'city_id': cityId, 'payment': payment},
+    );
+    return (res['data'] as List).cast<Map<String, dynamic>>();
   }
 }
