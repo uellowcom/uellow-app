@@ -164,12 +164,26 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       // page in a webview FIRST. The backend redirects to /payment/status
       // when the gateway returns; we listen for that URL and only then
       // route to the order-confirmation screen.
+      final ar = UellowApi.instance.lang == 'ar';
       if (result.paymentRequired && (result.paymentUrl ?? '').isNotEmpty) {
-        await Navigator.pushNamed(context, Routes.webview, arguments: {
-          'url': result.paymentUrl!,
-          'title': UellowApi.instance.lang == 'ar' ? 'الدفع' : 'Payment',
-        });
+        final paid = await Navigator.pushNamed<bool>(context, Routes.webview,
+          arguments: {
+            'url': result.paymentUrl!,
+            'title': ar ? 'الدفع' : 'Payment',
+          });
         if (!mounted) return;
+        // Cancelled / not completed → cart is preserved (online order stayed a
+        // draft until payment). Show a failure screen with return buttons.
+        if (paid == false) {
+          Navigator.pushReplacementNamed(context, Routes.orderConfirm,
+            arguments: OrderConfirmationArgs(
+              success: false,
+              failureMessage: ar
+                  ? 'لم يكتمل الدفع — سلتك محفوظة، يمكنك المحاولة مرة أخرى.'
+                  : 'Payment was not completed — your cart is saved, you can try again.',
+            ));
+          return;
+        }
       }
       Navigator.pushReplacementNamed(context, Routes.orderConfirm,
         arguments: OrderConfirmationArgs(
@@ -292,10 +306,20 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       bottomNavigationBar: FutureBuilder<_CheckoutData>(
         future: _data,
         builder: (_, snap) {
-          final t = (snap.data?.summary?['cart']?['totals']?['total'] as Map?);
-          final total = t == null
-              ? null
-              : UellowMoney.fromJson(Map<String, dynamic>.from(t));
+          UellowMoney? total;
+          final tot = (snap.data?.summary?['cart']?['totals'] as Map?);
+          if (tot != null) {
+            double a(Map? m) => (m?['amount'] as num?)?.toDouble() ?? 0;
+            final ship = snap.data != null ? _selectedShipping(snap.data!) : null;
+            final pay = a(tot['subtotal'] as Map?) - a(tot['discount'] as Map?)
+                + a(tot['tax'] as Map?) + a((ship ?? tot['shipping']) as Map?);
+            final tmpl = (tot['subtotal'] ?? tot['total']) as Map?;
+            if (tmpl != null) {
+              final mm = Map<String, dynamic>.from(tmpl);
+              mm['amount'] = pay;
+              total = UellowMoney.fromJson(mm);
+            }
+          }
           return _PlaceOrderBar(
             busy: _placing,
             total: total,
@@ -304,6 +328,17 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         },
       ),
     );
+  }
+
+  // The money map of the currently-selected shipping method (or null).
+  Map<String, dynamic>? _selectedShipping(_CheckoutData d) {
+    for (final m in d.shippingMethods) {
+      if ((m['id'] as int?) == _selectedCarrierId) {
+        final p = m['price'] ?? m['rate'];
+        return p is Map ? p.cast<String, dynamic>() : null;
+      }
+    }
+    return null;
   }
 
   Widget _content(_CheckoutData d) {
@@ -334,7 +369,10 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           )),
       _section(num: null,
           title: UellowApi.instance.lang == 'ar' ? 'ملخص الطلب' : 'ORDER SUMMARY',
-          child: _SumBlock(cart: (d.summary?['cart'] as Map?))),
+          child: _SumBlock(
+            cart: (d.summary?['cart'] as Map?),
+            shippingOverride: _selectedShipping(d),
+          )),
       // No trailing gap — sticky Place Order bar hugs the last block.
     ]);
   }
@@ -878,36 +916,52 @@ class _PaymentMethodGrid extends StatelessWidget {
 // ─── Summary block ────────────────────────────────────────────────
 
 class _SumBlock extends StatelessWidget {
-  const _SumBlock({this.cart});
+  const _SumBlock({this.cart, this.shippingOverride});
   final Map? cart;
+  // The selected shipping method's price (the order's amount_delivery is 0
+  // until a carrier is applied at confirm, so the preview must use this).
+  final Map<String, dynamic>? shippingOverride;
   @override
   Widget build(BuildContext context) {
     final totals = cart?['totals'] as Map?;
     final coupons = ((cart?['coupons'] as List?) ?? const []).cast<String>();
-    String fmt(String k) {
-      final m = totals?[k] as Map?;
-      if (m == null) return '—';
-      return UellowMoney.fromJson(Map<String, dynamic>.from(m)).format();
+    double amt(Map? m) => (m?['amount'] as num?)?.toDouble() ?? 0;
+    String moneyOf(Map? m) => m == null
+        ? '—'
+        : UellowMoney.fromJson(Map<String, dynamic>.from(m)).format();
+    // Build a money string for a computed amount, reusing a currency template.
+    String moneyAmt(double a) {
+      final tmpl = (totals?['subtotal'] ?? totals?['total'] ?? shippingOverride) as Map?;
+      if (tmpl == null) return a.toStringAsFixed(3);
+      final mm = Map<String, dynamic>.from(tmpl);
+      mm['amount'] = a;
+      return UellowMoney.fromJson(mm).format();
     }
     final ar = UellowApi.instance.lang == 'ar';
-    final discAmt = ((totals?['discount'] as Map?)?['amount'] as num?)?.toDouble() ?? 0;
+    final subAmt = amt(totals?['subtotal'] as Map?);
+    final taxAmt = amt(totals?['tax'] as Map?);
+    final discAmt = amt(totals?['discount'] as Map?);
+    final shipMap = shippingOverride ?? (totals?['shipping'] as Map?);
+    final shipAmt = amt(shipMap);
+    final payAmt = subAmt - discAmt + taxAmt + shipAmt;
     return Column(children: [
-      _r(ar ? 'الإجمالي قبل الخصم' : 'Subtotal', fmt('subtotal')),
-      _r(ar ? 'الشحن' : 'Delivery', fmt('shipping')),
-      // Show the discount line only when there is an actual discount.
+      _r(ar ? 'الإجمالي قبل الخصم' : 'Subtotal', moneyOf(totals?['subtotal'] as Map?)),
+      _r(ar ? 'الشحن' : 'Delivery',
+          shipAmt <= 0 ? (ar ? 'مجاني' : 'Free') : moneyOf(shipMap)),
       if (discAmt > 0) ...[
         if (coupons.isNotEmpty)
           for (final code in coupons)
             _r(ar ? 'كوبون $code' : 'Coupon $code',
-                '− ${fmt('discount')}', success: true)
+                '− ${moneyOf(totals?['discount'] as Map?)}', success: true)
         else
-          _r(ar ? 'الخصم' : 'Discount', '− ${fmt('discount')}', success: true),
+          _r(ar ? 'الخصم' : 'Discount',
+              '− ${moneyOf(totals?['discount'] as Map?)}', success: true),
       ],
       const Divider(height: 24),
       Row(children: [
         Expanded(child: Text(ar ? 'الإجمالي' : 'You pay', style: const TextStyle(
             fontWeight: FontWeight.w900, fontSize: 16, color: UellowColors.ink))),
-        Text(fmt('total'), style: const TextStyle(
+        Text(moneyAmt(payAmt), style: const TextStyle(
             fontWeight: FontWeight.w900, fontSize: 18, color: UellowColors.ink)),
       ]),
     ]);

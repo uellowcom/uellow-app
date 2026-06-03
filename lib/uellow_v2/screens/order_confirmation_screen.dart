@@ -146,16 +146,30 @@ class _OrderConfirmationScreenState extends State<OrderConfirmationScreen>
   Widget _ctaRow(BuildContext context) {
     final ar = UellowApi.instance.lang == 'ar';
     return Column(children: [
+      // Cart is preserved on a failed/cancelled payment — let the user retry.
       SizedBox(width: double.infinity, child: ElevatedButton.icon(
         onPressed: () =>
-            Navigator.of(context).pushNamedAndRemoveUntil('/home', (_) => false),
-        icon: const Icon(Icons.shopping_bag_outlined, size: 16),
-        label: Text(ar ? 'متابعة التسوق' : 'Continue shopping',
+            Navigator.of(context).pushReplacementNamed('/checkout'),
+        icon: const Icon(Icons.lock_outline, size: 16),
+        label: Text(ar ? 'العودة إلى الدفع' : 'Back to checkout',
             style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 15)),
         style: ElevatedButton.styleFrom(
           backgroundColor: UellowColors.yellow,
           foregroundColor: UellowColors.darkBrown,
           padding: const EdgeInsets.symmetric(vertical: 16),
+        ),
+      )),
+      const SizedBox(height: 10),
+      SizedBox(width: double.infinity, child: OutlinedButton.icon(
+        onPressed: () => Navigator.of(context).pushReplacementNamed('/cart'),
+        icon: const Icon(Icons.shopping_cart_outlined, size: 16,
+            color: UellowColors.darkBrown),
+        label: Text(ar ? 'العودة إلى السلة' : 'Back to cart',
+            style: const TextStyle(color: UellowColors.ink,
+                fontWeight: FontWeight.w800)),
+        style: OutlinedButton.styleFrom(
+          padding: const EdgeInsets.symmetric(vertical: 14),
+          side: const BorderSide(color: UellowColors.border, width: 1.5),
         ),
       )),
       const SizedBox(height: 10),
