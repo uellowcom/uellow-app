@@ -78,7 +78,7 @@ class T {
     'product.bulk_sub':        {'en': 'save more, buy more',       'ar': 'كلما زاد العدد، زاد التوفير'},
     'product.size':            {'en': 'Size',                      'ar': 'المقاس'},
     'product.color':           {'en': 'Color',                     'ar': 'اللون'},
-    'product.write_review':    {'en': 'Write a review',            'ar': 'اكتب تقييماً'},
+    'product.write_review':    {'en': 'Write a review',            'ar': 'اكتب تقييم'},
     'product.deliver_to':      {'en': 'Deliver to',                'ar': 'التوصيل إلى'},
     'product.change_address':  {'en': 'Change address',            'ar': 'تغيير العنوان'},
     'product.notify_me':       {'en': 'Notify me when back in stock',
@@ -89,7 +89,7 @@ class T {
     'product.views':           {'en': 'views',                     'ar': 'مشاهدة'},
     'product.save_amount':     {'en': 'Save',                      'ar': 'وفّر'},
     // Reviews dialog
-    'reviews.write':           {'en': 'Write a review',            'ar': 'اكتب تقييماً'},
+    'reviews.write':           {'en': 'Write a review',            'ar': 'اكتب تقييم'},
     'reviews.rating':          {'en': 'Your rating',               'ar': 'تقييمك'},
     'reviews.comment':         {'en': 'Your comment',              'ar': 'تعليقك'},
     'reviews.submit':          {'en': 'Submit review',             'ar': 'إرسال التقييم'},

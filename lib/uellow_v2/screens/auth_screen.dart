@@ -87,16 +87,50 @@ class _AuthScreenState extends State<AuthScreen> {
             else
               // Full page (e.g. after logout): give a way back to browsing
               // so the user isn't trapped on the login screen.
-              Align(alignment: Alignment.centerLeft, child: TextButton.icon(
-                onPressed: () => Navigator.of(context)
-                    .pushNamedAndRemoveUntil('/home', (_) => false),
-                icon: const Icon(Icons.arrow_back, color: UellowColors.darkBrown, size: 18),
-                label: Text(
-                    UellowApi.instance.lang.toLowerCase().startsWith('ar')
-                        ? 'تصفّح كضيف' : 'Browse as guest',
-                    style: const TextStyle(color: UellowColors.darkBrown,
-                        fontWeight: FontWeight.w800)),
-              )),
+              // v2.1.35 — proper pill button, RTL-aware (start-aligned,
+              // back-arrow flips in Arabic), and it returns to the page
+              // the user CAME FROM — home only as a last resort.
+              Align(
+                alignment: AlignmentDirectional.centerStart,
+                child: Material(
+                  color: Colors.white,
+                  shape: const StadiumBorder(),
+                  elevation: 2,
+                  shadowColor: const Color(0x33000000),
+                  child: InkWell(
+                    customBorder: const StadiumBorder(),
+                    onTap: () {
+                      final nav = Navigator.of(context);
+                      if (nav.canPop()) {
+                        nav.pop(false);
+                      } else {
+                        nav.pushNamedAndRemoveUntil('/home', (_) => false);
+                      }
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 8),
+                      child: Row(mainAxisSize: MainAxisSize.min, children: [
+                        Icon(
+                            UellowApi.instance.lang.toLowerCase()
+                                    .startsWith('ar')
+                                ? Icons.arrow_forward
+                                : Icons.arrow_back,
+                            color: UellowColors.darkBrown, size: 16),
+                        const SizedBox(width: 6),
+                        Text(
+                            UellowApi.instance.lang.toLowerCase()
+                                    .startsWith('ar')
+                                ? 'تصفّح كضيف' : 'Browse as guest',
+                            style: const TextStyle(
+                                color: UellowColors.darkBrown,
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w900)),
+                      ]),
+                    ),
+                  ),
+                ),
+              ),
             _logo(),
             const SizedBox(height: 24),
             _card(),

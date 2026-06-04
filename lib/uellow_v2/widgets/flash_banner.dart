@@ -17,7 +17,8 @@ class FlashBanner extends StatelessWidget {
   const FlashBanner({super.key,
       this.endsAt, this.compact = false, this.edgeToEdge = false,
       this.discountPct, this.productCount,
-      this.title, this.subtitle, this.onTap});
+      this.title, this.subtitle, this.onTap,
+      this.colors, this.emoji, this.pattern = true});
   /// Sale end timestamp. If null, shows a placeholder D/H/M/S.
   final DateTime? endsAt;
   /// When true, renders the slim 36px-tall strip (for under product image).
@@ -33,6 +34,13 @@ class FlashBanner extends StatelessWidget {
   final String? title, subtitle;
   /// Optional tap handler — wraps the whole banner in a Material InkWell.
   final VoidCallback? onTap;
+  // v2.1.35 — promotion banners reuse this widget with their own look:
+  /// Override gradient colors (1 color = solid, 2+ = gradient).
+  final List<Color>? colors;
+  /// Override the left icon (⚡ by default) with the campaign emoji.
+  final String? emoji;
+  /// Diagonal shimmer stripes on/off.
+  final bool pattern;
   @override
   Widget build(BuildContext context) {
     final ar = UellowApi.instance.lang == 'ar';
@@ -50,19 +58,26 @@ class FlashBanner extends StatelessWidget {
             color: Color(0x33EA580C), blurRadius: 10, offset: Offset(0, 4))],
       ),
       child: Stack(children: [
-        // Base gradient
+        // Base gradient (overridable per campaign)
         Positioned.fill(child: Container(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft, end: Alignment.bottomRight,
-              colors: [Color(0xFFFFD340), Color(0xFFF59E0B),
-                  Color(0xFFEA580C), Color(0xFFB91C1C)],
-              stops: [0.0, 0.45, 0.78, 1.0],
-            ),
+          decoration: BoxDecoration(
+            gradient: (colors != null && colors!.isNotEmpty)
+                ? LinearGradient(
+                    begin: Alignment.topLeft, end: Alignment.bottomRight,
+                    colors: colors!.length == 1
+                        ? [colors!.first, colors!.first]
+                        : colors!,
+                  )
+                : const LinearGradient(
+                    begin: Alignment.topLeft, end: Alignment.bottomRight,
+                    colors: [Color(0xFFFFD340), Color(0xFFF59E0B),
+                        Color(0xFFEA580C), Color(0xFFB91C1C)],
+                    stops: [0.0, 0.45, 0.78, 1.0],
+                  ),
           ),
         )),
         // Diagonal shimmer
-        Positioned.fill(child: IgnorePointer(
+        if (pattern) Positioned.fill(child: IgnorePointer(
             child: CustomPaint(painter: _DiagonalStripes()))),
         // Subtle glossy top
         Positioned.fill(child: IgnorePointer(child: Container(
@@ -131,7 +146,7 @@ class FlashBanner extends StatelessWidget {
                     fontSize: 8, fontWeight: FontWeight.w900,
                     letterSpacing: 0.6, height: 1)),
               ])
-            : const Text('⚡', style: TextStyle(fontSize: 28)),
+            : Text(emoji ?? '⚡', style: const TextStyle(fontSize: 28)),
       ),
       const SizedBox(width: 12),
       // Middle: title + subtitle
@@ -221,19 +236,46 @@ class _DhmsCounterState extends State<_DhmsCounter> {
   String _two(int n) => n.toString().padLeft(2, '0');
   @override
   Widget build(BuildContext context) {
+    final ar = UellowApi.instance.lang == 'ar';
     final d = _left.inDays;
     final h = _left.inHours.remainder(24);
     final m = _left.inMinutes.remainder(60);
     final s = _left.inSeconds.remainder(60);
-    final sz = widget.compact ? 14.0 : 30.0;
-    final fs = widget.compact ? 8.0 : 14.0;
+    // v2.1.35 — full variant: localized unit label ABOVE the number
+    // (يوم/ساعة/دقيقة/ثانية), per request. Compact keeps the tiny letter.
+    final labels = ar
+        ? const ['يوم', 'ساعة', 'دقيقة', 'ثانية']
+        : const ['DAY', 'HR', 'MIN', 'SEC'];
+    final sz = widget.compact ? 14.0 : 32.0;
+    final fs = widget.compact ? 8.0 : 13.0;
+    final vals = [_two(d), _two(h), _two(m), _two(s)];
+    final letters = const ['D', 'H', 'M', 'S'];
     return Row(mainAxisSize: MainAxisSize.min, children: [
-      _cell(_two(d), 'D', sz, fs), const SizedBox(width: 3),
-      _cell(_two(h), 'H', sz, fs), const SizedBox(width: 3),
-      _cell(_two(m), 'M', sz, fs), const SizedBox(width: 3),
-      _cell(_two(s), 'S', sz, fs),
+      for (var i = 0; i < 4; i++) ...[
+        if (i > 0) const SizedBox(width: 3),
+        widget.compact
+            ? _cell(vals[i], letters[i], sz, fs)
+            : _labeledCell(vals[i], labels[i], sz, fs),
+      ],
     ]);
   }
+  Widget _labeledCell(String v, String u, double sz, double fs) => Container(
+    width: sz + 2, height: sz + 6,
+    decoration: BoxDecoration(
+      color: const Color(0xD9000000),
+      borderRadius: BorderRadius.circular(5),
+      border: Border.all(color: const Color(0x40FFFFFF), width: 0.5),
+    ),
+    child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+      Text(u, maxLines: 1,
+          style: const TextStyle(color: Color(0xB3FFFFFF),
+              fontSize: 6.5, fontWeight: FontWeight.w800, height: 1.1)),
+      const SizedBox(height: 1),
+      Text(v, style: TextStyle(color: Colors.white,
+          fontSize: fs, fontWeight: FontWeight.w900,
+          height: 1, fontFamily: 'monospace')),
+    ]),
+  );
   Widget _cell(String v, String u, double sz, double fs) => Container(
     width: sz, height: sz, alignment: Alignment.center,
     decoration: BoxDecoration(

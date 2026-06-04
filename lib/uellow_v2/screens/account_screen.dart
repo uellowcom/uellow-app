@@ -898,14 +898,15 @@ class _OrdersGrid extends StatelessWidget {
               isGuest ? '/auth' : '/orders',
               arguments: isGuest ? null : {'filter': _filters[i]}),
           child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+            // v2.1.35 — bigger status icons per request (38/15 → 48/22).
             Container(
-              width: 38, height: 38,
+              width: 48, height: 48,
               decoration: BoxDecoration(
                 color: Colors.white,
                 border: Border.all(color: UellowColors.border, width: 1),
-                borderRadius: BorderRadius.circular(11),
+                borderRadius: BorderRadius.circular(13),
               ),
-              child: Icon(_icons[i], size: 15, color: UellowColors.darkBrown),
+              child: Icon(_icons[i], size: 22, color: UellowColors.darkBrown),
             ),
             const SizedBox(height: 6),
             Text(labels[i], textAlign: TextAlign.center,

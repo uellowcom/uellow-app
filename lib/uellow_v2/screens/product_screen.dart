@@ -150,6 +150,32 @@ class _ProductScreenState extends State<ProductScreen> {
         // the headline text. Uses the wide flash banner variant.
         child: FlashBanner(endsAt: p.flashEndsAt, compact: false, edgeToEdge: true),
       ),
+      // v2.1.35 — promotion banner: SAME flash-sale style strip, but with
+      // the campaign's own emoji / colors / pattern / title / subtitle
+      // (configured per promotion in the backend) + live countdown.
+      if (p.flashEndsAt == null && (p.promo?['banner'] as Map?) != null)
+        SliverToBoxAdapter(child: Builder(builder: (_) {
+          final b = (p.promo!['banner'] as Map).cast<String, dynamic>();
+          final ar = UellowApi.instance.lang.toLowerCase().startsWith('ar');
+          final l = ar ? 'ar' : 'en';
+          final cols = ((b['colors'] as List?) ?? const [])
+              .map((c) => _hexColor(c, UellowColors.yellow))
+              .toList();
+          final pct = ((p.promo!['discount_pct'] as num?) ?? 0).toInt();
+          return FlashBanner(
+            endsAt: DateTime.tryParse(
+                (p.promo!['ends_at'] ?? '').toString()),
+            compact: false, edgeToEdge: true,
+            emoji: (b['emoji'] ?? '🎯').toString(),
+            colors: cols.isEmpty ? null : cols,
+            pattern: b['pattern'] != false,
+            discountPct: pct > 0 ? pct : null,
+            title: ((b['title'] as Map?)?[l] ?? '').toString(),
+            subtitle: ((b['subtitle'] as Map?)?[l] ?? '').toString().isEmpty
+                ? null
+                : ((b['subtitle'] as Map?)?[l] ?? '').toString(),
+          );
+        })),
       SliverToBoxAdapter(child: _Title(p: p)),
       SliverToBoxAdapter(child: _PriceRow(p: p)),
       // v2.0.78 — when a product has no vendor, show a "Fulfilled by
@@ -182,10 +208,8 @@ class _ProductScreenState extends State<ProductScreen> {
           && ((p.priceHistory!['points'] as List?)?.length ?? 0) >= 2)
         SliverToBoxAdapter(child: _PriceHistoryBlock(
             history: p.priceHistory!, trend: p.priceTrend)),
-      // v2.1.29 — compact premium reviews highlight (low height).
-      if (p.rating.count > 0)
-        SliverToBoxAdapter(child: _ReviewsHighlight(productId: p.id,
-            avg: p.rating.avg, count: p.rating.count)),
+      // v2.1.35 — the "verified reviews" highlight strip was removed per
+      // request; the full reviews block lower on the page remains.
       // v2.1.31 — specialist reviewers (uellow_reviewers): latest expert
       // verdicts + "ask a specialist" CTA.
       SliverToBoxAdapter(child: _ExpertReviewsBlock(productId: p.id)),
@@ -1509,10 +1533,108 @@ class _DeliveryDialog extends StatefulWidget {
 
 class _DeliveryDialogState extends State<_DeliveryDialog> {
   late Future<List<UellowAddress>> _future;
+  // v2.1.35 — the dialog now shows the FULL delivery picture: every
+  // method with live availability, cutoff, price and free-over rule.
+  List<Map<String, dynamic>> _etaLines = const [];
+
   @override
   void initState() {
     super.initState();
     _future = UellowApi.instance.addresses.list().catchError((_) => <UellowAddress>[]);
+    _loadEta();
+  }
+
+  Future<void> _loadEta() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final cc = prefs.getString('uellow_country_code_v1') ?? '';
+      final r = await http.get(Uri.parse(
+          '${UellowApi.instance.baseUrl}/api/mobile/v2/orders/delivery-eta'
+          '${cc.isNotEmpty ? "?country=$cc" : ""}'))
+          .timeout(const Duration(seconds: 8));
+      final j = jsonDecode(utf8.decode(r.bodyBytes)) as Map<String, dynamic>;
+      if (j['success'] == true && mounted) {
+        setState(() => _etaLines = ((j['data']?['lines'] as List?) ?? const [])
+            .cast<Map>().map((m) => m.cast<String, dynamic>()).toList());
+      }
+    } catch (_) {}
+  }
+
+  Widget _methodCard(Map<String, dynamic> l, bool ar) {
+    final isNow = l['status'] == 'now';
+    final name = ((l['name'] as Map?)?[ar ? 'ar' : 'en'] ?? '').toString();
+    final text = ((l['text'] as Map?)?[ar ? 'ar' : 'en'] ?? '').toString();
+    final cutoff = (l['cutoff'] ?? '').toString();
+    final price = (l['price'] as num?)?.toDouble();
+    final freeOver = (l['free_over'] as num?)?.toDouble();
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: isNow ? const Color(0xFFF2FBF5) : Colors.white,
+        border: Border.all(color: isNow
+            ? UellowColors.success.withValues(alpha: 0.45)
+            : UellowColors.border),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Icon(isNow ? Icons.bolt : Icons.schedule,
+              size: 16, color: isNow
+                  ? UellowColors.successDk : UellowColors.muted),
+          const SizedBox(width: 6),
+          Expanded(child: Text(name,
+              maxLines: 1, overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 13,
+                  fontWeight: FontWeight.w800, color: UellowColors.ink))),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2.5),
+            decoration: BoxDecoration(
+              color: isNow
+                  ? UellowColors.success.withValues(alpha: 0.15)
+                  : const Color(0xFFF1F5F9),
+              borderRadius: BorderRadius.circular(999),
+            ),
+            child: Text(
+                isNow
+                    ? (ar ? 'متاح الآن' : 'Available now')
+                    : (ar ? 'لاحقاً' : 'Later'),
+                style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w900,
+                    color: isNow
+                        ? UellowColors.successDk : UellowColors.muted)),
+          ),
+        ]),
+        const SizedBox(height: 5),
+        Text(text, style: const TextStyle(fontSize: 11.5,
+            color: UellowColors.text, height: 1.4)),
+        if (cutoff.isNotEmpty || price != null || freeOver != null) ...[
+          const SizedBox(height: 6),
+          Wrap(spacing: 10, runSpacing: 3, children: [
+            if (cutoff.isNotEmpty)
+              Text(ar ? '⏰ آخر وقت للطلب: $cutoff'
+                      : '⏰ Order cutoff: $cutoff',
+                  style: const TextStyle(fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                      color: UellowColors.muted)),
+            if (price != null)
+              Text(price <= 0
+                      ? (ar ? '💰 التوصيل: مجاني' : '💰 Delivery: FREE')
+                      : (ar ? '💰 التوصيل: ${price.toStringAsFixed(3)} د.ك'
+                            : '💰 Delivery: ${price.toStringAsFixed(3)} KD'),
+                  style: const TextStyle(fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                      color: UellowColors.muted)),
+            if (freeOver != null && freeOver > 0)
+              Text(ar
+                      ? '🎁 مجاني للطلبات فوق ${freeOver.toStringAsFixed(3)} د.ك'
+                      : '🎁 Free over ${freeOver.toStringAsFixed(3)} KD',
+                  style: const TextStyle(fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                      color: UellowColors.successDk)),
+          ]),
+        ],
+      ]),
+    );
   }
 
   @override
@@ -1533,65 +1655,88 @@ class _DeliveryDialogState extends State<_DeliveryDialog> {
               Text(UellowApi.instance.lang == 'ar' ? 'التوصيل إلى' : 'Deliver to',
                   style: UT.h2),
             ])),
-        Flexible(child: FutureBuilder<List<UellowAddress>>(
-          future: _future,
-          builder: (_, snap) {
-            if (snap.connectionState != ConnectionState.done) {
-              return const Center(child: Padding(
-                padding: EdgeInsets.all(20), child: CircularProgressIndicator()));
-            }
-            final list = snap.data ?? [];
-            if (list.isEmpty) return _empty();
-            return ListView.separated(
-              shrinkWrap: true,
-              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
-              itemCount: list.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 8),
-              itemBuilder: (_, i) {
-                final a = list[i];
-                final isDef = a.isDefault;
-                return GestureDetector(
-                  onTap: () async {
-                    await UellowApi.instance.tokenStore.writeAddressId(a.id);
-                    if (context.mounted) Navigator.pop(context);
-                  },
-                  child: Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: isDef ? UellowColors.yellowSoft : Colors.white,
-                    border: Border.all(
-                        color: isDef ? UellowColors.yellow : UellowColors.border,
-                        width: isDef ? 2 : 1),
-                    borderRadius: BorderRadius.circular(12),
+        Flexible(child: ListView(
+          shrinkWrap: true,
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
+          children: [
+            FutureBuilder<List<UellowAddress>>(
+              future: _future,
+              builder: (_, snap) {
+                if (snap.connectionState != ConnectionState.done) {
+                  return const Center(child: Padding(
+                    padding: EdgeInsets.all(20), child: CircularProgressIndicator()));
+                }
+                final list = snap.data ?? [];
+                if (list.isEmpty) return _empty();
+                return Column(children: [
+                  for (final a in list) Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Builder(builder: (_) {
+                      final isDef = a.isDefault;
+                      return GestureDetector(
+                        onTap: () async {
+                          await UellowApi.instance.tokenStore.writeAddressId(a.id);
+                          if (context.mounted) Navigator.pop(context);
+                        },
+                        child: Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: isDef ? UellowColors.yellowSoft : Colors.white,
+                          border: Border.all(
+                              color: isDef ? UellowColors.yellow : UellowColors.border,
+                              width: isDef ? 2 : 1),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Row(children: [
+                          Icon(isDef ? Icons.location_on : Icons.location_on_outlined,
+                              color: isDef ? UellowColors.warn : UellowColors.muted),
+                          const SizedBox(width: 10),
+                          Expanded(child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start, children: [
+                            Text(a.name.isNotEmpty ? a.name : (a.city.isNotEmpty ? a.city : (UellowApi.instance.lang == 'ar' ? 'العنوان' : 'Address')),
+                                style: const TextStyle(fontWeight: FontWeight.w800,
+                                    fontSize: 14, color: UellowColors.ink)),
+                            const SizedBox(height: 2),
+                            Text([a.street, a.street2, a.city].where((s) => s.isNotEmpty).join(', '),
+                                style: const TextStyle(fontSize: 12, color: UellowColors.muted)),
+                          ])),
+                          if (isDef) Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: UellowColors.yellow,
+                              borderRadius: BorderRadius.circular(6)),
+                            child: Text(UellowApi.instance.lang == 'ar' ? 'افتراضي' : 'DEFAULT',
+                                style: const TextStyle(
+                                fontSize: 9, fontWeight: FontWeight.w900,
+                                color: UellowColors.darkBrown, letterSpacing: 0.5)),
+                          ),
+                        ]),
+                      ));
+                    }),
                   ),
-                  child: Row(children: [
-                    Icon(isDef ? Icons.location_on : Icons.location_on_outlined,
-                        color: isDef ? UellowColors.warn : UellowColors.muted),
-                    const SizedBox(width: 10),
-                    Expanded(child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Text(a.name.isNotEmpty ? a.name : (a.city.isNotEmpty ? a.city : (UellowApi.instance.lang == 'ar' ? 'العنوان' : 'Address')),
-                          style: const TextStyle(fontWeight: FontWeight.w800,
-                              fontSize: 14, color: UellowColors.ink)),
-                      const SizedBox(height: 2),
-                      Text([a.street, a.street2, a.city].where((s) => s.isNotEmpty).join(', '),
-                          style: const TextStyle(fontSize: 12, color: UellowColors.muted)),
-                    ])),
-                    if (isDef) Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: UellowColors.yellow,
-                        borderRadius: BorderRadius.circular(6)),
-                      child: Text(UellowApi.instance.lang == 'ar' ? 'افتراضي' : 'DEFAULT',
-                          style: const TextStyle(
-                          fontSize: 9, fontWeight: FontWeight.w900,
-                          color: UellowColors.darkBrown, letterSpacing: 0.5)),
-                    ),
-                  ]),
-                ));
+                ]);
               },
-            );
-          },
+            ),
+            // v2.1.35 — FULL delivery details: every method, its live
+            // availability, schedule note, cutoff, price and free-over.
+            if (_etaLines.isNotEmpty) ...[
+              Padding(
+                padding: const EdgeInsets.fromLTRB(0, 10, 0, 8),
+                child: Row(children: [
+                  const Icon(Icons.local_shipping_outlined,
+                      size: 16, color: UellowColors.darkBrown),
+                  const SizedBox(width: 6),
+                  Text(UellowApi.instance.lang == 'ar'
+                          ? 'خيارات التوصيل' : 'Delivery options',
+                      style: const TextStyle(fontSize: 14,
+                          fontWeight: FontWeight.w900,
+                          color: UellowColors.ink)),
+                ]),
+              ),
+              for (final l in _etaLines)
+                _methodCard(l, UellowApi.instance.lang == 'ar'),
+            ],
+          ],
         )),
         Padding(padding: const EdgeInsets.fromLTRB(18, 10, 18, 18),
             child: Column(children: [
@@ -2211,6 +2356,9 @@ class _ExpertReviewsBlockState extends State<_ExpertReviewsBlock> {
       ? UellowColors.successDk
       : v == 'not_recommend' ? UellowColors.danger : const Color(0xFF1565C0);
 
+  // v2.1.35 — denser, smaller, more data: level + specialty + date +
+  // quality/value mini-ratings per verdict; the CTA shrank into a small
+  // pill in the header.
   @override
   Widget build(BuildContext context) {
     if (!_loaded || (_items.isEmpty && _online == 0)) {
@@ -2219,7 +2367,7 @@ class _ExpertReviewsBlockState extends State<_ExpertReviewsBlock> {
     final ar = UellowApi.instance.lang.toLowerCase().startsWith('ar');
     return Container(
       margin: const EdgeInsets.only(top: 8),
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+      padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
       decoration: const BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft, end: Alignment.bottomRight,
@@ -2228,104 +2376,155 @@ class _ExpertReviewsBlockState extends State<_ExpertReviewsBlock> {
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
-          const Text('🎓', style: TextStyle(fontSize: 16)),
-          const SizedBox(width: 6),
-          Text(ar ? 'آراء المتخصصين' : 'Expert opinions', style: UT.h3),
-          const Spacer(),
-          if (_online > 0) Row(children: [
-            Container(width: 7, height: 7, decoration: const BoxDecoration(
+          const Text('🎓', style: TextStyle(fontSize: 14)),
+          const SizedBox(width: 5),
+          Text(ar ? 'آراء المتخصصين' : 'Expert opinions',
+              style: const TextStyle(fontSize: 13,
+                  fontWeight: FontWeight.w900, color: UellowColors.ink)),
+          if (_online > 0) ...[
+            const SizedBox(width: 8),
+            Container(width: 6, height: 6, decoration: const BoxDecoration(
                 color: UellowColors.success, shape: BoxShape.circle)),
-            const SizedBox(width: 4),
-            Text(ar ? '$_online متاح الآن' : '$_online online now',
-                style: const TextStyle(fontSize: 10.5,
+            const SizedBox(width: 3),
+            Text(ar ? '$_online متاح' : '$_online online',
+                style: const TextStyle(fontSize: 9.5,
                     color: UellowColors.successDk,
                     fontWeight: FontWeight.w800)),
-          ]),
-        ]),
-        // latest verdicts
-        for (final it in _items.take(2)) Container(
-          margin: const EdgeInsets.only(top: 8),
-          padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            border: Border.all(color: const Color(0xFFE3EAF6)),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            CircleAvatar(
-              radius: 16, backgroundColor: const Color(0xFFE3EAF6),
-              backgroundImage: (it['reviewer']?['avatar'] != null)
-                  ? CachedNetworkImageProvider(
-                      it['reviewer']['avatar'].toString()) : null,
-              child: it['reviewer']?['avatar'] == null
-                  ? const Icon(Icons.person, size: 16,
-                      color: Color(0xFF1565C0)) : null,
-            ),
-            const SizedBox(width: 9),
-            Expanded(child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Row(children: [
-                Flexible(child: Text(
-                    (it['reviewer']?['name'] ?? '').toString(),
-                    maxLines: 1, overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 12,
-                        fontWeight: FontWeight.w800,
-                        color: UellowColors.ink))),
-                if (it['reviewer']?['verified'] == true) const Padding(
-                  padding: EdgeInsetsDirectional.only(start: 3),
-                  child: Icon(Icons.verified, size: 13,
-                      color: Color(0xFF1565C0)),
-                ),
-                const SizedBox(width: 6),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 6, vertical: 1.5),
-                  decoration: BoxDecoration(
-                    color: _verdictColor((it['verdict'] ?? '').toString())
-                        .withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: Text(
-                    ((it['verdict_label'] as Map?)?[ar ? 'ar' : 'en'] ?? '')
-                        .toString(),
-                    style: TextStyle(fontSize: 9,
-                        fontWeight: FontWeight.w900,
-                        color: _verdictColor(
-                            (it['verdict'] ?? '').toString())),
-                  ),
-                ),
-              ]),
-              if ((it['notes'] ?? '').toString().isNotEmpty) Padding(
-                padding: const EdgeInsets.only(top: 3),
-                child: Text((it['notes'] ?? '').toString(),
-                    maxLines: 2, overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 11,
-                        color: UellowColors.text, height: 1.35)),
+          ],
+          const Spacer(),
+          // small CTA pill — the big full-width button is gone.
+          Material(
+            color: const Color(0xFF1565C0),
+            shape: const StadiumBorder(),
+            child: InkWell(
+              customBorder: const StadiumBorder(),
+              onTap: () => _openSpecialists(context),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 10, vertical: 5),
+                child: Text(ar ? 'اطلب رأي متخصص' : 'Ask a specialist',
+                    style: const TextStyle(color: Colors.white,
+                        fontSize: 9.5, fontWeight: FontWeight.w900)),
               ),
-            ])),
-          ]),
-        ),
-        const SizedBox(height: 10),
-        // premium CTA
-        SizedBox(width: double.infinity, child: ElevatedButton.icon(
-          onPressed: () => _openSpecialists(context),
-          icon: const Text('🎓', style: TextStyle(fontSize: 14)),
-          label: Text(ar ? 'اطلب رأي متخصص' : 'Ask a specialist',
-              style: const TextStyle(fontSize: 13,
-                  fontWeight: FontWeight.w900)),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: const Color(0xFF1565C0),
-            foregroundColor: Colors.white,
-            elevation: 0,
-            padding: const EdgeInsets.symmetric(vertical: 12),
-            shape: const RoundedRectangleBorder(
-                borderRadius: BorderRadius.all(Radius.circular(12))),
+            ),
           ),
-        )),
+        ]),
+        for (final it in _items.take(2)) _verdictCard(it, ar),
       ]),
     );
   }
 
+  Widget _verdictCard(Map<String, dynamic> it, bool ar) {
+    final rv = (it['reviewer'] as Map?)?.cast<String, dynamic>() ?? const {};
+    final verdict = (it['verdict'] ?? '').toString();
+    final q = (it['quality'] as num?)?.toInt() ?? 0;
+    final v = (it['value'] as num?)?.toInt() ?? 0;
+    return Container(
+      margin: const EdgeInsets.only(top: 7),
+      padding: const EdgeInsets.all(9),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border.all(color: const Color(0xFFE3EAF6)),
+        borderRadius: BorderRadius.circular(11),
+      ),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Stack(children: [
+          CircleAvatar(
+            radius: 14, backgroundColor: const Color(0xFFE3EAF6),
+            backgroundImage: rv['avatar'] != null
+                ? CachedNetworkImageProvider(rv['avatar'].toString()) : null,
+            child: rv['avatar'] == null
+                ? const Icon(Icons.person, size: 14,
+                    color: Color(0xFF1565C0)) : null,
+          ),
+          if (rv['online'] == true) Positioned(right: 0, bottom: 0,
+            child: Container(width: 9, height: 9, decoration: BoxDecoration(
+              color: UellowColors.success, shape: BoxShape.circle,
+              border: Border.all(color: Colors.white, width: 1.5),
+            ))),
+        ]),
+        const SizedBox(width: 8),
+        Expanded(child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            Flexible(child: Text((rv['name'] ?? '').toString(),
+                maxLines: 1, overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 11.5,
+                    fontWeight: FontWeight.w800, color: UellowColors.ink))),
+            if (rv['verified'] == true) const Padding(
+              padding: EdgeInsetsDirectional.only(start: 3),
+              child: Icon(Icons.verified, size: 12, color: Color(0xFF1565C0)),
+            ),
+            if ((rv['level'] ?? '').toString().isNotEmpty) Container(
+              margin: const EdgeInsetsDirectional.only(start: 5),
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 5, vertical: 1),
+              decoration: BoxDecoration(
+                color: const Color(0xFFEFF4FF),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Text((rv['level'] ?? '').toString(),
+                  style: const TextStyle(fontSize: 8,
+                      fontWeight: FontWeight.w800,
+                      color: Color(0xFF1565C0))),
+            ),
+            const Spacer(),
+            Text((it['date'] ?? '').toString(),
+                style: const TextStyle(fontSize: 8.5,
+                    color: UellowColors.muted)),
+          ]),
+          if ((rv['specialty'] ?? '').toString().isNotEmpty)
+            Text((rv['specialty'] ?? '').toString(),
+                maxLines: 1, overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 9,
+                    color: UellowColors.muted)),
+          const SizedBox(height: 3),
+          Row(children: [
+            Container(
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 6, vertical: 1.5),
+              decoration: BoxDecoration(
+                color: _verdictColor(verdict).withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Text(
+                ((it['verdict_label'] as Map?)?[ar ? 'ar' : 'en'] ?? '')
+                    .toString(),
+                style: TextStyle(fontSize: 8.5,
+                    fontWeight: FontWeight.w900,
+                    color: _verdictColor(verdict)),
+              ),
+            ),
+            if (q > 0) ...[
+              const SizedBox(width: 7),
+              Text(ar ? 'الجودة $q/5' : 'Quality $q/5',
+                  style: const TextStyle(fontSize: 8.5,
+                      fontWeight: FontWeight.w700,
+                      color: UellowColors.muted)),
+            ],
+            if (v > 0) ...[
+              const SizedBox(width: 7),
+              Text(ar ? 'القيمة $v/5' : 'Value $v/5',
+                  style: const TextStyle(fontSize: 8.5,
+                      fontWeight: FontWeight.w700,
+                      color: UellowColors.muted)),
+            ],
+          ]),
+          if ((it['notes'] ?? '').toString().isNotEmpty) Padding(
+            padding: const EdgeInsets.only(top: 3),
+            child: Text((it['notes'] ?? '').toString(),
+                maxLines: 2, overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 10.5,
+                    color: UellowColors.text, height: 1.35)),
+          ),
+        ])),
+      ]),
+    );
+  }
+
+  // v2.1.35 — richer specialists sheet: service explainer, online-only
+  // filter, full profile facts (level, rating + count, both prices) and
+  // a request composer with session type + optional question.
   void _openSpecialists(BuildContext context) async {
     final ar = UellowApi.instance.lang.toLowerCase().startsWith('ar');
     List<Map<String, dynamic>> revs = const [];
@@ -2340,42 +2539,89 @@ class _ExpertReviewsBlockState extends State<_ExpertReviewsBlock> {
       }
     } catch (_) {}
     if (!context.mounted) return;
+    var onlineOnly = false;
     showModalBottomSheet(
       context: context, isScrollControlled: true,
       backgroundColor: Colors.white,
       shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (ctx) => SizedBox(
-        height: MediaQuery.of(ctx).size.height * 0.7,
-        child: Column(children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(18, 16, 18, 8),
-            child: Row(children: [
-              Text(ar ? '🎓 المتخصصون' : '🎓 Specialists', style: UT.h2),
-              const Spacer(),
-              IconButton(icon: const Icon(Icons.close, size: 20),
-                  onPressed: () => Navigator.pop(ctx)),
-            ]),
-          ),
-          Expanded(child: revs.isEmpty
-              ? Center(child: Text(
-                  ar ? 'لا يوجد متخصصون متاحون حالياً'
-                     : 'No specialists available right now',
-                  style: UT.body))
-              : ListView.separated(
-                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 20),
-                  itemCount: revs.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 8),
-                  itemBuilder: (_, i) => _specialistTile(ctx, revs[i], ar),
-                )),
-        ]),
+      builder: (ctx) => StatefulBuilder(builder: (ctx, setSheet) {
+        final shown = onlineOnly
+            ? revs.where((r) => r['online'] == true).toList()
+            : revs;
+        return SizedBox(
+          height: MediaQuery.of(ctx).size.height * 0.78,
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(18, 14, 18, 0),
+              child: Row(children: [
+                Text(ar ? '🎓 المتخصصون' : '🎓 Specialists', style: UT.h2),
+                const Spacer(),
+                IconButton(icon: const Icon(Icons.close, size: 20),
+                    onPressed: () => Navigator.pop(ctx)),
+              ]),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(18, 0, 18, 8),
+              child: Text(ar
+                  ? 'استشر خبيراً حقيقياً قبل الشراء — يفحص المنتج ويرد عليك برأي موثوق.'
+                  : 'Consult a real expert before you buy — they review the product and reply with a trusted opinion.',
+                  style: const TextStyle(fontSize: 11.5,
+                      color: UellowColors.muted, height: 1.4)),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(18, 0, 18, 4),
+              child: Row(children: [
+                _filterChip(ar ? 'الكل' : 'All', !onlineOnly,
+                    () => setSheet(() => onlineOnly = false)),
+                const SizedBox(width: 6),
+                _filterChip(ar ? '🟢 متاح الآن' : '🟢 Online now',
+                    onlineOnly,
+                    () => setSheet(() => onlineOnly = true)),
+              ]),
+            ),
+            Expanded(child: shown.isEmpty
+                ? Center(child: Text(
+                    ar ? 'لا يوجد متخصصون متاحون حالياً'
+                       : 'No specialists available right now',
+                    style: UT.body))
+                : ListView.separated(
+                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 20),
+                    itemCount: shown.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 8),
+                    itemBuilder: (_, i) => _specialistTile(ctx, shown[i], ar),
+                  )),
+          ]),
+        );
+      }),
+    );
+  }
+
+  Widget _filterChip(String label, bool active, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 5),
+        decoration: BoxDecoration(
+          color: active ? const Color(0xFF1565C0) : Colors.white,
+          border: Border.all(color: active
+              ? const Color(0xFF1565C0) : UellowColors.border),
+          borderRadius: BorderRadius.circular(999),
+        ),
+        child: Text(label, style: TextStyle(fontSize: 10.5,
+            fontWeight: FontWeight.w800,
+            color: active ? Colors.white : UellowColors.text)),
       ),
     );
   }
 
   Widget _specialistTile(BuildContext ctx, Map<String, dynamic> rv, bool ar) {
+    final priceW = ((rv['price_written'] as num?) ?? 0).toDouble();
+    final priceC = ((rv['price_chat'] as num?) ?? 0).toDouble();
+    final count = (rv['review_count'] as num?)?.toInt() ?? 0;
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(11),
       decoration: BoxDecoration(
         border: Border.all(color: UellowColors.border),
         borderRadius: BorderRadius.circular(12),
@@ -2383,14 +2629,14 @@ class _ExpertReviewsBlockState extends State<_ExpertReviewsBlock> {
       child: Row(children: [
         Stack(children: [
           CircleAvatar(
-            radius: 20, backgroundColor: const Color(0xFFE3EAF6),
+            radius: 21, backgroundColor: const Color(0xFFE3EAF6),
             backgroundImage: rv['avatar'] != null
                 ? CachedNetworkImageProvider(rv['avatar'].toString()) : null,
             child: rv['avatar'] == null
                 ? const Icon(Icons.person, color: Color(0xFF1565C0)) : null,
           ),
           if (rv['online'] == true) Positioned(right: 0, bottom: 0,
-            child: Container(width: 11, height: 11, decoration: BoxDecoration(
+            child: Container(width: 12, height: 12, decoration: BoxDecoration(
               color: UellowColors.success, shape: BoxShape.circle,
               border: Border.all(color: Colors.white, width: 2),
             ))),
@@ -2402,45 +2648,76 @@ class _ExpertReviewsBlockState extends State<_ExpertReviewsBlock> {
             Flexible(child: Text((rv['name'] ?? '').toString(),
                 maxLines: 1, overflow: TextOverflow.ellipsis,
                 style: const TextStyle(fontWeight: FontWeight.w800,
-                    fontSize: 13))),
+                    fontSize: 12.5))),
             if (rv['verified'] == true) const Padding(
               padding: EdgeInsetsDirectional.only(start: 3),
               child: Icon(Icons.verified, size: 13, color: Color(0xFF1565C0)),
             ),
+            if ((rv['level'] ?? '').toString().isNotEmpty) Container(
+              margin: const EdgeInsetsDirectional.only(start: 5),
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 5, vertical: 1),
+              decoration: BoxDecoration(
+                color: const Color(0xFFEFF4FF),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Text((rv['level'] ?? '').toString(),
+                  style: const TextStyle(fontSize: 8.5,
+                      fontWeight: FontWeight.w800,
+                      color: Color(0xFF1565C0))),
+            ),
           ]),
           Text((rv['specialty'] ?? '').toString(),
               maxLines: 1, overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 10.5,
+              style: const TextStyle(fontSize: 10,
                   color: UellowColors.muted)),
+          const SizedBox(height: 2),
           Row(children: [
             const Icon(Icons.star_rounded, size: 11, color: Color(0xFFFFB400)),
             Text(' ${(rv['rating'] ?? 0)}', style: const TextStyle(
-                fontSize: 10.5, fontWeight: FontWeight.w800)),
-            const SizedBox(width: 8),
-            Text(ar
-                ? 'من ${((rv['price_written'] as num?) ?? 0).toStringAsFixed(3)} د.ك'
-                : 'from ${((rv['price_written'] as num?) ?? 0).toStringAsFixed(3)} KD',
-                style: const TextStyle(fontSize: 10,
-                    color: UellowColors.muted)),
+                fontSize: 10, fontWeight: FontWeight.w800)),
+            if (count > 0)
+              Text(ar ? ' ($count رأي)' : ' ($count reviews)',
+                  style: const TextStyle(fontSize: 9,
+                      color: UellowColors.muted)),
+          ]),
+          const SizedBox(height: 2),
+          Wrap(spacing: 6, children: [
+            if (rv['allow_written'] != false)
+              Text(ar
+                  ? '📝 كتابي: ${priceW.toStringAsFixed(3)} د.ك'
+                  : '📝 Written: ${priceW.toStringAsFixed(3)} KD',
+                  style: const TextStyle(fontSize: 9,
+                      fontWeight: FontWeight.w700,
+                      color: UellowColors.text)),
+            if (rv['allow_chat'] == true)
+              Text(ar
+                  ? '💬 محادثة: ${priceC.toStringAsFixed(3)} د.ك'
+                  : '💬 Chat: ${priceC.toStringAsFixed(3)} KD',
+                  style: const TextStyle(fontSize: 9,
+                      fontWeight: FontWeight.w700,
+                      color: UellowColors.text)),
           ]),
         ])),
         ElevatedButton(
-          onPressed: () => _request(ctx, rv),
+          onPressed: () => _openComposer(ctx, rv),
           style: ElevatedButton.styleFrom(
             backgroundColor: const Color(0xFF1565C0),
             foregroundColor: Colors.white, elevation: 0,
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 7),
             shape: const RoundedRectangleBorder(
                 borderRadius: BorderRadius.all(Radius.circular(9))),
           ),
           child: Text(ar ? 'اطلب' : 'Ask', style: const TextStyle(
-              fontSize: 11.5, fontWeight: FontWeight.w900)),
+              fontSize: 11, fontWeight: FontWeight.w900)),
         ),
       ]),
     );
   }
 
-  Future<void> _request(BuildContext ctx, Map<String, dynamic> rv) async {
+  // Request composer: pick the session type, optionally write your
+  // question, then send. Guests get the sign-in sheet first.
+  void _openComposer(BuildContext ctx, Map<String, dynamic> rv) async {
     final ar = UellowApi.instance.lang.toLowerCase().startsWith('ar');
     final token = await UellowApi.instance.tokenStore.readToken();
     if (token == null || token.isEmpty) {
@@ -2450,134 +2727,181 @@ class _ExpertReviewsBlockState extends State<_ExpertReviewsBlock> {
       }
       return;
     }
+    if (!ctx.mounted) return;
+    var session = rv['allow_written'] != false ? 'written' : 'chat';
+    final noteCtrl = TextEditingController();
+    var sending = false;
+    final priceW = ((rv['price_written'] as num?) ?? 0).toDouble();
+    final priceC = ((rv['price_chat'] as num?) ?? 0).toDouble();
+    showModalBottomSheet(
+      context: ctx, isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (c2) => StatefulBuilder(builder: (c2, setS) => Padding(
+        padding: EdgeInsets.fromLTRB(18, 16, 18,
+            18 + MediaQuery.of(c2).viewInsets.bottom),
+        child: Column(mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            CircleAvatar(
+              radius: 16, backgroundColor: const Color(0xFFE3EAF6),
+              backgroundImage: rv['avatar'] != null
+                  ? CachedNetworkImageProvider(rv['avatar'].toString())
+                  : null,
+              child: rv['avatar'] == null
+                  ? const Icon(Icons.person, size: 16,
+                      color: Color(0xFF1565C0)) : null,
+            ),
+            const SizedBox(width: 8),
+            Expanded(child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text((rv['name'] ?? '').toString(),
+                  maxLines: 1, overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 13,
+                      fontWeight: FontWeight.w900)),
+              Text((rv['specialty'] ?? '').toString(),
+                  maxLines: 1, overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 10,
+                      color: UellowColors.muted)),
+            ])),
+            IconButton(icon: const Icon(Icons.close, size: 18),
+                onPressed: () => Navigator.pop(c2)),
+          ]),
+          const SizedBox(height: 10),
+          Text(ar ? 'نوع الجلسة' : 'Session type',
+              style: const TextStyle(fontSize: 11,
+                  fontWeight: FontWeight.w800, color: UellowColors.text)),
+          const SizedBox(height: 6),
+          Row(children: [
+            if (rv['allow_written'] != false) Expanded(
+              child: _sessionOption(c2, ar,
+                  active: session == 'written',
+                  emoji: '📝',
+                  label: ar ? 'رأي كتابي' : 'Written opinion',
+                  price: priceW,
+                  onTap: () => setS(() => session = 'written')),
+            ),
+            if (rv['allow_written'] != false && rv['allow_chat'] == true)
+              const SizedBox(width: 8),
+            if (rv['allow_chat'] == true) Expanded(
+              child: _sessionOption(c2, ar,
+                  active: session == 'chat',
+                  emoji: '💬',
+                  label: ar ? 'محادثة مباشرة' : 'Live chat',
+                  price: priceC,
+                  onTap: () => setS(() => session = 'chat')),
+            ),
+          ]),
+          const SizedBox(height: 12),
+          Text(ar ? 'سؤالك (اختياري)' : 'Your question (optional)',
+              style: const TextStyle(fontSize: 11,
+                  fontWeight: FontWeight.w800, color: UellowColors.text)),
+          const SizedBox(height: 6),
+          TextField(
+            controller: noteCtrl,
+            maxLines: 3, maxLength: 500,
+            style: const TextStyle(fontSize: 12.5),
+            decoration: InputDecoration(
+              counterText: '',
+              hintText: ar
+                  ? 'مثال: هل يناسب الاستخدام اليومي؟ وما رأيك بالخامة؟'
+                  : 'e.g. Is it good for daily use? What about the material?',
+              hintStyle: const TextStyle(fontSize: 11.5,
+                  color: UellowColors.muted),
+              border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: const BorderSide(color: UellowColors.border)),
+              contentPadding: const EdgeInsets.all(10),
+            ),
+          ),
+          const SizedBox(height: 12),
+          SizedBox(width: double.infinity, child: ElevatedButton(
+            onPressed: sending ? null : () async {
+              setS(() => sending = true);
+              final ok2 = await _send(rv, session, noteCtrl.text.trim());
+              if (c2.mounted) Navigator.pop(c2);
+              if (ctx.mounted) Navigator.pop(ctx);
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                    content: Text(ok2
+                        ? (ar ? '✅ تم إرسال طلبك — سيرد عليك المتخصص قريباً'
+                              : '✅ Request sent — the specialist will reply soon')
+                        : (ar ? 'تعذر إرسال الطلب' : 'Could not send the request'))));
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF1565C0),
+              foregroundColor: Colors.white, elevation: 0,
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              shape: const RoundedRectangleBorder(
+                  borderRadius: BorderRadius.all(Radius.circular(12))),
+            ),
+            child: Text(
+                sending
+                    ? (ar ? 'جارٍ الإرسال…' : 'Sending…')
+                    : (ar ? 'إرسال الطلب' : 'Send request'),
+                style: const TextStyle(fontSize: 13,
+                    fontWeight: FontWeight.w900)),
+          )),
+        ]),
+      )),
+    );
+  }
+
+  Widget _sessionOption(BuildContext c, bool ar,
+      {required bool active, required String emoji, required String label,
+       required double price, required VoidCallback onTap}) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+        decoration: BoxDecoration(
+          color: active ? const Color(0xFFEFF4FF) : Colors.white,
+          border: Border.all(
+              color: active ? const Color(0xFF1565C0) : UellowColors.border,
+              width: active ? 1.5 : 1),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            Text(emoji, style: const TextStyle(fontSize: 13)),
+            const SizedBox(width: 4),
+            Flexible(child: Text(label,
+                maxLines: 1, overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 10.5,
+                    fontWeight: FontWeight.w800,
+                    color: active
+                        ? const Color(0xFF1565C0) : UellowColors.ink))),
+          ]),
+          const SizedBox(height: 2),
+          Text(ar
+              ? '${price.toStringAsFixed(3)} د.ك'
+              : '${price.toStringAsFixed(3)} KD',
+              style: const TextStyle(fontSize: 9.5,
+                  fontWeight: FontWeight.w700, color: UellowColors.muted)),
+        ]),
+      ),
+    );
+  }
+
+  Future<bool> _send(Map<String, dynamic> rv, String session,
+      String note) async {
     try {
+      final token = await UellowApi.instance.tokenStore.readToken();
       final r = await http.post(Uri.parse(
           '${UellowApi.instance.baseUrl}/api/mobile/v2/reviewers/request'),
           headers: {'Content-Type': 'application/json',
                     'Authorization': 'Bearer $token'},
           body: jsonEncode({'reviewer_id': rv['id'],
                             'product_id': widget.productId,
-                            'session_type': 'written'}));
+                            'session_type': session,
+                            if (note.isNotEmpty) 'note': note}));
       final j = jsonDecode(utf8.decode(r.bodyBytes)) as Map<String, dynamic>;
-      if (ctx.mounted) Navigator.pop(ctx);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(
-            j['success'] == true
-                ? (ar ? '✅ تم إرسال طلبك — سيرد عليك المتخصص قريباً'
-                      : '✅ Request sent — the specialist will reply soon')
-                : (ar ? 'تعذر إرسال الطلب' : 'Could not send the request'))));
-      }
-    } catch (_) {}
-  }
-}
-
-// ─── Compact premium reviews highlight (v2.1.29) ───────────────────
-// One slim luxurious strip: big average, golden stars, count, and a
-// mini 5→1 distribution meter — tap scrolls intent to the full reviews.
-
-class _ReviewsHighlight extends StatefulWidget {
-  const _ReviewsHighlight({required this.productId,
-      required this.avg, required this.count});
-  final int productId;
-  final double avg;
-  final int count;
-  @override
-  State<_ReviewsHighlight> createState() => _ReviewsHighlightState();
-}
-
-class _ReviewsHighlightState extends State<_ReviewsHighlight> {
-  Map<String, dynamic> _breakdown = const {};
-
-  @override
-  void initState() {
-    super.initState();
-    _load();
-  }
-
-  Future<void> _load() async {
-    try {
-      final r = await http.get(Uri.parse(
-          '${UellowApi.instance.baseUrl}/api/mobile/v2/products/'
-          '${widget.productId}/reviews?page=1'),
-          headers: {'Accept': 'application/json'});
-      final j = jsonDecode(utf8.decode(r.bodyBytes)) as Map<String, dynamic>;
-      final bd = ((j['data']?['summary'] as Map?)?['breakdown'] as Map?)
-          ?.cast<String, dynamic>();
-      if (mounted && bd != null) setState(() => _breakdown = bd);
-    } catch (_) {}
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final ar = UellowApi.instance.lang.toLowerCase().startsWith('ar');
-    final total = widget.count == 0 ? 1 : widget.count;
-    return Container(
-      margin: const EdgeInsets.only(top: 8),
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.centerLeft, end: Alignment.centerRight,
-          colors: [Color(0xFFFFFBEF), Colors.white],
-        ),
-      ),
-      child: Row(children: [
-        // Big average
-        Column(children: [
-          Text(widget.avg.toStringAsFixed(1),
-              style: const TextStyle(fontSize: 26, height: 1.0,
-                  fontWeight: FontWeight.w900, color: UellowColors.darkBrown)),
-          const SizedBox(height: 2),
-          Row(mainAxisSize: MainAxisSize.min, children: [
-            for (var i = 0; i < 5; i++) Icon(
-              i < widget.avg.round() ? Icons.star_rounded
-                                     : Icons.star_outline_rounded,
-              size: 11, color: const Color(0xFFFFB400)),
-          ]),
-          const SizedBox(height: 2),
-          Text(ar ? '${widget.count} تقييم' : '${widget.count} reviews',
-              style: const TextStyle(fontSize: 9.5,
-                  color: UellowColors.muted, fontWeight: FontWeight.w700)),
-        ]),
-        const SizedBox(width: 16),
-        // Mini distribution meter 5→1
-        Expanded(child: Column(children: [
-          for (final star in ['5', '4', '3', '2', '1']) Padding(
-            padding: const EdgeInsets.symmetric(vertical: 1.5),
-            child: Row(children: [
-              SizedBox(width: 8, child: Text(star,
-                  style: const TextStyle(fontSize: 8.5,
-                      color: UellowColors.muted,
-                      fontWeight: FontWeight.w800))),
-              const SizedBox(width: 4),
-              Expanded(child: ClipRRect(
-                borderRadius: BorderRadius.circular(99),
-                child: Container(
-                  height: 4, color: const Color(0xFFF0EDE4),
-                  alignment: AlignmentDirectional.centerStart,
-                  child: FractionallySizedBox(
-                    widthFactor: (((_breakdown[star] as num?)?.toDouble()
-                        ?? 0) / total).clamp(0.0, 1.0),
-                    child: Container(color: const Color(0xFFFFB400)),
-                  ),
-                ),
-              )),
-            ]),
-          ),
-        ])),
-        const SizedBox(width: 12),
-        // verified hint
-        Column(children: [
-          const Icon(Icons.verified_outlined, size: 18,
-              color: UellowColors.successDk),
-          const SizedBox(height: 3),
-          Text(ar ? 'تقييمات\nموثوقة' : 'Verified\nreviews',
-              textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 8.5, height: 1.2,
-                  color: UellowColors.successDk,
-                  fontWeight: FontWeight.w800)),
-        ]),
-      ]),
-    );
+      return j['success'] == true;
+    } catch (_) {
+      return false;
+    }
   }
 }
 
@@ -2630,9 +2954,10 @@ class _ReviewsBlockState extends State<_ReviewsBlock> {
                 child: Row(mainAxisSize: MainAxisSize.min, children: [
                   const Icon(Icons.star_rounded, size: 12, color: UellowColors.darkBrown),
                   const SizedBox(width: 3),
+                  // v2.1.35 — never fade the label mid-word ("اكتب…").
                   Text(T.t('product.write_review'),
                       maxLines: 1, softWrap: false,
-                      overflow: TextOverflow.fade,
+                      overflow: TextOverflow.visible,
                       style: const TextStyle(fontSize: 9.5,
                           fontWeight: FontWeight.w800, color: UellowColors.darkBrown,
                           letterSpacing: -0.1)),
@@ -3815,7 +4140,12 @@ class _WriteReviewSheetState extends State<_WriteReviewSheet> {
       );
       if (!mounted) return;
       nav.pop();
-      messenger.showSnackBar(SnackBar(content: Text(T.t('reviews.thanks'))));
+      // v2.1.35 — reviews now need admin approval before going live.
+      messenger.showSnackBar(SnackBar(
+          duration: const Duration(seconds: 4),
+          content: Text(ar
+              ? '✅ شكراً! تقييمك قيد المراجعة وسيظهر فور اعتماده'
+              : '✅ Thanks! Your review is pending approval and will appear once approved')));
       widget.onSubmitted();
     } on UellowApiException catch (e) {
       if (mounted) setState(() => _busy = false);
