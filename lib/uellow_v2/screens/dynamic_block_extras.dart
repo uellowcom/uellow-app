@@ -1491,8 +1491,11 @@ class DiscountStripBlock extends StatelessWidget {
   // ─── countdown row ─────────────────────────────────────────────────────────
   // v2.0.70 — match compact card sizing (was width 128 / height 184)
   Widget _countdownRow(List items) {
+    // v2.1.48 — same adopted RICH ProductCard as the other layouts, with
+    // the per-item countdown chip overlaid on the photo (top-start).
+    final accent = _parseColor(p['accent']) ?? const Color(0xFFE63946);
     return SizedBox(
-      height: 244,
+      height: 268,
       child: ListView.separated(
         padding: const EdgeInsets.symmetric(horizontal: 12),
         scrollDirection: Axis.horizontal,
@@ -1501,7 +1504,13 @@ class DiscountStripBlock extends StatelessWidget {
         separatorBuilder: (_, __) => const SizedBox(width: 8),
         itemBuilder: (_, i) {
           final pp = (items[i] as Map).cast<String, dynamic>();
-          return _DiscountCard(p: pp, props: this.p, t: t, ar: ar, width: 144, showCountdown: true);
+          final endIso = pp['flash_end_datetime']?.toString();
+          return Stack(children: [
+            _richCard(pp, width: 150),
+            if (endIso != null && endIso.isNotEmpty)
+              PositionedDirectional(top: 6, start: 6,
+                  child: _MiniCountdown(endIso: endIso, accent: accent)),
+          ]);
         },
       ),
     );
