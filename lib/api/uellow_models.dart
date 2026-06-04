@@ -934,6 +934,10 @@ class UellowOrderDetail extends UellowOrderSummary {
   /// Timeline of the unified order status — list of {code, label{en,ar},
   /// state:'done'|'current'|'upcoming'}.
   final List<Map<String, dynamic>> timeline;
+  // v2.1.42 — customer cancellation flow.
+  final bool canCancel;
+  final bool cancelRequested;
+  final bool isPaid;
 
   UellowOrderDetail({
     required super.id, required super.name, required super.state,
@@ -944,6 +948,8 @@ class UellowOrderDetail extends UellowOrderSummary {
     required this.shipping, this.deliveryAddress, this.invoiceAddress,
     required this.payment, required this.trackingNumber, required this.carrier,
     this.deliveryTracking, this.timeline = const [],
+    this.canCancel = false, this.cancelRequested = false,
+    this.isPaid = false,
   });
 
   factory UellowOrderDetail.fromJson(Map<String, dynamic> j) => UellowOrderDetail(
@@ -976,6 +982,9 @@ class UellowOrderDetail extends UellowOrderSummary {
         timeline: ((j['timeline'] as List?) ?? const [])
             .map((e) => Map<String, dynamic>.from(e as Map))
             .toList(),
+        canCancel: j['can_cancel'] == true,
+        cancelRequested: j['cancel_requested'] == true,
+        isPaid: j['is_paid'] == true,
       );
 }
 

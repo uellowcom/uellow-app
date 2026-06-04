@@ -784,6 +784,15 @@ class _OrdersApi {
         res, (e) => UellowOrderSummary.fromJson(e));
   }
 
+  // v2.1.42 — customer cancellation: returns 'cancelled' (done) or
+  // 'requested' (paid order → awaits admin approval).
+  Future<String> cancel(int id, {String? reason}) async {
+    final res = await _c._post('${EP.orders}/$id/cancel', body: {
+      if (reason != null && reason.isNotEmpty) 'reason': reason,
+    }, auth: true);
+    return ((res['data'] as Map?)?['result'] ?? '').toString();
+  }
+
   Future<UellowOrderDetail> detail(int id) async {
     final res = await _c._get('${EP.orders}/$id', auth: true);
     return UellowOrderDetail.fromJson(

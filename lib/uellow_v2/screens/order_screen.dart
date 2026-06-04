@@ -79,9 +79,32 @@ class _OrderScreenState extends State<OrderScreen> {
               if (order.deliveryTracking != null) _EtaCard(tracking: order.deliveryTracking!, ar: ar),
               _MapBox(tracking: order.deliveryTracking, ar: ar),
               if (order.timeline.isNotEmpty) _Timeline(timeline: order.timeline, ar: ar),
+              // v2.1.42 — cancellation-request banner (paid orders).
+              if (order.cancelRequested) Container(
+                margin: const EdgeInsets.fromLTRB(14, 8, 14, 0),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFF3CD),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: const Color(0xFFF0D88C)),
+                ),
+                child: Row(children: [
+                  const Text('⏳', style: TextStyle(fontSize: 18)),
+                  const SizedBox(width: 8),
+                  Expanded(child: Text(ar
+                      ? 'طلب الإلغاء قيد مراجعة الإدارة — سنبلغك فور البت فيه'
+                      : 'Your cancellation request is under review — we will notify you once decided',
+                      style: const TextStyle(fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF8A6D00), height: 1.4))),
+                ]),
+              ),
               _Items(order: order, ar: ar),
               _Summary(order: order, ar: ar),
-              _Actions(order: order, ar: ar),
+              _Actions(order: order, ar: ar,
+                  onChanged: () => setState(() {
+                    _future = UellowApi.instance.orders.detail(widget.orderId);
+                  })),
               const SizedBox(height: 24),
             ]),
           );
@@ -621,12 +644,20 @@ class _Summary extends StatelessWidget {
 // ─── Action buttons ──────────────────────────────────────────────────
 
 class _Actions extends StatelessWidget {
-  const _Actions({required this.order, required this.ar});
+  const _Actions({required this.order, required this.ar, this.onChanged});
   final UellowOrderDetail order;
   final bool ar;
+  // v2.1.42 — parent reloads the order after a cancellation.
+  final VoidCallback? onChanged;
   @override
   Widget build(BuildContext context) {
     final items = <_Action>[
+      // v2.1.42 — customer cancellation (draft/confirmed only). Paid
+      // orders raise an admin-approval request instead of cancelling.
+      if (order.canCancel)
+        _Action(icon: Icons.cancel_outlined,
+            label: ar ? 'إلغاء الطلب' : 'Cancel order', danger: true,
+            onTap: () => _cancelOrder(context)),
       _Action(icon: Icons.replay,
           label: ar ? 'إعادة الطلب' : 'Reorder',
           onTap: () => _reorder(context)),
@@ -696,6 +727,64 @@ class _Actions extends StatelessWidget {
         },
       ),
     );
+  }
+
+  Future<void> _cancelOrder(BuildContext context) async {
+    final needsApproval = order.isPaid;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text(ar ? 'إلغاء الطلب؟' : 'Cancel this order?',
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900,
+                color: UellowColors.darkBrown)),
+        content: Text(
+            needsApproval
+                ? (ar
+                    ? 'هذا الطلب مدفوع — سيُرسل طلب الإلغاء إلى الإدارة للموافقة، وسنبلغك بالنتيجة (والمبلغ يُعاد لك بعد الموافقة).'
+                    : 'This order is PAID — a cancellation request will be sent for admin approval; you will be notified (refund follows approval).')
+                : (ar
+                    ? 'سيتم إلغاء الطلب فوراً. لا يمكن التراجع عن هذا الإجراء.'
+                    : 'The order will be cancelled immediately. This cannot be undone.'),
+            style: const TextStyle(fontSize: 13, height: 1.5)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dctx, false),
+            child: Text(ar ? 'تراجع' : 'Keep order',
+                style: const TextStyle(color: UellowColors.muted)),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(dctx, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: UellowColors.danger,
+              foregroundColor: Colors.white,
+            ),
+            child: Text(
+                needsApproval
+                    ? (ar ? 'إرسال طلب الإلغاء' : 'Send request')
+                    : (ar ? 'تأكيد الإلغاء' : 'Confirm cancel'),
+                style: const TextStyle(fontWeight: FontWeight.w900)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+    try {
+      final result = await UellowApi.instance.orders.cancel(order.id);
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          duration: const Duration(seconds: 4),
+          content: Text(result == 'cancelled'
+              ? (ar ? '✅ تم إلغاء الطلب' : '✅ Order cancelled')
+              : (ar ? '⏳ أُرسل طلب الإلغاء للإدارة — سنبلغك بالنتيجة'
+                    : '⏳ Cancellation request sent — we will notify you'))));
+      onChanged?.call();
+    } on UellowApiException catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(e.message)));
+      }
+    }
   }
 
   Future<void> _reorder(BuildContext context) async {
