@@ -20,6 +20,7 @@ import '../router/uellow_router.dart';
 import '../services/first_launch_service.dart';
 import '../theme/uellow_l10n.dart';
 import '../theme/uellow_theme.dart';
+import 'auth_screen.dart';
 import '../widgets/flash_banner.dart';
 import '../widgets/product_card.dart';
 
@@ -185,6 +186,9 @@ class _ProductScreenState extends State<ProductScreen> {
       if (p.rating.count > 0)
         SliverToBoxAdapter(child: _ReviewsHighlight(productId: p.id,
             avg: p.rating.avg, count: p.rating.count)),
+      // v2.1.31 — specialist reviewers (uellow_reviewers): latest expert
+      // verdicts + "ask a specialist" CTA.
+      SliverToBoxAdapter(child: _ExpertReviewsBlock(productId: p.id)),
       // Show whenever there's at least one bulk tier — even a single
       // "buy 5+ → save 5%" hint is useful.
       if (p.bulkPricing.isNotEmpty)
@@ -639,7 +643,7 @@ class _Title extends StatelessWidget {
           const SizedBox(width: 4),
           Text('(${p.rating.count})',
               style: const TextStyle(color: UellowColors.muted)),
-          // v2.1.29 — Best-Seller rank badge inline with the ratings.
+          // v2.1.31 — simple Best-Seller mark: no background, plain gold.
           if (p.ranks.isNotEmpty) Flexible(child: Padding(
             padding: const EdgeInsetsDirectional.only(start: 8),
             child: GestureDetector(
@@ -650,21 +654,11 @@ class _Title extends StatelessWidget {
                       arguments: {'category_id': cid});
                 }
               },
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                      colors: [Color(0xFFFFD700), Color(0xFFE8A800)]),
-                  borderRadius: BorderRadius.circular(999),
-                  boxShadow: const [BoxShadow(color: Color(0x33B8860B),
-                      blurRadius: 4, offset: Offset(0, 2))],
-                ),
-                child: Text(
-                  '🏆 ${(((p.ranks.first['label'] as Map?)?[lang.toLowerCase().startsWith('ar') ? 'ar' : 'en']) ?? '')}',
-                  maxLines: 1, overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 9.5,
-                      fontWeight: FontWeight.w900, color: Color(0xFF412402)),
-                ),
+              child: Text(
+                '🏆 ${(((p.ranks.first['label'] as Map?)?[lang.toLowerCase().startsWith('ar') ? 'ar' : 'en']) ?? '')}',
+                maxLines: 1, overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 10.5,
+                    fontWeight: FontWeight.w800, color: Color(0xFFB8860B)),
               ),
             ),
           )),
@@ -1476,37 +1470,30 @@ class _CompactDeliveryState extends State<_CompactDelivery> {
                 style: TextStyle(fontSize: 13,
                     fontWeight: FontWeight.w800,
                     color: has ? UellowColors.darkBrown : UellowColors.ink)),
-            // v2.1.22 — live schedule-aware lines per delivery method.
-            if (_etaLines.isEmpty) ...[
-              const SizedBox(height: 2),
-              Text(ar ? 'اختر عنوانك لمعرفة مواعيد التوصيل'
-                      : 'Pick your address to see delivery times',
-                  maxLines: 1, overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 10.5,
-                      color: UellowColors.muted, fontWeight: FontWeight.w600)),
-            ] else ...[
-              const SizedBox(height: 4),
-              for (final l in _etaLines.take(3)) Padding(
-                padding: const EdgeInsets.only(top: 2),
-                child: Row(children: [
-                  Container(width: 6, height: 6, decoration: BoxDecoration(
-                    color: l['status'] == 'now'
-                        ? UellowColors.success : const Color(0xFFD9A406),
-                    shape: BoxShape.circle,
-                  )),
-                  const SizedBox(width: 5),
-                  Flexible(child: Text(
-                    '${((l['name'] as Map?)?[ar ? 'ar' : 'en'] ?? '')}: '
-                    '${((l['text'] as Map?)?[ar ? 'ar' : 'en'] ?? '')}',
-                    maxLines: 1, overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontSize: 10.5, height: 1.3,
-                        fontWeight: FontWeight.w700,
-                        color: l['status'] == 'now'
-                            ? UellowColors.successDk : UellowColors.muted),
-                  )),
-                ]),
-              ),
-            ],
+            // v2.1.31 — ONE quiet dark-grey line: the EXPRESS method when
+            // it is available right now, otherwise just the first option.
+            const SizedBox(height: 2),
+            Builder(builder: (_) {
+              Map<String, dynamic>? pick;
+              for (final l in _etaLines) {
+                final nm = (((l['name'] as Map?)?['en']) ?? '')
+                    .toString().toLowerCase();
+                final nmAr = (((l['name'] as Map?)?['ar']) ?? '').toString();
+                final isExpress = nm.contains('express')
+                    || nm.contains('fast') || nmAr.contains('سريع');
+                if (isExpress && l['status'] == 'now') { pick = l; break; }
+              }
+              pick ??= _etaLines.isNotEmpty ? _etaLines.first : null;
+              final txt = pick == null
+                  ? (ar ? 'اختر عنوانك لمعرفة مواعيد التوصيل'
+                        : 'Pick your address to see delivery times')
+                  : '${((pick['name'] as Map?)?[ar ? 'ar' : 'en'] ?? '')}: '
+                    '${((pick['text'] as Map?)?[ar ? 'ar' : 'en'] ?? '')}';
+              return Text(txt, maxLines: 1, overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 10.5, height: 1.3,
+                      fontWeight: FontWeight.w500,
+                      color: Color(0xFF555555)));
+            }),
           ],
         )),
         const Icon(Icons.chevron_right, color: Color(0xFFCBB78A)),
@@ -2183,6 +2170,307 @@ class _SheetHeader extends StatelessWidget {
 
 // ─── Reviews block (live from /products/<id>/reviews) ──────────────
 
+// ─── Specialist reviewers block (v2.1.31 — uellow_reviewers) ────────
+// Latest expert verdicts for this product + a premium "ask a
+// specialist" CTA that opens the online-specialists sheet.
+
+class _ExpertReviewsBlock extends StatefulWidget {
+  const _ExpertReviewsBlock({required this.productId});
+  final int productId;
+  @override
+  State<_ExpertReviewsBlock> createState() => _ExpertReviewsBlockState();
+}
+
+class _ExpertReviewsBlockState extends State<_ExpertReviewsBlock> {
+  List<Map<String, dynamic>> _items = const [];
+  int _online = 0;
+  bool _loaded = false;
+
+  @override
+  void initState() { super.initState(); _load(); }
+
+  Future<void> _load() async {
+    try {
+      final r = await http.get(Uri.parse(
+          '${UellowApi.instance.baseUrl}/api/mobile/v2/products/'
+          '${widget.productId}/expert-reviews'),
+          headers: {'Accept': 'application/json'});
+      final j = jsonDecode(utf8.decode(r.bodyBytes)) as Map<String, dynamic>;
+      if (mounted && j['success'] == true) {
+        setState(() {
+          _items = ((j['data']?['items'] as List?) ?? const [])
+              .cast<Map>().map((m) => m.cast<String, dynamic>()).toList();
+          _online = (j['data']?['online_count'] as num?)?.toInt() ?? 0;
+          _loaded = true;
+        });
+      }
+    } catch (_) {}
+  }
+
+  Color _verdictColor(String v) => v == 'recommend'
+      ? UellowColors.successDk
+      : v == 'not_recommend' ? UellowColors.danger : const Color(0xFF1565C0);
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_loaded || (_items.isEmpty && _online == 0)) {
+      return const SizedBox.shrink();
+    }
+    final ar = UellowApi.instance.lang.toLowerCase().startsWith('ar');
+    return Container(
+      margin: const EdgeInsets.only(top: 8),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft, end: Alignment.bottomRight,
+          colors: [Color(0xFFF3F7FF), Colors.white],
+        ),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          const Text('🎓', style: TextStyle(fontSize: 16)),
+          const SizedBox(width: 6),
+          Text(ar ? 'آراء المتخصصين' : 'Expert opinions', style: UT.h3),
+          const Spacer(),
+          if (_online > 0) Row(children: [
+            Container(width: 7, height: 7, decoration: const BoxDecoration(
+                color: UellowColors.success, shape: BoxShape.circle)),
+            const SizedBox(width: 4),
+            Text(ar ? '$_online متاح الآن' : '$_online online now',
+                style: const TextStyle(fontSize: 10.5,
+                    color: UellowColors.successDk,
+                    fontWeight: FontWeight.w800)),
+          ]),
+        ]),
+        // latest verdicts
+        for (final it in _items.take(2)) Container(
+          margin: const EdgeInsets.only(top: 8),
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            border: Border.all(color: const Color(0xFFE3EAF6)),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            CircleAvatar(
+              radius: 16, backgroundColor: const Color(0xFFE3EAF6),
+              backgroundImage: (it['reviewer']?['avatar'] != null)
+                  ? CachedNetworkImageProvider(
+                      it['reviewer']['avatar'].toString()) : null,
+              child: it['reviewer']?['avatar'] == null
+                  ? const Icon(Icons.person, size: 16,
+                      color: Color(0xFF1565C0)) : null,
+            ),
+            const SizedBox(width: 9),
+            Expanded(child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: [
+                Flexible(child: Text(
+                    (it['reviewer']?['name'] ?? '').toString(),
+                    maxLines: 1, overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 12,
+                        fontWeight: FontWeight.w800,
+                        color: UellowColors.ink))),
+                if (it['reviewer']?['verified'] == true) const Padding(
+                  padding: EdgeInsetsDirectional.only(start: 3),
+                  child: Icon(Icons.verified, size: 13,
+                      color: Color(0xFF1565C0)),
+                ),
+                const SizedBox(width: 6),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 6, vertical: 1.5),
+                  decoration: BoxDecoration(
+                    color: _verdictColor((it['verdict'] ?? '').toString())
+                        .withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    ((it['verdict_label'] as Map?)?[ar ? 'ar' : 'en'] ?? '')
+                        .toString(),
+                    style: TextStyle(fontSize: 9,
+                        fontWeight: FontWeight.w900,
+                        color: _verdictColor(
+                            (it['verdict'] ?? '').toString())),
+                  ),
+                ),
+              ]),
+              if ((it['notes'] ?? '').toString().isNotEmpty) Padding(
+                padding: const EdgeInsets.only(top: 3),
+                child: Text((it['notes'] ?? '').toString(),
+                    maxLines: 2, overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 11,
+                        color: UellowColors.text, height: 1.35)),
+              ),
+            ])),
+          ]),
+        ),
+        const SizedBox(height: 10),
+        // premium CTA
+        SizedBox(width: double.infinity, child: ElevatedButton.icon(
+          onPressed: () => _openSpecialists(context),
+          icon: const Text('🎓', style: TextStyle(fontSize: 14)),
+          label: Text(ar ? 'اطلب رأي متخصص' : 'Ask a specialist',
+              style: const TextStyle(fontSize: 13,
+                  fontWeight: FontWeight.w900)),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: const Color(0xFF1565C0),
+            foregroundColor: Colors.white,
+            elevation: 0,
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            shape: const RoundedRectangleBorder(
+                borderRadius: BorderRadius.all(Radius.circular(12))),
+          ),
+        )),
+      ]),
+    );
+  }
+
+  void _openSpecialists(BuildContext context) async {
+    final ar = UellowApi.instance.lang.toLowerCase().startsWith('ar');
+    List<Map<String, dynamic>> revs = const [];
+    try {
+      final r = await http.get(Uri.parse(
+          '${UellowApi.instance.baseUrl}/api/mobile/v2/reviewers/online'),
+          headers: {'Accept': 'application/json'});
+      final j = jsonDecode(utf8.decode(r.bodyBytes)) as Map<String, dynamic>;
+      if (j['success'] == true) {
+        revs = ((j['data'] as List?) ?? const [])
+            .cast<Map>().map((m) => m.cast<String, dynamic>()).toList();
+      }
+    } catch (_) {}
+    if (!context.mounted) return;
+    showModalBottomSheet(
+      context: context, isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => SizedBox(
+        height: MediaQuery.of(ctx).size.height * 0.7,
+        child: Column(children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(18, 16, 18, 8),
+            child: Row(children: [
+              Text(ar ? '🎓 المتخصصون' : '🎓 Specialists', style: UT.h2),
+              const Spacer(),
+              IconButton(icon: const Icon(Icons.close, size: 20),
+                  onPressed: () => Navigator.pop(ctx)),
+            ]),
+          ),
+          Expanded(child: revs.isEmpty
+              ? Center(child: Text(
+                  ar ? 'لا يوجد متخصصون متاحون حالياً'
+                     : 'No specialists available right now',
+                  style: UT.body))
+              : ListView.separated(
+                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 20),
+                  itemCount: revs.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 8),
+                  itemBuilder: (_, i) => _specialistTile(ctx, revs[i], ar),
+                )),
+        ]),
+      ),
+    );
+  }
+
+  Widget _specialistTile(BuildContext ctx, Map<String, dynamic> rv, bool ar) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        border: Border.all(color: UellowColors.border),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(children: [
+        Stack(children: [
+          CircleAvatar(
+            radius: 20, backgroundColor: const Color(0xFFE3EAF6),
+            backgroundImage: rv['avatar'] != null
+                ? CachedNetworkImageProvider(rv['avatar'].toString()) : null,
+            child: rv['avatar'] == null
+                ? const Icon(Icons.person, color: Color(0xFF1565C0)) : null,
+          ),
+          if (rv['online'] == true) Positioned(right: 0, bottom: 0,
+            child: Container(width: 11, height: 11, decoration: BoxDecoration(
+              color: UellowColors.success, shape: BoxShape.circle,
+              border: Border.all(color: Colors.white, width: 2),
+            ))),
+        ]),
+        const SizedBox(width: 10),
+        Expanded(child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            Flexible(child: Text((rv['name'] ?? '').toString(),
+                maxLines: 1, overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontWeight: FontWeight.w800,
+                    fontSize: 13))),
+            if (rv['verified'] == true) const Padding(
+              padding: EdgeInsetsDirectional.only(start: 3),
+              child: Icon(Icons.verified, size: 13, color: Color(0xFF1565C0)),
+            ),
+          ]),
+          Text((rv['specialty'] ?? '').toString(),
+              maxLines: 1, overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 10.5,
+                  color: UellowColors.muted)),
+          Row(children: [
+            const Icon(Icons.star_rounded, size: 11, color: Color(0xFFFFB400)),
+            Text(' ${(rv['rating'] ?? 0)}', style: const TextStyle(
+                fontSize: 10.5, fontWeight: FontWeight.w800)),
+            const SizedBox(width: 8),
+            Text(ar
+                ? 'من ${((rv['price_written'] as num?) ?? 0).toStringAsFixed(3)} د.ك'
+                : 'from ${((rv['price_written'] as num?) ?? 0).toStringAsFixed(3)} KD',
+                style: const TextStyle(fontSize: 10,
+                    color: UellowColors.muted)),
+          ]),
+        ])),
+        ElevatedButton(
+          onPressed: () => _request(ctx, rv),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: const Color(0xFF1565C0),
+            foregroundColor: Colors.white, elevation: 0,
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            shape: const RoundedRectangleBorder(
+                borderRadius: BorderRadius.all(Radius.circular(9))),
+          ),
+          child: Text(ar ? 'اطلب' : 'Ask', style: const TextStyle(
+              fontSize: 11.5, fontWeight: FontWeight.w900)),
+        ),
+      ]),
+    );
+  }
+
+  Future<void> _request(BuildContext ctx, Map<String, dynamic> rv) async {
+    final ar = UellowApi.instance.lang.toLowerCase().startsWith('ar');
+    final token = await UellowApi.instance.tokenStore.readToken();
+    if (token == null || token.isEmpty) {
+      if (ctx.mounted) {
+        Navigator.pop(ctx);
+        await showAuthSheet(context);
+      }
+      return;
+    }
+    try {
+      final r = await http.post(Uri.parse(
+          '${UellowApi.instance.baseUrl}/api/mobile/v2/reviewers/request'),
+          headers: {'Content-Type': 'application/json',
+                    'Authorization': 'Bearer $token'},
+          body: jsonEncode({'reviewer_id': rv['id'],
+                            'product_id': widget.productId,
+                            'session_type': 'written'}));
+      final j = jsonDecode(utf8.decode(r.bodyBytes)) as Map<String, dynamic>;
+      if (ctx.mounted) Navigator.pop(ctx);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(
+            j['success'] == true
+                ? (ar ? '✅ تم إرسال طلبك — سيرد عليك المتخصص قريباً'
+                      : '✅ Request sent — the specialist will reply soon')
+                : (ar ? 'تعذر إرسال الطلب' : 'Could not send the request'))));
+      }
+    } catch (_) {}
+  }
+}
+
 // ─── Compact premium reviews highlight (v2.1.29) ───────────────────
 // One slim luxurious strip: big average, golden stars, count, and a
 // mini 5→1 distribution meter — tap scrolls intent to the full reviews.
@@ -2343,6 +2631,8 @@ class _ReviewsBlockState extends State<_ReviewsBlock> {
                   const Icon(Icons.star_rounded, size: 12, color: UellowColors.darkBrown),
                   const SizedBox(width: 3),
                   Text(T.t('product.write_review'),
+                      maxLines: 1, softWrap: false,
+                      overflow: TextOverflow.fade,
                       style: const TextStyle(fontSize: 9.5,
                           fontWeight: FontWeight.w800, color: UellowColors.darkBrown,
                           letterSpacing: -0.1)),
