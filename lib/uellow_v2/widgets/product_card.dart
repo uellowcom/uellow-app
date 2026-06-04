@@ -415,9 +415,13 @@ class _FlashLayout extends StatelessWidget {
     // Arabic), baseline-tidy layout, old price pushed to the row end; the
     // discount % moved ONTO the photo as a small premium corner badge.
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      // v2.1.39 — flash photo overlays rebuilt explicitly (clean image +
+      // our own directional badges) so the free-shipping and video labels
+      // ALWAYS render and never collide with the discount pill:
+      //   discount → top-end · video → top-start · free ship → bottom-start.
       Stack(children: [
         _Image(product: product, hasDiscount: false,
-            discountPct: 0, faved: faved, onFav: onFav),
+            discountPct: 0, faved: faved, onFav: onFav, clean: true),
         if (discountPct > 0) PositionedDirectional(
           top: 6, end: 6,
           child: Container(
@@ -434,6 +438,46 @@ class _FlashLayout extends StatelessWidget {
                 style: const TextStyle(color: Colors.white, fontSize: 8.5,
                     fontWeight: FontWeight.w900, letterSpacing: 0.2,
                     height: 1.0)),
+          ),
+        ),
+        if (product.hasVideo) PositionedDirectional(
+          top: 6, start: 6,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2.5),
+            decoration: BoxDecoration(
+              color: Colors.black.withValues(alpha: 0.72),
+              borderRadius: BorderRadius.circular(5),
+            ),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              const Icon(Icons.play_arrow_rounded,
+                  color: Colors.white, size: 11),
+              const SizedBox(width: 2),
+              Text(lang == 'ar' ? 'فيديو' : 'VIDEO',
+                  style: const TextStyle(color: Colors.white, fontSize: 8,
+                      fontWeight: FontWeight.w900, letterSpacing: 0.3)),
+            ]),
+          ),
+        ),
+        if (product.badges.contains('free_shipping')) PositionedDirectional(
+          bottom: 6, start: 6,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2.5),
+            decoration: BoxDecoration(
+              color: UellowColors.yellow,
+              borderRadius: BorderRadius.circular(5),
+              boxShadow: const [BoxShadow(
+                  color: Color(0x33000000), blurRadius: 4,
+                  offset: Offset(0, 2))],
+            ),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              const Icon(Icons.local_shipping_outlined, size: 10,
+                  color: UellowColors.darkBrown),
+              const SizedBox(width: 3),
+              Text(lang == 'ar' ? 'شحن مجاني' : 'FREE SHIP',
+                  style: const TextStyle(color: UellowColors.darkBrown,
+                      fontSize: 8, fontWeight: FontWeight.w900,
+                      letterSpacing: 0.2)),
+            ]),
           ),
         ),
       ]),

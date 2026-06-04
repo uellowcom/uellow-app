@@ -15,6 +15,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../api/uellow_api.dart';
 import '../../api/uellow_models.dart';
 import '../router/uellow_router.dart';
+import '../widgets/flash_banner.dart' show BannerPattern;
 import '../widgets/product_card.dart';
 import 'dynamic_block_extras.dart';
 
@@ -2004,8 +2005,10 @@ class _FlashCustom extends StatelessWidget {
             ),
           )),
           if (showPattern)
+            // v2.1.39 — 22 selectable pattern styles (builder-controlled).
             Positioned.fill(child: IgnorePointer(child: CustomPaint(
-              painter: _DiagonalStripes(),
+              painter: BannerPattern(
+                  style: (p['flash_pattern_style'] ?? 'stripes').toString()),
             ))),
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),

@@ -162,6 +162,10 @@ class _ProductScreenState extends State<ProductScreen> {
               .map((c) => _hexColor(c, UellowColors.yellow))
               .toList();
           final pct = ((p.promo!['discount_pct'] as num?) ?? 0).toInt();
+          var iconUrl = (b['icon_url'] ?? '').toString();
+          if (iconUrl.startsWith('/')) {
+            iconUrl = '${UellowApi.instance.baseUrl}$iconUrl';
+          }
           return FlashBanner(
             endsAt: DateTime.tryParse(
                 (p.promo!['ends_at'] ?? '').toString()),
@@ -169,7 +173,11 @@ class _ProductScreenState extends State<ProductScreen> {
             emoji: (b['emoji'] ?? '🎯').toString(),
             colors: cols.isEmpty ? null : cols,
             pattern: b['pattern'] != false,
-            discountPct: pct > 0 ? pct : null,
+            // v2.1.39 — pattern style + uploaded campaign icon (the icon
+            // replaces the discount circle when set).
+            patternStyle: (b['pattern_style'] ?? 'stripes').toString(),
+            iconUrl: iconUrl.isEmpty ? null : iconUrl,
+            discountPct: (iconUrl.isEmpty && pct > 0) ? pct : null,
             title: ((b['title'] as Map?)?[l] ?? '').toString(),
             subtitle: ((b['subtitle'] as Map?)?[l] ?? '').toString().isEmpty
                 ? null
@@ -302,8 +310,10 @@ class _Gallery extends StatelessWidget {
             return CachedNetworkImage(imageUrl: it['url'] as String, fit: BoxFit.contain);
           },
         )),
-        // v2.1.30 — promotion coin beside the gallery banner.
-        if (promo != null) PositionedDirectional(top: 14, start: 60,
+        // v2.1.30 — promotion coin on the gallery.
+        // v2.1.39 — moved to BOTTOM-start: at top-start:60 it sat under
+        // the share/wishlist buttons in Arabic (RTL) and never showed.
+        if (promo != null) PositionedDirectional(bottom: 18, start: 12,
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
             decoration: BoxDecoration(
@@ -2617,8 +2627,6 @@ class _ExpertReviewsBlockState extends State<_ExpertReviewsBlock> {
   }
 
   Widget _specialistTile(BuildContext ctx, Map<String, dynamic> rv, bool ar) {
-    final priceW = ((rv['price_written'] as num?) ?? 0).toDouble();
-    final priceC = ((rv['price_chat'] as num?) ?? 0).toDouble();
     final count = (rv['review_count'] as num?)?.toInt() ?? 0;
     return Container(
       padding: const EdgeInsets.all(11),
@@ -2682,18 +2690,16 @@ class _ExpertReviewsBlockState extends State<_ExpertReviewsBlock> {
                       color: UellowColors.muted)),
           ]),
           const SizedBox(height: 2),
+          // v2.1.39 — prices removed from the specialists UI per request;
+          // only the session TYPES are shown.
           Wrap(spacing: 6, children: [
             if (rv['allow_written'] != false)
-              Text(ar
-                  ? '📝 كتابي: ${priceW.toStringAsFixed(3)} د.ك'
-                  : '📝 Written: ${priceW.toStringAsFixed(3)} KD',
+              Text(ar ? '📝 رأي كتابي' : '📝 Written opinion',
                   style: const TextStyle(fontSize: 9,
                       fontWeight: FontWeight.w700,
                       color: UellowColors.text)),
             if (rv['allow_chat'] == true)
-              Text(ar
-                  ? '💬 محادثة: ${priceC.toStringAsFixed(3)} د.ك'
-                  : '💬 Chat: ${priceC.toStringAsFixed(3)} KD',
+              Text(ar ? '💬 محادثة مباشرة' : '💬 Live chat',
                   style: const TextStyle(fontSize: 9,
                       fontWeight: FontWeight.w700,
                       color: UellowColors.text)),
@@ -2731,8 +2737,6 @@ class _ExpertReviewsBlockState extends State<_ExpertReviewsBlock> {
     var session = rv['allow_written'] != false ? 'written' : 'chat';
     final noteCtrl = TextEditingController();
     var sending = false;
-    final priceW = ((rv['price_written'] as num?) ?? 0).toDouble();
-    final priceC = ((rv['price_chat'] as num?) ?? 0).toDouble();
     showModalBottomSheet(
       context: ctx, isScrollControlled: true,
       backgroundColor: Colors.white,
@@ -2779,7 +2783,6 @@ class _ExpertReviewsBlockState extends State<_ExpertReviewsBlock> {
                   active: session == 'written',
                   emoji: '📝',
                   label: ar ? 'رأي كتابي' : 'Written opinion',
-                  price: priceW,
                   onTap: () => setS(() => session = 'written')),
             ),
             if (rv['allow_written'] != false && rv['allow_chat'] == true)
@@ -2789,7 +2792,6 @@ class _ExpertReviewsBlockState extends State<_ExpertReviewsBlock> {
                   active: session == 'chat',
                   emoji: '💬',
                   label: ar ? 'محادثة مباشرة' : 'Live chat',
-                  price: priceC,
                   onTap: () => setS(() => session = 'chat')),
             ),
           ]),
@@ -2851,7 +2853,7 @@ class _ExpertReviewsBlockState extends State<_ExpertReviewsBlock> {
 
   Widget _sessionOption(BuildContext c, bool ar,
       {required bool active, required String emoji, required String label,
-       required double price, required VoidCallback onTap}) {
+       required VoidCallback onTap}) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -2874,12 +2876,6 @@ class _ExpertReviewsBlockState extends State<_ExpertReviewsBlock> {
                     color: active
                         ? const Color(0xFF1565C0) : UellowColors.ink))),
           ]),
-          const SizedBox(height: 2),
-          Text(ar
-              ? '${price.toStringAsFixed(3)} د.ك'
-              : '${price.toStringAsFixed(3)} KD',
-              style: const TextStyle(fontSize: 9.5,
-                  fontWeight: FontWeight.w700, color: UellowColors.muted)),
         ]),
       ),
     );

@@ -8,7 +8,9 @@
 // live D/H/M/S countdown, optional "% OFF" badge and right-side meta.
 // =============================================================================
 import 'dart:async';
+import 'dart:math' as math;
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
 import '../../api/uellow_api.dart';
@@ -18,7 +20,8 @@ class FlashBanner extends StatelessWidget {
       this.endsAt, this.compact = false, this.edgeToEdge = false,
       this.discountPct, this.productCount,
       this.title, this.subtitle, this.onTap,
-      this.colors, this.emoji, this.pattern = true});
+      this.colors, this.emoji, this.pattern = true,
+      this.patternStyle, this.iconUrl});
   /// Sale end timestamp. If null, shows a placeholder D/H/M/S.
   final DateTime? endsAt;
   /// When true, renders the slim 36px-tall strip (for under product image).
@@ -41,6 +44,12 @@ class FlashBanner extends StatelessWidget {
   final String? emoji;
   /// Diagonal shimmer stripes on/off.
   final bool pattern;
+  /// v2.1.39 — named pattern style (one of [BannerPattern.styles]);
+  /// overrides the default stripes when set. 'none' disables.
+  final String? patternStyle;
+  /// v2.1.39 — campaign icon IMAGE (replaces the discount circle / emoji
+  /// in the leading slot when provided).
+  final String? iconUrl;
   @override
   Widget build(BuildContext context) {
     final ar = UellowApi.instance.lang == 'ar';
@@ -76,9 +85,11 @@ class FlashBanner extends StatelessWidget {
                   ),
           ),
         )),
-        // Diagonal shimmer
-        if (pattern) Positioned.fill(child: IgnorePointer(
-            child: CustomPaint(painter: _DiagonalStripes()))),
+        // Pattern overlay — named style when set, legacy stripes else.
+        if (pattern && (patternStyle ?? 'stripes') != 'none')
+          Positioned.fill(child: IgnorePointer(
+              child: CustomPaint(painter: BannerPattern(
+                  style: patternStyle ?? 'stripes')))),
         // Subtle glossy top
         Positioned.fill(child: IgnorePointer(child: Container(
             decoration: const BoxDecoration(
@@ -126,29 +137,36 @@ class FlashBanner extends StatelessWidget {
 
   Widget _fullRow(String t, String sub, bool ar) {
     return Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
-      // Left: discount circular badge or lightning bolt
+      // Leading slot — v2.1.39: 56→46 (it crowded the text) and priority:
+      // campaign icon IMAGE > discount % > emoji.
       Container(
-        width: 56, height: 56,
-        decoration: BoxDecoration(
+        width: 46, height: 46,
+        decoration: const BoxDecoration(
           shape: BoxShape.circle,
           color: Colors.white,
-          boxShadow: const [BoxShadow(
+          boxShadow: [BoxShadow(
               color: Color(0x33000000), blurRadius: 6, offset: Offset(0, 2))],
         ),
+        clipBehavior: Clip.antiAlias,
         alignment: Alignment.center,
-        child: discountPct != null
+        child: (iconUrl != null && iconUrl!.isNotEmpty)
+            ? CachedNetworkImage(
+                imageUrl: iconUrl!, width: 46, height: 46, fit: BoxFit.cover,
+                errorWidget: (_, __, ___) =>
+                    Text(emoji ?? '⚡', style: const TextStyle(fontSize: 22)))
+            : discountPct != null
             ? Column(mainAxisAlignment: MainAxisAlignment.center, children: [
                 Text('-${discountPct}%', style: const TextStyle(
-                    color: Color(0xFFEA580C), fontSize: 16,
+                    color: Color(0xFFEA580C), fontSize: 13.5,
                     fontWeight: FontWeight.w900, height: 1)),
                 Text(UellowApi.instance.lang == 'ar' ? 'خصم' : 'OFF',
                     style: const TextStyle(color: Color(0xFFB91C1C),
-                    fontSize: 8, fontWeight: FontWeight.w900,
+                    fontSize: 7.5, fontWeight: FontWeight.w900,
                     letterSpacing: 0.6, height: 1)),
               ])
-            : Text(emoji ?? '⚡', style: const TextStyle(fontSize: 28)),
+            : Text(emoji ?? '⚡', style: const TextStyle(fontSize: 22)),
       ),
-      const SizedBox(width: 12),
+      const SizedBox(width: 10),
       // Middle: title + subtitle
       Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisAlignment: MainAxisAlignment.center, children: [
@@ -192,20 +210,241 @@ class FlashBanner extends StatelessWidget {
   }
 }
 
-class _DiagonalStripes extends CustomPainter {
+// ─── Banner pattern engine (v2.1.39) ─────────────────────────────────
+// 22 professional white-overlay patterns, selectable per promotion from
+// the backend / per block from the builder. All deterministic.
+class BannerPattern extends CustomPainter {
+  BannerPattern({this.style = 'stripes'});
+  final String style;
+
+  static const styles = [
+    'stripes', 'stripes_bold', 'crosshatch', 'mesh', 'grid',
+    'dots', 'polka', 'bubbles', 'circles', 'rings', 'scales',
+    'waves', 'zigzag', 'chevrons', 'diamonds', 'triangles', 'hexagons',
+    'plus', 'sparkles', 'stars', 'confetti', 'moons',
+  ];
+
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = const Color(0x14FFFFFF)
-      ..strokeWidth = 4;
-    const spacing = 14.0;
-    for (var x = -size.height.toDouble(); x < size.width; x += spacing) {
-      canvas.drawLine(Offset(x, 0),
-          Offset(x + size.height, size.height), paint);
+    const c = Color(0x16FFFFFF);
+    final line = Paint()..color = c..strokeWidth = 3
+        ..style = PaintingStyle.stroke;
+    final fill = Paint()..color = c..style = PaintingStyle.fill;
+    final w = size.width, h = size.height;
+    final rnd = math.Random(7);   // fixed seed — stable artwork
+
+    void diag(double spacing, double stroke) {
+      final p = Paint()..color = c..strokeWidth = stroke;
+      for (var x = -h; x < w; x += spacing) {
+        canvas.drawLine(Offset(x, 0), Offset(x + h, h), p);
+      }
+    }
+
+    switch (style) {
+      case 'stripes_bold': diag(26, 10); break;
+      case 'crosshatch':
+        diag(18, 2);
+        final p = Paint()..color = c..strokeWidth = 2;
+        for (var x = 0.0; x < w + h; x += 18) {
+          canvas.drawLine(Offset(x, 0), Offset(x - h, h), p);
+        }
+        break;
+      case 'mesh':
+        final p = Paint()..color = c..strokeWidth = 1.2;
+        for (var x = 0.0; x < w; x += 16) {
+          canvas.drawLine(Offset(x, 0), Offset(x, h), p);
+        }
+        for (var y = 0.0; y < h; y += 16) {
+          canvas.drawLine(Offset(0, y), Offset(w, y), p);
+        }
+        break;
+      case 'grid':
+        final p = Paint()..color = c..strokeWidth = 2;
+        for (var x = 0.0; x < w; x += 26) {
+          canvas.drawLine(Offset(x, 0), Offset(x, h), p);
+        }
+        for (var y = 0.0; y < h; y += 26) {
+          canvas.drawLine(Offset(0, y), Offset(w, y), p);
+        }
+        break;
+      case 'dots':
+        for (var x = 6.0; x < w; x += 16) {
+          for (var y = 6.0; y < h; y += 16) {
+            canvas.drawCircle(Offset(x, y), 1.6, fill);
+          }
+        }
+        break;
+      case 'polka':
+        var row = 0;
+        for (var y = 8.0; y < h; y += 20) {
+          final off = (row.isOdd) ? 10.0 : 0.0;
+          for (var x = 8.0 + off; x < w; x += 20) {
+            canvas.drawCircle(Offset(x, y), 3.4, fill);
+          }
+          row++;
+        }
+        break;
+      case 'bubbles':
+        for (var i = 0; i < 26; i++) {
+          canvas.drawCircle(
+              Offset(rnd.nextDouble() * w, rnd.nextDouble() * h),
+              3 + rnd.nextDouble() * 9, fill);
+        }
+        break;
+      case 'circles':
+        for (var x = 14.0; x < w; x += 34) {
+          for (var y = 14.0; y < h; y += 34) {
+            canvas.drawCircle(Offset(x, y), 9, line..strokeWidth = 1.6);
+          }
+        }
+        break;
+      case 'rings':
+        for (var r = 12.0; r < math.max(w, h); r += 22) {
+          canvas.drawCircle(Offset(w, 0), r, line..strokeWidth = 2);
+        }
+        break;
+      case 'scales':
+        var srow = 0;
+        for (var y = 0.0; y <= h + 16; y += 13) {
+          final off = srow.isOdd ? 13.0 : 0.0;
+          for (var x = -13.0 + off; x < w + 13; x += 26) {
+            canvas.drawArc(Rect.fromCircle(
+                center: Offset(x, y), radius: 13),
+                0, math.pi, false, line..strokeWidth = 1.6);
+          }
+          srow++;
+        }
+        break;
+      case 'waves':
+        final p = Paint()..color = c..strokeWidth = 2
+            ..style = PaintingStyle.stroke;
+        for (var y = 8.0; y < h; y += 16) {
+          final path = Path()..moveTo(0, y);
+          for (var x = 0.0; x < w; x += 24) {
+            path.quadraticBezierTo(x + 6, y - 6, x + 12, y);
+            path.quadraticBezierTo(x + 18, y + 6, x + 24, y);
+          }
+          canvas.drawPath(path, p);
+        }
+        break;
+      case 'zigzag':
+        final p = Paint()..color = c..strokeWidth = 2
+            ..style = PaintingStyle.stroke;
+        for (var y = 8.0; y < h; y += 18) {
+          final path = Path()..moveTo(0, y);
+          var up = true;
+          for (var x = 0.0; x < w; x += 12) {
+            path.lineTo(x + 12, up ? y - 6 : y + 6);
+            up = !up;
+          }
+          canvas.drawPath(path, p);
+        }
+        break;
+      case 'chevrons':
+        final p = Paint()..color = c..strokeWidth = 3
+            ..style = PaintingStyle.stroke;
+        for (var x = 0.0; x < w + 20; x += 24) {
+          final path = Path()
+            ..moveTo(x, h)..lineTo(x + 12, h / 2)..lineTo(x, 0);
+          canvas.drawPath(path, p);
+        }
+        break;
+      case 'diamonds':
+        for (var x = 14.0; x < w; x += 30) {
+          for (var y = 12.0; y < h; y += 30) {
+            final path = Path()
+              ..moveTo(x, y - 7)..lineTo(x + 7, y)
+              ..lineTo(x, y + 7)..lineTo(x - 7, y)..close();
+            canvas.drawPath(path, fill);
+          }
+        }
+        break;
+      case 'triangles':
+        for (var x = 12.0; x < w; x += 28) {
+          for (var y = 14.0; y < h; y += 28) {
+            final path = Path()
+              ..moveTo(x, y - 7)..lineTo(x + 7, y + 6)
+              ..lineTo(x - 7, y + 6)..close();
+            canvas.drawPath(path, line..strokeWidth = 1.6);
+          }
+        }
+        break;
+      case 'hexagons':
+        for (var x = 16.0; x < w; x += 34) {
+          for (var y = 16.0; y < h; y += 32) {
+            final path = Path();
+            for (var i = 0; i < 6; i++) {
+              final a = math.pi / 3 * i + math.pi / 6;
+              final pt = Offset(x + 9 * math.cos(a), y + 9 * math.sin(a));
+              i == 0 ? path.moveTo(pt.dx, pt.dy) : path.lineTo(pt.dx, pt.dy);
+            }
+            path.close();
+            canvas.drawPath(path, line..strokeWidth = 1.6);
+          }
+        }
+        break;
+      case 'plus':
+        final p = Paint()..color = c..strokeWidth = 2.4;
+        for (var x = 12.0; x < w; x += 26) {
+          for (var y = 12.0; y < h; y += 26) {
+            canvas.drawLine(Offset(x - 4, y), Offset(x + 4, y), p);
+            canvas.drawLine(Offset(x, y - 4), Offset(x, y + 4), p);
+          }
+        }
+        break;
+      case 'sparkles':
+        for (var i = 0; i < 22; i++) {
+          final x = rnd.nextDouble() * w, y = rnd.nextDouble() * h;
+          final r = 2 + rnd.nextDouble() * 3;
+          final p = Paint()..color = c..strokeWidth = 1.6;
+          canvas.drawLine(Offset(x - r, y), Offset(x + r, y), p);
+          canvas.drawLine(Offset(x, y - r), Offset(x, y + r), p);
+        }
+        break;
+      case 'stars':
+        for (var i = 0; i < 16; i++) {
+          final cx = rnd.nextDouble() * w, cy = rnd.nextDouble() * h;
+          final r = 3 + rnd.nextDouble() * 4;
+          final path = Path();
+          for (var k = 0; k < 8; k++) {
+            final rr = k.isEven ? r : r / 2.6;
+            final a = math.pi / 4 * k - math.pi / 2;
+            final pt = Offset(cx + rr * math.cos(a), cy + rr * math.sin(a));
+            k == 0 ? path.moveTo(pt.dx, pt.dy) : path.lineTo(pt.dx, pt.dy);
+          }
+          path.close();
+          canvas.drawPath(path, fill);
+        }
+        break;
+      case 'confetti':
+        for (var i = 0; i < 30; i++) {
+          final x = rnd.nextDouble() * w, y = rnd.nextDouble() * h;
+          canvas.save();
+          canvas.translate(x, y);
+          canvas.rotate(rnd.nextDouble() * math.pi);
+          canvas.drawRect(
+              const Rect.fromLTWH(-3, -1.4, 6, 2.8), fill);
+          canvas.restore();
+        }
+        break;
+      case 'moons':
+        for (var x = 18.0; x < w; x += 40) {
+          for (var y = 16.0; y < h; y += 36) {
+            canvas.drawArc(Rect.fromCircle(
+                center: Offset(x, y), radius: 8),
+                math.pi * 0.25, math.pi * 1.1, false,
+                line..strokeWidth = 2);
+          }
+        }
+        break;
+      case 'stripes':
+      default:
+        diag(14, 4);
     }
   }
+
   @override
-  bool shouldRepaint(covariant _) => false;
+  bool shouldRepaint(covariant BannerPattern old) => old.style != style;
 }
 
 class _DhmsCounter extends StatefulWidget {
