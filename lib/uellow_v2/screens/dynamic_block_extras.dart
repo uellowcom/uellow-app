@@ -1380,23 +1380,33 @@ class DiscountStripBlock extends StatelessWidget {
   }
 
   // ─── compact (default) ─────────────────────────────────────────────────────
-  // v2.0.70 — width 120 → 140; row height bumped to fit redesigned info section
-  // (brand row + 2-line name + big price + save pill).
+  // v2.1.45 — uses the adopted RICH ProductCard (stars + PI + ticker +
+  // badges) instead of the bespoke discount card.
   Widget _compactRow(List items) {
     return SizedBox(
-      height: 244,
+      height: 268,
       child: ListView.separated(
         padding: const EdgeInsets.symmetric(horizontal: 12),
         scrollDirection: Axis.horizontal,
         physics: const ClampingScrollPhysics(),
         itemCount: items.length,
         separatorBuilder: (_, __) => const SizedBox(width: 8),
-        itemBuilder: (_, i) {
-          final pp = (items[i] as Map).cast<String, dynamic>();
-          return _DiscountCard(p: pp, props: this.p, t: t, ar: ar, width: 140);
-        },
+        itemBuilder: (_, i) => _richCard(items[i], width: 150),
       ),
     );
+  }
+
+  // v2.1.45 — shared rich-card builder with a graceful fallback to the
+  // legacy discount card when the payload can't be parsed.
+  Widget _richCard(dynamic raw, {double width = 150}) {
+    final pp = (raw as Map).cast<String, dynamic>();
+    try {
+      final prod = UellowProductCard.fromJson(pp);
+      return SizedBox(width: width,
+          child: ProductCard(rich: true, product: prod));
+    } catch (_) {
+      return _DiscountCard(p: pp, props: p, t: t, ar: ar, width: width);
+    }
   }
 
   // ─── hero (1 big + 2 small) ────────────────────────────────────────────────
@@ -1448,15 +1458,12 @@ class DiscountStripBlock extends StatelessWidget {
         shrinkWrap: true,
         physics: const NeverScrollableScrollPhysics(),
         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          // v2.0.70 — taller aspect to fit the new info section
+          // v2.1.45 — rich-card aspect (matches the adopted card).
           crossAxisCount: 2, mainAxisSpacing: 8, crossAxisSpacing: 8,
-          childAspectRatio: 0.62,
+          childAspectRatio: 0.585,
         ),
         itemCount: list.length,
-        itemBuilder: (_, i) => _DiscountCard(
-          p: (list[i] as Map).cast<String, dynamic>(),
-          props: this.p, t: t, ar: ar, fillHeight: true, fillWidth: true,
-        ),
+        itemBuilder: (_, i) => _richCard(list[i]),
       ),
     );
   }
@@ -3466,6 +3473,282 @@ class _KenBurnsState extends State<_KenBurns>
       },
     );
   }
+}
+
+
+// ─── BESTSELLERS — premium podium + ranked list (v2.1.45) ───────────────────
+// Theme-able (gold / dark / clean), #1 on a raised gold podium with a
+// crown, #2 silver, #3 bronze, then a ranked list. All tappable.
+class BestsellersBlock extends StatelessWidget {
+  const BestsellersBlock({super.key, required this.p, required this.data,
+      required this.t, required this.ar});
+  final Map<String, dynamic> p;
+  final Map<String, dynamic> data;
+  final DynTheme t;
+  final bool ar;
+
+  ({Color bg1, Color bg2, Color ink, Color sub, Color card, Color border})
+      _theme(String name) => switch (name) {
+    'dark' => (bg1: const Color(0xFF131129), bg2: const Color(0xFF1E1B3C),
+               ink: Colors.white, sub: const Color(0xB3FFFFFF),
+               card: const Color(0x14FFFFFF), border: const Color(0x22FFFFFF)),
+    'clean' => (bg1: Colors.white, bg2: Colors.white,
+               ink: const Color(0xFF1F1206), sub: const Color(0xFF8A7B5E),
+               card: const Color(0xFFFAFAFA), border: const Color(0xFFEFEAD9)),
+    _ => (bg1: const Color(0xFFFFF9E8), bg2: const Color(0xFFFFFDF6),
+               ink: const Color(0xFF4A2E04), sub: const Color(0xFF9A7B33),
+               card: Colors.white, border: const Color(0xFFF0E2BB)),
+  };
+
+  static const _medal = ['🥇', '🥈', '🥉'];
+  static const _ringColors = [
+    [Color(0xFFFFE082), Color(0xFFD4AF37)],   // gold
+    [Color(0xFFE0E0E0), Color(0xFF9E9E9E)],   // silver
+    [Color(0xFFE0B187), Color(0xFFA0683A)],   // bronze
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final raw = ((data['items'] as List?) ?? const [])
+        .cast<dynamic>().map((e) => (e as Map).cast<String, dynamic>());
+    final items = <UellowProductCard>[];
+    for (final m in raw) {
+      try { items.add(UellowProductCard.fromJson(m)); } catch (_) {}
+    }
+    if (items.isEmpty) return const SizedBox.shrink();
+    final th = _theme((p['bs_theme'] as String?) ?? 'gold');
+    final showPodium = p['show_podium'] != false && items.length >= 3;
+    final showSold = p['show_sold'] != false;
+    final listCount = ((p['bs_list_count'] as num?)?.toInt() ?? 7)
+        .clamp(0, 20);
+    final title = ar
+        ? ((p['titleAr'] ?? p['titleEn'])?.toString() ?? 'الأكثر مبيعاً')
+        : ((p['titleEn'] ?? p['titleAr'])?.toString() ?? 'Bestsellers');
+    final podium = showPodium ? items.take(3).toList() : <UellowProductCard>[];
+    final rest = items.skip(showPodium ? 3 : 0).take(listCount).toList();
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 10),
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(begin: Alignment.topCenter,
+            end: Alignment.bottomCenter, colors: [th.bg1, th.bg2]),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: th.border),
+        boxShadow: const [BoxShadow(color: Color(0x14000000),
+            blurRadius: 12, offset: Offset(0, 4))],
+      ),
+      padding: const EdgeInsets.fromLTRB(12, 14, 12, 12),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        // ── header ──
+        Row(children: [
+          Container(
+            padding: const EdgeInsets.all(7),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                  colors: [Color(0xFFFFE082), Color(0xFFD4AF37)]),
+              shape: BoxShape.circle,
+              boxShadow: [BoxShadow(
+                  color: const Color(0xFFD4AF37).withValues(alpha: 0.45),
+                  blurRadius: 8)],
+            ),
+            child: const Text('🏆', style: TextStyle(fontSize: 15)),
+          ),
+          const SizedBox(width: 8),
+          Expanded(child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(title, maxLines: 1, overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900,
+                    color: th.ink, letterSpacing: 0.2)),
+            Text(ar ? 'ترتيب حقيقي حسب المبيعات' : 'Real sales ranking',
+                style: TextStyle(fontSize: 9.5, color: th.sub,
+                    fontWeight: FontWeight.w600)),
+          ])),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+            decoration: BoxDecoration(
+              color: const Color(0xFF16A34A).withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(999),
+            ),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              Container(width: 6, height: 6, decoration: const BoxDecoration(
+                  color: Color(0xFF16A34A), shape: BoxShape.circle)),
+              const SizedBox(width: 4),
+              Text(ar ? 'محدّث يومياً' : 'Updated daily',
+                  style: const TextStyle(fontSize: 8.5,
+                      fontWeight: FontWeight.w800, color: Color(0xFF15803D))),
+            ]),
+          ),
+        ]),
+        if (podium.isNotEmpty) ...[
+          const SizedBox(height: 14),
+          // ── podium: 2 · 1 · 3 ──
+          Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+            Expanded(child: _podiumSpot(context, podium[1], 1, th,
+                showSold, avatar: 64, stand: 26)),
+            Expanded(child: _podiumSpot(context, podium[0], 0, th,
+                showSold, avatar: 84, stand: 42, crowned: true)),
+            Expanded(child: _podiumSpot(context, podium[2], 2, th,
+                showSold, avatar: 64, stand: 16)),
+          ]),
+        ],
+        if (rest.isNotEmpty) ...[
+          const SizedBox(height: 10),
+          for (var i = 0; i < rest.length; i++)
+            _rankRow(context, rest[i], (showPodium ? 4 : 1) + i, th, showSold),
+        ],
+      ]),
+    );
+  }
+
+  Widget _podiumSpot(BuildContext c, UellowProductCard prod, int medalIdx,
+      dynamic th, bool showSold,
+      {required double avatar, required double stand, bool crowned = false}) {
+    final lang = UellowApi.instance.lang;
+    final ring = _ringColors[medalIdx];
+    return GestureDetector(
+      onTap: () => UellowRouter.goProduct(c, prod.id),
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        if (crowned)
+          const Padding(padding: EdgeInsets.only(bottom: 2),
+              child: Text('👑', style: TextStyle(fontSize: 18))),
+        Stack(clipBehavior: Clip.none, alignment: Alignment.center, children: [
+          Container(
+            width: avatar + 8, height: avatar + 8,
+            padding: const EdgeInsets.all(3),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: LinearGradient(colors: ring),
+              boxShadow: [BoxShadow(
+                  color: ring[1].withValues(alpha: 0.45),
+                  blurRadius: crowned ? 14 : 8, offset: const Offset(0, 3))],
+            ),
+            child: ClipOval(child: CachedNetworkImage(
+              imageUrl: prod.image, fit: BoxFit.cover,
+              placeholder: (_, __) =>
+                  const ColoredBox(color: Color(0xFFEFEFEF)),
+              errorWidget: (_, __, ___) =>
+                  const ColoredBox(color: Color(0xFFEFEFEF)),
+            )),
+          ),
+          Positioned(bottom: -7,
+              child: Text(_medal[medalIdx],
+                  style: const TextStyle(fontSize: 17))),
+        ]),
+        const SizedBox(height: 10),
+        Text(prod.name.current(lang),
+            maxLines: 1, overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w700,
+                color: th.ink)),
+        const SizedBox(height: 2),
+        Text('${prod.price.amount.toStringAsFixed(3)} '
+             '${prod.price.displaySymbol(lang)}',
+            style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w900,
+                color: th.ink)),
+        if (showSold && prod.soldCount > 0) Padding(
+          padding: const EdgeInsets.only(top: 2),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+            decoration: BoxDecoration(
+              color: const Color(0xFFD4AF37).withValues(alpha: 0.16),
+              borderRadius: BorderRadius.circular(999),
+            ),
+            child: Text(
+                UellowApi.instance.lang == 'ar'
+                    ? '🔥 باع ${_fmtSold(prod.soldCount)}+'
+                    : '🔥 ${_fmtSold(prod.soldCount)}+ sold',
+                style: const TextStyle(fontSize: 8,
+                    fontWeight: FontWeight.w800, color: Color(0xFF8B6508))),
+          ),
+        ),
+        const SizedBox(height: 6),
+        // podium stand
+        Container(
+          height: stand,
+          margin: const EdgeInsets.symmetric(horizontal: 10),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter, end: Alignment.bottomCenter,
+              colors: [ring[0].withValues(alpha: 0.85),
+                       ring[1].withValues(alpha: 0.55)],
+            ),
+            borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(6)),
+          ),
+          alignment: Alignment.center,
+          child: Text('${medalIdx + 1}', style: const TextStyle(
+              fontSize: 13, fontWeight: FontWeight.w900,
+              color: Colors.white)),
+        ),
+      ]),
+    );
+  }
+
+  Widget _rankRow(BuildContext c, UellowProductCard prod, int rank,
+      dynamic th, bool showSold) {
+    final lang = UellowApi.instance.lang;
+    return GestureDetector(
+      onTap: () => UellowRouter.goProduct(c, prod.id),
+      child: Container(
+        margin: const EdgeInsets.only(top: 6),
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: th.card,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: th.border),
+        ),
+        child: Row(children: [
+          SizedBox(width: 26, child: Text('#$rank',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w900,
+                  color: th.sub, fontStyle: FontStyle.italic))),
+          const SizedBox(width: 6),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(9),
+            child: CachedNetworkImage(
+              imageUrl: prod.image, width: 44, height: 44, fit: BoxFit.cover,
+              placeholder: (_, __) => const SizedBox(width: 44, height: 44),
+              errorWidget: (_, __, ___) =>
+                  const SizedBox(width: 44, height: 44),
+            ),
+          ),
+          const SizedBox(width: 9),
+          Expanded(child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(prod.name.current(lang),
+                maxLines: 1, overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700,
+                    color: th.ink)),
+            const SizedBox(height: 2),
+            Row(children: [
+              const Icon(Icons.star_rounded,
+                  size: 11, color: Color(0xFFFFC107)),
+              Text(' ${prod.rating.avg.toStringAsFixed(1)}',
+                  style: TextStyle(fontSize: 9.5,
+                      fontWeight: FontWeight.w800, color: th.ink)),
+              if (showSold && prod.soldCount > 0)
+                Text(UellowApi.instance.lang == 'ar'
+                        ? '  ·  باع ${_fmtSold(prod.soldCount)}+'
+                        : '  ·  ${_fmtSold(prod.soldCount)}+ sold',
+                    style: TextStyle(fontSize: 9, color: th.sub,
+                        fontWeight: FontWeight.w600)),
+            ]),
+          ])),
+          Text('${prod.price.amount.toStringAsFixed(3)} '
+               '${prod.price.displaySymbol(lang)}',
+              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w900,
+                  color: th.ink)),
+          Icon(UellowApi.instance.lang == 'ar'
+                  ? Icons.chevron_left : Icons.chevron_right,
+              size: 17, color: th.sub),
+        ]),
+      ),
+    );
+  }
+
+  String _fmtSold(int n) => n >= 1000
+      ? '${(n / 1000).toStringAsFixed(n >= 10000 ? 0 : 1)}K' : '$n';
 }
 
 // ─── TAB NAV — horizontal SHEIN-style tabs ──────────────────────────────────

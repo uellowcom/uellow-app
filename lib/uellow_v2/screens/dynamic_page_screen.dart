@@ -205,10 +205,11 @@ Widget _renderBlock(BuildContext c, Map<String, dynamic> b, DynTheme t) {
     case 'cats-strip': inner = _CategoriesBlock(p: p, data: data, t: t, ar: ar); break;
     case 'flash':      inner = _FlashBlock(p: p, data: data, t: t, ar: ar); break;
     case 'products':
-    case 'bestsellers':
     case 'rec-ai':
     case 'recent':
     case 'grid':       inner = _ProductsBlock(p: p, data: data, t: t, ar: ar, kind: kind); break;
+    // v2.1.45 — dedicated premium Bestsellers block (podium + ranked list).
+    case 'bestsellers': inner = BestsellersBlock(p: p, data: data, t: t, ar: ar); break;
     case 'banner-1':   inner = _Banner1(p: p, t: t, ar: ar); break;
     case 'banner-2':   inner = _BannerMulti(p: p, t: t, columns: 2); break;
     case 'banner-3':   inner = _BannerMulti(p: p, t: t, columns: 3); break;
