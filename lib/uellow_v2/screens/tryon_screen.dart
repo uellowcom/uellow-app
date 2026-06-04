@@ -1254,10 +1254,10 @@ class _MeasurementsEditorState extends State<_MeasurementsEditor> {
                 value: _bodyType,
                 options: ar ? const [
                   ('slim', 'نحيف'), ('athletic', 'رياضي'),
-                  ('average', 'متوسط'), ('plus', 'ممتلئ'),
+                  ('regular', 'متوسط'), ('plus', 'ممتلئ'),
                 ] : const [
                   ('slim', 'Slim'), ('athletic', 'Athletic'),
-                  ('average', 'Average'), ('plus', 'Plus'),
+                  ('regular', 'Regular'), ('plus', 'Plus'),
                 ],
                 onChanged: (v) => setState(() => _bodyType = v),
               ),
