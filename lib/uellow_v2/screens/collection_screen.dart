@@ -21,6 +21,7 @@ import 'package:http/http.dart' as http;
 import '../../api/uellow_api.dart';
 import '../../api/uellow_models.dart';
 import '../router/uellow_router.dart';
+import '../services/ads_service.dart';
 import '../theme/uellow_theme.dart';
 import '../widgets/product_card.dart';
 
@@ -54,6 +55,8 @@ class _CollectionScreenState extends State<CollectionScreen> {
   double? _minPrice;
   double? _maxPrice;
   int _minRating = 0;
+  // v2.1.27 — in-feed ads injected between products.
+  List<Map<String, dynamic>> _ads = const [];
 
   @override
   void initState() {
@@ -70,6 +73,9 @@ class _CollectionScreenState extends State<CollectionScreen> {
   }
 
   Future<void> _bootstrap() async {
+    AdsService.fetch('infeed', categoryId: widget.categoryId).then((a) {
+      if (mounted && a.isNotEmpty) setState(() => _ads = a);
+    });
     if (widget.categoryId != null) {
       try {
         _category = await UellowApi.instance.categories.detail(widget.categoryId!);
@@ -183,6 +189,42 @@ class _CollectionScreenState extends State<CollectionScreen> {
     }
   }
 
+  // ── v2.1.27 — in-feed ad injection ──────────────────────────────
+  // Pattern repeats every (n+1) grid slots: n products then 1 ad tile.
+  // every_n mode uses the configured N; random mode derives a stable
+  // per-category interval so positions feel random but never reshuffle.
+  int _adInterval() {
+    if (_ads.isEmpty) return 0;
+    final every = ((_ads.first['infeed_every_n'] as num?)?.toInt() ?? 8)
+        .clamp(2, 50);
+    if ((_ads.first['infeed_mode'] ?? 'every_n') == 'random') {
+      final seed = (widget.categoryId ?? 7) % 5;
+      return (every + seed - 2).clamp(4, 30);
+    }
+    return every;
+  }
+
+  int _gridCount() {
+    final n = _adInterval();
+    if (n == 0) return _items.length;
+    return _items.length + (_items.length ~/ n);
+  }
+
+  Widget _gridItem(int i) {
+    final n = _adInterval();
+    if (n == 0) return ProductCard(rich: true, product: _items[i]);
+    final block = i ~/ (n + 1);
+    final inBlock = i % (n + 1);
+    if (inBlock == n) {
+      return AdTile(ad: _ads[block % _ads.length]);
+    }
+    final pIdx = block * n + inBlock;
+    if (pIdx < _items.length) {
+      return ProductCard(rich: true, product: _items[pIdx]);
+    }
+    return const SizedBox.shrink();
+  }
+
   @override
   Widget build(BuildContext context) {
     final lang = UellowApi.instance.lang;
@@ -228,8 +270,8 @@ class _CollectionScreenState extends State<CollectionScreen> {
                 childAspectRatio: 0.54,
               ),
               delegate: SliverChildBuilderDelegate(
-                (_, i) => ProductCard(rich: true, product: _items[i]),
-                childCount: _items.length,
+                (_, i) => _gridItem(i),
+                childCount: _gridCount(),
               ),
             ),
           ),

@@ -19,6 +19,7 @@ import '../../api/uellow_api.dart';
 import '../../api/uellow_endpoints.dart';
 import '../../api/uellow_models.dart';
 import '../router/uellow_router.dart';
+import '../services/ads_service.dart';
 import '../theme/uellow_theme.dart';
 import '../widgets/product_card.dart';
 import '../widgets/uellow_bottom_nav.dart';
@@ -39,6 +40,11 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     _future = UellowApi.instance.home.get();
     _dynFuture = _fetchDynamicHome();
+    // v2.1.27 — open-sequence ads: splash flash first, then popup
+    // (frequency-capped). Runs once per app session.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) AdsService.showOpenAds(context);
+    });
   }
 
   /// Fetch the builder-designed `home` page. Returns null on any failure so
