@@ -19,9 +19,11 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../api/uellow_api.dart';
 import '../../api/uellow_models.dart';
+import '../router/uellow_router.dart';
 import '../theme/uellow_theme.dart';
 
 class TryOnScreen extends StatefulWidget {
@@ -51,6 +53,7 @@ class _TryOnScreenState extends State<TryOnScreen> {
   void initState() {
     super.initState();
     _loadProfile();
+    _restorePhotos();   // v2.1.50 — saved photos come back automatically
     if (widget.productId != null) {
       _loadProduct(widget.productId!);
     }
@@ -137,6 +140,63 @@ class _TryOnScreenState extends State<TryOnScreen> {
         maxWidth: 1280, maxHeight: 1280, imageQuality: 85);
     if (p == null || !mounted) return;
     setState(() => _photos.add(File(p.path)));
+    // v2.1.50 — persist: local paths survive restarts AND the photo is
+    // saved on the body profile server-side (uploaded ONCE).
+    _persistPhotos();
+    _uploadPhotoToProfile(File(p.path));
+  }
+
+  Future<void> _persistPhotos() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setStringList(
+          'tryon_photos_v1', _photos.map((f) => f.path).toList());
+    } catch (_) {}
+  }
+
+  Future<void> _restorePhotos() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final paths = prefs.getStringList('tryon_photos_v1') ?? const [];
+      final files = paths.map(File.new).where((f) => f.existsSync()).toList();
+      if (files.isNotEmpty && mounted) {
+        setState(() => _photos.addAll(files));
+      } else {
+        // Nothing local — maybe saved on the profile from another
+        // session/device: pull it back down once.
+        final token = await UellowApi.instance.tokenStore.readToken();
+        if (token == null) return;
+        final r = await http.get(
+          Uri.parse('${UellowApi.instance.baseUrl}/api/mobile/v2/tryon/photo'),
+          headers: {'Accept': 'application/json',
+                    'Authorization': 'Bearer $token'},
+        ).timeout(const Duration(seconds: 8));
+        final j = jsonDecode(utf8.decode(r.bodyBytes)) as Map<String, dynamic>;
+        final b64 = (j['data']?['photo'] as String?) ?? '';
+        if (b64.isNotEmpty && mounted) {
+          final dir = await SharedPreferences.getInstance();   // path anchor
+          final f = File(
+              '${Directory.systemTemp.path}/uellow_tryon_profile.jpg');
+          await f.writeAsBytes(base64Decode(b64));
+          if (mounted) setState(() => _photos.add(f));
+          await dir.setStringList('tryon_photos_v1', [f.path]);
+        }
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _uploadPhotoToProfile(File f) async {
+    try {
+      final token = await UellowApi.instance.tokenStore.readToken();
+      if (token == null) return;
+      final b64 = base64Encode(await f.readAsBytes());
+      await http.post(
+        Uri.parse('${UellowApi.instance.baseUrl}/api/mobile/v2/tryon/photo'),
+        headers: {'Content-Type': 'application/json',
+                  'Authorization': 'Bearer $token'},
+        body: jsonEncode({'image_base64': b64}),
+      ).timeout(const Duration(seconds: 20));
+    } catch (_) {/* best effort */}
   }
 
   Future<void> _generate() async {
@@ -152,23 +212,10 @@ class _TryOnScreenState extends State<TryOnScreen> {
     setState(() { _generating = true; _error = null; });
     try {
       final token = await UellowApi.instance.tokenStore.readToken();
-      // Upload first photo
-      final bytes = await _photos.first.readAsBytes();
-      final b64 = base64Encode(bytes);
-      final upload = await http.post(
-        Uri.parse('${UellowApi.instance.baseUrl}/tryon/upload-photo'),
-        headers: {
-          'Content-Type': 'application/json',
-          if (token != null) 'Authorization': 'Bearer $token',
-        },
-        body: jsonEncode({'image_base64': b64}),
-      );
-      // Best-effort: ignore upload response — backend stores into the
-      // profile and the generate call will use the latest source photo.
-      jsonDecode(utf8.decode(upload.bodyBytes));
-      // Kick off generation
+      // v2.1.50 — proper mobile endpoint (Bearer auth). The old /tryon/*
+      // session routes always failed from the app.
       final gen = await http.post(
-        Uri.parse('${UellowApi.instance.baseUrl}/tryon/generate'),
+        Uri.parse('${UellowApi.instance.baseUrl}/api/mobile/v2/tryon/generate'),
         headers: {
           'Content-Type': 'application/json',
           if (token != null) 'Authorization': 'Bearer $token',
@@ -178,67 +225,125 @@ class _TryOnScreenState extends State<TryOnScreen> {
           'color_index': _colorIdx,
           'size': _selectedSize,
         }),
-      );
-      final genBody = jsonDecode(utf8.decode(gen.bodyBytes));
-      final imageId = (genBody is Map ? genBody['image_id'] : null) as int?;
-      if (imageId == null) {
-        if (mounted) setState(() {
-          _generating = false;
-          _error = (genBody is Map ? genBody['error']?.toString() : null)
-              ?? (ar ? 'فشل التوليد' : 'Generation failed');
-        });
+      ).timeout(const Duration(seconds: 25));
+      final j = jsonDecode(utf8.decode(gen.bodyBytes)) as Map<String, dynamic>;
+      final data = (j['data'] as Map?)?.cast<String, dynamic>() ?? {};
+      if (data['available'] == false) {
+        // Provider not configured yet — friendly coming-soon, not an error.
+        if (mounted) {
+          setState(() => _generating = false);
+          _showComingSoon();
+        }
         return;
       }
-      // Poll status (best effort — backend may return URL synchronously)
-      for (var i = 0; i < 60; i++) {
-        await Future.delayed(const Duration(seconds: 2));
-        if (!mounted) return;
-        final st = await http.post(
-          Uri.parse('${UellowApi.instance.baseUrl}/tryon/status/$imageId'),
-          headers: {
-            'Content-Type': 'application/json',
-            if (token != null) 'Authorization': 'Bearer $token',
-          },
-          body: '{}',
-        );
-        final stBody = jsonDecode(utf8.decode(st.bodyBytes));
-        if (stBody is Map) {
-          final status = stBody['status'] as String?;
-          final url = (stBody['result_url'] ?? stBody['image_url']) as String?;
-          if (url != null && url.isNotEmpty) {
-            setState(() { _generatedImageUrl = url; _generating = false; });
-            return;
-          }
-          if (status == 'failed') {
-            setState(() {
-              _generating = false;
-              _error = (ar ? 'فشل التوليد' : 'Generation failed');
-            });
-            return;
-          }
+      final url = (data['result_url'] ?? data['image_url'] ?? '').toString();
+      if (url.isNotEmpty) {
+        if (mounted) {
+          setState(() { _generatedImageUrl = url; _generating = false; });
         }
+        return;
       }
-      if (mounted) setState(() {
-        _generating = false;
-        _error = (ar ? 'انتهت المهلة، حاول مرة أخرى'
-                     : 'Timed out, please try again');
-      });
-    } catch (e) {
-      if (mounted) setState(() {
-        _generating = false;
-        _error = e.toString();
-      });
+      if (mounted) {
+        setState(() {
+          _generating = false;
+          _error = (data['error']?.toString())
+              ?? (ar ? 'فشل التوليد، حاول لاحقاً' : 'Generation failed, try later');
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => _generating = false);
+        _showComingSoon();
+      }
     }
   }
 
+  // v2.1.50 — premium "coming soon" sheet instead of a raw error.
+  void _showComingSoon() {
+    final ar = UellowApi.instance.lang == 'ar';
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (_) => Container(
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+        ),
+        padding: const EdgeInsets.fromLTRB(24, 22, 24, 28),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                  colors: [Color(0xFFFFD340), Color(0xFFE8A800)]),
+              shape: BoxShape.circle,
+            ),
+            child: const Text('🪄', style: TextStyle(fontSize: 34)),
+          ),
+          const SizedBox(height: 14),
+          Text(ar ? 'التجربة الافتراضية… قريباً جداً!'
+                  : 'Virtual try-on… coming very soon!',
+              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w900,
+                  color: UellowColors.darkBrown)),
+          const SizedBox(height: 8),
+          Text(ar
+                  ? 'نجهّز محرك الذكاء الاصطناعي الذي سيُلبسك المنتج في ثوانٍ. صورتك ومقاساتك محفوظة وجاهزة — سنبلغك فور الإطلاق 🚀'
+                  : 'We are finalizing the AI engine that dresses you in seconds. Your photo and measurements are saved and ready — we will notify you at launch 🚀',
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 12.5, height: 1.6,
+                  color: UellowColors.muted)),
+          const SizedBox(height: 18),
+          SizedBox(width: double.infinity, child: ElevatedButton(
+            onPressed: () => Navigator.pop(context),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: UellowColors.darkBrown,
+              foregroundColor: UellowColors.yellowLight,
+              padding: const EdgeInsets.symmetric(vertical: 13),
+            ),
+            child: Text(ar ? 'حسناً، بانتظارها!' : 'Great — can\'t wait!',
+                style: const TextStyle(fontWeight: FontWeight.w900)),
+          )),
+        ]),
+      ),
+    );
+  }
+
   Future<void> _addToCart() async {
-    if (_product == null) return;
+    final ar = UellowApi.instance.lang == 'ar';
+    if (_product == null) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(ar ? 'اختر منتجاً أولاً' : 'Pick a product first')));
+      return;
+    }
+    // v2.1.50 — size-aware: if the product has sizes and none is picked,
+    // nudge (and auto-pick the recommended one when we have it).
+    final sizes = _product!.attributes
+        .where((l) => l.attributeName.en.toLowerCase().contains('size')
+            || l.attributeName.ar.contains('مقاس'))
+        .expand((l) => l.values)
+        .toList();
+    if (sizes.isNotEmpty && _selectedSize.isEmpty) {
+      if ((_recommendedSize ?? '').isNotEmpty) {
+        setState(() => _selectedSize = _recommendedSize!);
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(ar ? 'اختر المقاس أولاً' : 'Pick a size first')));
+        return;
+      }
+    }
     try {
       await UellowApi.instance.cart.add(productId: _product!.id, qty: 1);
       if (!mounted) return;
-      final ar = UellowApi.instance.lang == 'ar';
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(ar ? 'تمت الإضافة إلى السلة' : 'Added to cart')));
+        content: Text(ar
+            ? 'تمت الإضافة إلى السلة${_selectedSize.isNotEmpty ? " · مقاس $_selectedSize" : ""}'
+            : 'Added to cart${_selectedSize.isNotEmpty ? " · size $_selectedSize" : ""}'),
+        action: SnackBarAction(
+          label: ar ? 'عرض السلة' : 'View cart',
+          textColor: UellowColors.yellow,
+          onPressed: () => Navigator.pushNamed(context, Routes.cart),
+        ),
+      ));
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
@@ -246,16 +351,180 @@ class _TryOnScreenState extends State<TryOnScreen> {
   }
 
   void _share() {
-    if (_generatedImageUrl == null) return;
     final lang = UellowApi.instance.lang;
+    final ar = lang == 'ar';
     final name = _product?.name.current(lang) ?? '';
-    Share.share(lang == 'ar'
-        ? 'شاهد كيف يبدو $name علي! $_generatedImageUrl'
-        : 'Check how $name looks on me! $_generatedImageUrl');
+    // v2.1.50 — share works at every stage: generated image → product
+    // link → the app itself.
+    if (_generatedImageUrl != null) {
+      Share.share(ar
+          ? 'شاهد كيف يبدو $name علي! $_generatedImageUrl'
+          : 'Check how $name looks on me! $_generatedImageUrl');
+    } else if (_product != null) {
+      final slug = _product!.slug.isNotEmpty
+          ? _product!.slug : 'p-${_product!.id}';
+      Share.share(ar
+          ? '$name — شاهده على يلو 🛍️\n${UellowApi.instance.baseUrl}/shop/$slug'
+          : '$name — check it on Uellow 🛍️\n${UellowApi.instance.baseUrl}/shop/$slug');
+    } else {
+      Share.share(ar
+          ? 'جرّب تطبيق يلو — تسوق أذكى 🛍️\n${UellowApi.instance.baseUrl}'
+          : 'Try the Uellow app — smarter shopping 🛍️\n${UellowApi.instance.baseUrl}');
+    }
   }
 
-  void _askReviewers() {
-    Navigator.pushNamed(context, '/beena');
+  // v2.1.50 — real specialists flow (was just a redirect to Beena):
+  // lists online reviewers; Ask sends a review.request for the picked
+  // product with an automatic question.
+  Future<void> _askReviewers() async {
+    final ar = UellowApi.instance.lang == 'ar';
+    if (_product == null) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(ar ? 'اختر منتجاً أولاً' : 'Pick a product first')));
+      return;
+    }
+    List<Map<String, dynamic>> revs = const [];
+    try {
+      final r = await http.get(
+        Uri.parse('${UellowApi.instance.baseUrl}/api/mobile/v2/reviewers/online'),
+        headers: {'Accept': 'application/json'},
+      ).timeout(const Duration(seconds: 8));
+      final j = jsonDecode(utf8.decode(r.bodyBytes)) as Map<String, dynamic>;
+      if (j['success'] == true) {
+        revs = ((j['data'] as List?) ?? const [])
+            .cast<Map>().map((m) => m.cast<String, dynamic>()).toList();
+      }
+    } catch (_) {}
+    if (!mounted) return;
+    if (revs.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(
+          ar ? 'لا يوجد متخصصون متاحون حالياً' : 'No specialists online right now')));
+      return;
+    }
+    showModalBottomSheet(
+      context: context, isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => SizedBox(
+        height: MediaQuery.of(ctx).size.height * 0.65,
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(18, 16, 18, 4),
+            child: Row(children: [
+              Text(ar ? '🎓 اسأل متخصصاً' : '🎓 Ask a specialist', style: UT.h2),
+              const Spacer(),
+              IconButton(icon: const Icon(Icons.close, size: 20),
+                  onPressed: () => Navigator.pop(ctx)),
+            ]),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(18, 0, 18, 8),
+            child: Text(ar
+                ? 'سيفحص المتخصص المنتج ويرد عليك برأي موثوق قبل الشراء'
+                : 'A specialist reviews the product and replies with a trusted opinion',
+                style: const TextStyle(fontSize: 11.5,
+                    color: UellowColors.muted, height: 1.4)),
+          ),
+          Expanded(child: ListView.separated(
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 20),
+            itemCount: revs.length,
+            separatorBuilder: (_, __) => const SizedBox(height: 8),
+            itemBuilder: (_, i) {
+              final rv = revs[i];
+              return Container(
+                padding: const EdgeInsets.all(11),
+                decoration: BoxDecoration(
+                  border: Border.all(color: UellowColors.border),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(children: [
+                  Stack(children: [
+                    CircleAvatar(radius: 20,
+                        backgroundColor: const Color(0xFFE3EAF6),
+                        backgroundImage: rv['avatar'] != null
+                            ? CachedNetworkImageProvider(
+                                rv['avatar'].toString()) : null,
+                        child: rv['avatar'] == null
+                            ? const Icon(Icons.person,
+                                color: Color(0xFF1565C0)) : null),
+                    if (rv['online'] == true) Positioned(
+                        right: 0, bottom: 0,
+                        child: Container(width: 11, height: 11,
+                            decoration: BoxDecoration(
+                              color: UellowColors.success,
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                  color: Colors.white, width: 2),
+                            ))),
+                  ]),
+                  const SizedBox(width: 10),
+                  Expanded(child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                    Text((rv['name'] ?? '').toString(),
+                        maxLines: 1, overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontWeight: FontWeight.w800,
+                            fontSize: 12.5)),
+                    Text((rv['specialty'] ?? '').toString(),
+                        maxLines: 1, overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 10,
+                            color: UellowColors.muted)),
+                  ])),
+                  ElevatedButton(
+                    onPressed: () => _sendReviewerRequest(ctx, rv),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF1565C0),
+                      foregroundColor: Colors.white, elevation: 0,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 13, vertical: 7),
+                    ),
+                    child: Text(ar ? 'اطلب رأيه' : 'Ask', style:
+                        const TextStyle(fontSize: 11,
+                            fontWeight: FontWeight.w900)),
+                  ),
+                ]),
+              );
+            },
+          )),
+        ]),
+      ),
+    );
+  }
+
+  Future<void> _sendReviewerRequest(
+      BuildContext ctx, Map<String, dynamic> rv) async {
+    final ar = UellowApi.instance.lang == 'ar';
+    final token = await UellowApi.instance.tokenStore.readToken();
+    if (token == null || token.isEmpty) {
+      if (ctx.mounted) Navigator.pop(ctx);
+      if (mounted) Navigator.pushNamed(context, '/auth');
+      return;
+    }
+    try {
+      final r = await http.post(
+        Uri.parse('${UellowApi.instance.baseUrl}/api/mobile/v2/reviewers/request'),
+        headers: {'Content-Type': 'application/json',
+                  'Authorization': 'Bearer $token'},
+        body: jsonEncode({
+          'reviewer_id': rv['id'],
+          'product_id': _product!.id,
+          'session_type': 'written',
+          'note': ar
+              ? 'أفكر بشراء هذا المنتج — ما رأيك به من ناحية الجودة والمقاس؟'
+              : 'I am considering this product — your opinion on quality and sizing?',
+        }),
+      ).timeout(const Duration(seconds: 10));
+      final j = jsonDecode(utf8.decode(r.bodyBytes)) as Map<String, dynamic>;
+      if (ctx.mounted) Navigator.pop(ctx);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(
+            j['success'] == true
+                ? (ar ? '✅ أُرسل طلبك — سيصلك رد المتخصص قريباً'
+                      : '✅ Request sent — the specialist will reply soon')
+                : (ar ? 'تعذر إرسال الطلب' : 'Could not send'))));
+      }
+    } catch (_) {}
   }
 
   @override
@@ -265,12 +534,6 @@ class _TryOnScreenState extends State<TryOnScreen> {
       backgroundColor: UellowColors.bg,
       body: SafeArea(bottom: false, child: ListView(padding: EdgeInsets.zero, children: [
         _Header(ar: ar),
-        // v2.1.47 — measurements come FIRST: this screen opens from the
-        // account "My sizes" tile, so the profile is the main content.
-        _MeasurementsCard(
-          profile: _profile, loading: _profileLoading, ar: ar,
-          onEdit: _openEditMeasurements,
-        ),
         _PreviewCard(
           generatedUrl: _generatedImageUrl,
           loading: _generating, error: _error,
@@ -291,6 +554,11 @@ class _TryOnScreenState extends State<TryOnScreen> {
           onColor: (i) => setState(() => _colorIdx = i),
           onSize: (s) => setState(() => _selectedSize = s),
           ar: ar,
+        ),
+        // v2.1.50 — measurements moved to the BOTTOM per request.
+        _MeasurementsCard(
+          profile: _profile, loading: _profileLoading, ar: ar,
+          onEdit: _openEditMeasurements,
         ),
         _ActionsBar(
           ar: ar, generating: _generating,

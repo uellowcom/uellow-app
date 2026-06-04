@@ -22,6 +22,8 @@ import '../router/uellow_router.dart';
 import '../services/ads_service.dart';
 import '../theme/uellow_theme.dart';
 import '../widgets/product_card.dart';
+import '../widgets/review_prompt_dialog.dart';
+import '../widgets/update_gate.dart';
 import '../widgets/uellow_bottom_nav.dart';
 import 'dynamic_page_screen.dart';
 
@@ -44,14 +46,25 @@ class _HomeScreenState extends State<HomeScreen> {
     // (frequency-capped). Runs once per app session.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) AdsService.showOpenAds(context);
+      // v2.1.50 — post-delivery review nudge with loyalty rewards
+      // (shows only when a delivered order has unreviewed items).
+      Future.delayed(const Duration(seconds: 3), () {
+        if (mounted) ReviewPromptService.maybeShow(context);
+      });
     });
     // v2.1.29 — warm the wishlist cache so card hearts render red.
     UellowApi.instance.wishlist.warm();
     // v2.1.34 — pull app settings once: best-seller badge placement
     // ('off' / 'category' / 'related' / 'all') is backend-controlled.
-    UellowApi.instance.settings.get().then(
-        (s) => ProductCard.rankBadgeScope = s.rankBadgeScope,
-        onError: (_) {});
+    UellowApi.instance.settings.get().then((s) {
+      ProductCard.rankBadgeScope = s.rankBadgeScope;
+      // v2.1.50 — premium update gate: when the backend's min version is
+      // newer than this build, show the update sheet (blocking when
+      // force_update is ON in Mobile App → Settings).
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) UpdateGate.check(context, s);
+      });
+    }, onError: (_) {});
   }
 
   /// Fetch the builder-designed `home` page. Returns null on any failure so
