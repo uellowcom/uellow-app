@@ -1679,6 +1679,39 @@ class _DeliveryDialogState extends State<_DeliveryDialog> {
           shrinkWrap: true,
           padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
           children: [
+            // v2.1.35 — FULL delivery details: every method, its live
+            // availability, schedule note, cutoff, price and free-over.
+            if (_etaLines.isNotEmpty) ...[
+              Padding(
+                padding: const EdgeInsets.fromLTRB(0, 10, 0, 8),
+                child: Row(children: [
+                  const Icon(Icons.local_shipping_outlined,
+                      size: 16, color: UellowColors.darkBrown),
+                  const SizedBox(width: 6),
+                  Text(UellowApi.instance.lang == 'ar'
+                          ? 'خيارات التوصيل' : 'Delivery options',
+                      style: const TextStyle(fontSize: 14,
+                          fontWeight: FontWeight.w900,
+                          color: UellowColors.ink)),
+                ]),
+              ),
+              for (final l in _etaLines)
+                _methodCard(l, UellowApi.instance.lang == 'ar'),
+            ],
+            // v2.1.44 — addresses now come AFTER the delivery options.
+            Padding(
+              padding: const EdgeInsets.fromLTRB(0, 10, 0, 8),
+              child: Row(children: [
+                const Icon(Icons.location_on_outlined,
+                    size: 16, color: UellowColors.darkBrown),
+                const SizedBox(width: 6),
+                Text(UellowApi.instance.lang == 'ar'
+                        ? 'عناويني' : 'My addresses',
+                    style: const TextStyle(fontSize: 14,
+                        fontWeight: FontWeight.w900,
+                        color: UellowColors.ink)),
+              ]),
+            ),
             FutureBuilder<List<UellowAddress>>(
               future: _future,
               builder: (_, snap) {
@@ -1737,25 +1770,6 @@ class _DeliveryDialogState extends State<_DeliveryDialog> {
                 ]);
               },
             ),
-            // v2.1.35 — FULL delivery details: every method, its live
-            // availability, schedule note, cutoff, price and free-over.
-            if (_etaLines.isNotEmpty) ...[
-              Padding(
-                padding: const EdgeInsets.fromLTRB(0, 10, 0, 8),
-                child: Row(children: [
-                  const Icon(Icons.local_shipping_outlined,
-                      size: 16, color: UellowColors.darkBrown),
-                  const SizedBox(width: 6),
-                  Text(UellowApi.instance.lang == 'ar'
-                          ? 'خيارات التوصيل' : 'Delivery options',
-                      style: const TextStyle(fontSize: 14,
-                          fontWeight: FontWeight.w900,
-                          color: UellowColors.ink)),
-                ]),
-              ),
-              for (final l in _etaLines)
-                _methodCard(l, UellowApi.instance.lang == 'ar'),
-            ],
           ],
         )),
         Padding(padding: const EdgeInsets.fromLTRB(18, 10, 18, 18),
