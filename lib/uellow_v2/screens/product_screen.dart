@@ -2932,7 +2932,7 @@ class _RelatedInfiniteState extends State<_RelatedInfinite> {
             ),
             itemCount: _items.length,
             // v2.1.33 — rich card everywhere products grid.
-            itemBuilder: (_, i) => ProductCard(rich: true, product: _items[i]),
+            itemBuilder: (_, i) => ProductCard(rich: true, surface: 'related', product: _items[i]),
           ),
           if (_loading && _items.isNotEmpty) const Padding(
             padding: EdgeInsets.symmetric(vertical: 10),

@@ -212,7 +212,7 @@ class _CollectionScreenState extends State<CollectionScreen> {
 
   Widget _gridItem(int i) {
     final n = _adInterval();
-    if (n == 0) return ProductCard(rich: true, product: _items[i]);
+    if (n == 0) return ProductCard(rich: true, surface: 'category', product: _items[i]);
     final block = i ~/ (n + 1);
     final inBlock = i % (n + 1);
     if (inBlock == n) {
@@ -220,7 +220,7 @@ class _CollectionScreenState extends State<CollectionScreen> {
     }
     final pIdx = block * n + inBlock;
     if (pIdx < _items.length) {
-      return ProductCard(rich: true, product: _items[pIdx]);
+      return ProductCard(rich: true, surface: 'category', product: _items[pIdx]);
     }
     return const SizedBox.shrink();
   }

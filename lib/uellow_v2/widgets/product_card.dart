@@ -31,7 +31,13 @@ class ProductCard extends StatefulWidget {
     this.hideSavePill = false,
     this.hideDiscount = false,
     this.rich = false,
+    this.surface = 'site',
   });
+
+  // v2.1.34 — backend-controlled "Best seller" placement. Loaded from
+  // /app/settings (mobile.app.setting.rank_badge_scope):
+  //   'off' (default) · 'category' · 'related' · 'all'.
+  static String rankBadgeScope = 'off';
 
   final UellowProductCard product;
   final bool showStockLabel;
@@ -48,6 +54,10 @@ class ProductCard extends StatefulWidget {
   // v2.1.26 — rich layout (category page): coins row, rating+price-trend
   // row, auto-rotating info ticker, availability/FREE/video bottom row.
   final bool rich;
+  // v2.1.34 — where this card lives: 'category' | 'related' | 'site'.
+  // Matched against [rankBadgeScope] to decide if the quiet best-seller
+  // line renders under the name.
+  final String surface;
 
   @override
   State<ProductCard> createState() => _ProductCardState();
@@ -72,6 +82,11 @@ class _ProductCardState extends State<ProductCard> {
     final discountPct = product.discountPct;
     final saveAmount = hasDiscount
         ? product.comparePrice!.amount - product.price.amount : 0.0;
+    // v2.1.34 — quiet best-seller line under the name, gated by the
+    // backend placement setting (off / category / related / all).
+    final showRank = product.rank != null &&
+        (ProductCard.rankBadgeScope == 'all' ||
+         ProductCard.rankBadgeScope == widget.surface);
 
     return GestureDetector(
       onTap: widget.onTap ?? () => UellowRouter.goProduct(context, product.id),
@@ -87,7 +102,8 @@ class _ProductCardState extends State<ProductCard> {
         child: widget.rich
           ? _RichLayout(product: product, lang: lang,
               hasDiscount: hasDiscount, discountPct: discountPct,
-              saveAmount: saveAmount, faved: _faved, onFav: _toggleFav)
+              saveAmount: saveAmount, faved: _faved, onFav: _toggleFav,
+              showRank: showRank)
           : widget.inFlashSale
           ? _FlashLayout(product: product, lang: lang,
               hasDiscount: hasDiscount, discountPct: discountPct,
@@ -102,7 +118,8 @@ class _ProductCardState extends State<ProductCard> {
               showStockLabel: widget.hideSavePill ? false : widget.showStockLabel,
               hideSavePill: widget.hideSavePill,
               compact: widget.compact,
-              faved: _faved, onFav: _toggleFav),
+              faved: _faved, onFav: _toggleFav,
+              showRank: showRank),
       ),
     );
   }
@@ -138,6 +155,7 @@ class _StdLayout extends StatelessWidget {
     required this.saveAmount, required this.showStockLabel,
     required this.faved, required this.onFav,
     this.compact = false, this.hideSavePill = false,
+    this.showRank = false,
   });
   final UellowProductCard product;
   final String lang;
@@ -153,6 +171,8 @@ class _StdLayout extends StatelessWidget {
   // price (not the current price) so "what you save" reads as a unit.
   final bool compact;
   final bool hideSavePill;
+  // v2.1.34 — quiet best-seller line under the name (no background).
+  final bool showRank;
 
   @override
   Widget build(BuildContext context) {
@@ -175,12 +195,28 @@ class _StdLayout extends StatelessWidget {
             children: [
               SizedBox(
                 height: nameH,
-                child: Text(product.name.current(lang),
-                    maxLines: 2, overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: nameFs, height: 1.25,
-                      color: UellowColors.ink, fontWeight: FontWeight.w700,
-                    )),
+                // v2.1.34 — when the rank line shows, the name drops to 1
+                // line so the card's total height never changes.
+                child: showRank
+                    ? Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(product.name.current(lang),
+                              maxLines: 1, overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: nameFs, height: 1.25,
+                                color: UellowColors.ink,
+                                fontWeight: FontWeight.w700,
+                              )),
+                          const SizedBox(height: 1),
+                          _RankLine(product: product),
+                        ])
+                    : Text(product.name.current(lang),
+                        maxLines: 2, overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: nameFs, height: 1.25,
+                          color: UellowColors.ink, fontWeight: FontWeight.w700,
+                        )),
               ),
               SizedBox(height: compact ? 2 : 4),
               // Current price + currency, then (if discounted) compare price
@@ -322,6 +358,25 @@ class _StatsRow extends StatelessWidget {
       ]);
     }
     return Row(children: children);
+  }
+}
+
+// v2.1.34 — quiet best-seller line: plain gold text under the product
+// name, no background, no shadow. Placement controlled from the backend
+// (ProductCard.rankBadgeScope).
+class _RankLine extends StatelessWidget {
+  const _RankLine({required this.product});
+  final UellowProductCard product;
+  @override
+  Widget build(BuildContext context) {
+    final ar = UellowApi.instance.lang.toLowerCase().startsWith('ar');
+    final label = (((product.rank?['label'] as Map?)?[ar ? 'ar' : 'en'])
+        ?? '').toString();
+    if (label.isEmpty) return const SizedBox.shrink();
+    return Text('🏆 $label',
+        maxLines: 1, overflow: TextOverflow.ellipsis,
+        style: const TextStyle(fontSize: 8.5, height: 1.2,
+            fontWeight: FontWeight.w700, color: Color(0xFFB8860B)));
   }
 }
 
@@ -508,37 +563,9 @@ class _Image extends StatelessWidget {
               ]),
             ),
           ),
-          // v2.1.24 — Best Seller rank badge (gold, Amazon-style).
-          if (product.rank != null && !clean) Positioned(
-            top: 8, left: 8, right: 8,
-            child: Align(
-              alignment: AlignmentDirectional.topStart,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                      colors: [Color(0xFFFFD700), Color(0xFFE8A800)]),
-                  borderRadius: BorderRadius.circular(6),
-                  boxShadow: const [BoxShadow(
-                    color: Color(0x44000000), blurRadius: 4, offset: Offset(0, 2),
-                  )],
-                ),
-                child: Row(mainAxisSize: MainAxisSize.min, children: [
-                  const Text('🏆', style: TextStyle(fontSize: 9)),
-                  const SizedBox(width: 3),
-                  Flexible(child: Text(
-                      (((product.rank!['label'] as Map?)?[
-                          UellowApi.instance.lang.toLowerCase().startsWith('ar')
-                              ? 'ar' : 'en']) ?? '').toString(),
-                      maxLines: 1, overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Color(0xFF412402), fontSize: 8.5,
-                        fontWeight: FontWeight.w900, letterSpacing: 0.2,
-                      ))),
-                ]),
-              ),
-            ),
-          ),
+          // v2.1.34 — rank badge REMOVED from the photo: it now renders as
+          // a quiet text line under the name (see _RankLine), gated by the
+          // backend rank_badge_scope setting.
           // v2.0.82 — Free shipping badge (when the product is tagged)
           if (product.badges.contains('free_shipping') && !clean) Positioned(
             bottom: 8, left: 8,
@@ -690,6 +717,7 @@ class _RichLayout extends StatelessWidget {
     required this.product, required this.lang,
     required this.hasDiscount, required this.discountPct,
     required this.saveAmount, required this.faved, required this.onFav,
+    this.showRank = false,
   });
   final UellowProductCard product;
   final String lang;
@@ -698,6 +726,8 @@ class _RichLayout extends StatelessWidget {
   final double saveAmount;
   final bool faved;
   final VoidCallback onFav;
+  // v2.1.34 — quiet best-seller line under the name (no background).
+  final bool showRank;
 
   // v2.1.32 — ALL bottom badges in priority order. The first 3 live in
   // the bottom row; everything beyond overflows onto the photo
@@ -726,10 +756,8 @@ class _RichLayout extends StatelessWidget {
       out.add(coin('⚡', ar ? 'عرض' : 'SALE',
           const Color(0xFFFFEBEE), const Color(0xFFC62828)));
     }
-    if ((product.rank?['rank'] ?? 99) == 1) {
-      out.add(coin('🏆', ar ? 'الأفضل' : 'BEST',
-          const Color(0xFFFFF8E1), const Color(0xFF8B6508)));
-    }
+    // v2.1.34 — 🏆 BEST coin removed: the rank now renders as a quiet
+    // text line under the name (backend-controlled placement).
     if (product.badges.contains('new')) {
       out.add(coin('✨', ar ? 'جديد' : 'NEW',
           const Color(0xFFE3F2FD), const Color(0xFF1565C0)));
@@ -779,8 +807,13 @@ class _RichLayout extends StatelessWidget {
         Padding(
           padding: const EdgeInsets.fromLTRB(8, 4, 8, 6),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            // ── name (2 lines) — promo coin inline BEFORE the name ──
-            SizedBox(height: 30, child: Text.rich(TextSpan(children: [
+            // ── name (2 lines) — promo coin inline BEFORE the name.
+            // v2.1.34 — with the rank line shown, the name drops to 1
+            // line so the card height never changes.
+            SizedBox(height: 30, child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+              Text.rich(TextSpan(children: [
               if (product.promo != null) WidgetSpan(
                 alignment: PlaceholderAlignment.middle,
                 child: Container(
@@ -803,9 +836,15 @@ class _RichLayout extends StatelessWidget {
               ),
               TextSpan(text: product.name.current(lang)),
             ]),
-                maxLines: 2, overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 11, height: 1.25,
-                    color: UellowColors.ink, fontWeight: FontWeight.w700))),
+                  maxLines: showRank ? 1 : 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 11, height: 1.25,
+                      color: UellowColors.ink, fontWeight: FontWeight.w700)),
+              if (showRank) ...[
+                const SizedBox(height: 1),
+                _RankLine(product: product),
+              ],
+            ])),
             const SizedBox(height: 2),
             // ── price row ──
             Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
@@ -876,7 +915,8 @@ class _RichLayout extends StatelessWidget {
             // ── rotating info ticker ──
             SizedBox(height: 14, child: _InfoTicker(
                 product: product, ar: ar,
-                saveAmount: hasDiscount ? saveAmount : 0)),
+                saveAmount: hasDiscount ? saveAmount : 0,
+                showRank: showRank)),
             const SizedBox(height: 3),
             // ── bottom: max 3 badges; the rest moved onto the photo ──
             SizedBox(height: 17, child: Row(children: [
@@ -906,10 +946,12 @@ Color _hex(Object? raw, Color fallback) {
 /// card's soft facts: save amount, fast delivery, views, sales, rank.
 class _InfoTicker extends StatefulWidget {
   const _InfoTicker({required this.product, required this.ar,
-      required this.saveAmount});
+      required this.saveAmount, this.showRank = false});
   final UellowProductCard product;
   final bool ar;
   final double saveAmount;
+  // v2.1.34 — rank phrase obeys the backend placement setting too.
+  final bool showRank;
   @override
   State<_InfoTicker> createState() => _InfoTickerState();
 }
@@ -939,7 +981,7 @@ class _InfoTickerState extends State<_InfoTicker> {
       if (p.soldCount > 0)
         (ar ? '✅ أكثر من ${_fmt(p.soldCount)} عملية شراء'
             : '✅ Over ${_fmt(p.soldCount)} purchases'),
-      if (p.rank != null)
+      if (p.rank != null && widget.showRank)
         (ar ? '🏆 الأفضل مبيعاً في ${_short((p.rank!['category'] as Map?)?['ar'] ?? '')}'
             : '🏆 Best seller in ${_short((p.rank!['category'] as Map?)?['en'] ?? '')}'),
     ];

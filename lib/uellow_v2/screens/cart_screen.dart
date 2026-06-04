@@ -9,6 +9,7 @@ import 'package:share_plus/share_plus.dart';
 
 import '../../api/uellow_api.dart';
 import '../../api/uellow_models.dart';
+import '../router/uellow_router.dart';
 import '../theme/uellow_theme.dart';
 
 class CartScreen extends StatefulWidget {
@@ -334,7 +335,10 @@ class _LineCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final lang = UellowApi.instance.lang;
     return GestureDetector(
-      onTap: selectMode ? onSelectToggle : null,
+      // v2.1.34 — tapping a cart line opens its product page.
+      onTap: selectMode
+          ? onSelectToggle
+          : () => UellowRouter.goProduct(context, line.productId),
       child: Container(
       margin: const EdgeInsets.fromLTRB(14, 10, 14, 0),
       padding: const EdgeInsets.all(12),
@@ -372,7 +376,8 @@ class _LineCard extends StatelessWidget {
             Text(line.unitPrice.format(), style: const TextStyle(
                 fontSize: 15, fontWeight: FontWeight.w900, color: UellowColors.ink)),
             const SizedBox(width: 6),
-            const Text('/ pc', style: TextStyle(
+            // v2.1.34 — "pc" was English-only; bilingual now.
+            Text(lang == 'ar' ? '/ قطعة' : '/ pc', style: const TextStyle(
                 fontSize: 10, color: UellowColors.muted)),
             const Spacer(),
             _QtyBox(qty: line.qty.toInt(), onChange: (n) => onUpdate(line.id, n)),
@@ -495,8 +500,10 @@ class _DeliveryBar extends StatelessWidget {
         )),
         const SizedBox(height: 6),
         Container(
-          height: 6,
-          decoration: BoxDecoration(color: Colors.white,
+          height: 8,
+          // v2.1.34 — light-green track so "done vs remaining" reads at a
+          // glance: solid green = collected, light green = still to add.
+          decoration: BoxDecoration(color: const Color(0xFFD7F0DF),
               borderRadius: BorderRadius.circular(999)),
           child: FractionallySizedBox(
             alignment: Alignment.centerLeft, widthFactor: info.progress.clamp(0, 1),

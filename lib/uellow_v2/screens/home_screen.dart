@@ -47,6 +47,11 @@ class _HomeScreenState extends State<HomeScreen> {
     });
     // v2.1.29 — warm the wishlist cache so card hearts render red.
     UellowApi.instance.wishlist.warm();
+    // v2.1.34 — pull app settings once: best-seller badge placement
+    // ('off' / 'category' / 'related' / 'all') is backend-controlled.
+    UellowApi.instance.settings.get().then(
+        (s) => ProductCard.rankBadgeScope = s.rankBadgeScope,
+        onError: (_) {});
   }
 
   /// Fetch the builder-designed `home` page. Returns null on any failure so

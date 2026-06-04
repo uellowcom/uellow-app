@@ -185,42 +185,56 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       title: Text(ar ? 'المتابعة كزائر؟' : 'Continue as guest?',
           style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900,
               color: UellowColors.darkBrown)),
-      content: Text(ar
-          ? 'بدون حساب ستفقد: متابعة حالة الطلب، نقاط الولاء والمكافآت، '
-            'حفظ العناوين، وسجلّ مشترياتك. يمكنك إنشاء حساب في ثوانٍ.'
-          : 'Without an account you lose: order tracking, loyalty points '
-            'and rewards, saved addresses, and your purchase history. '
-            'Creating an account takes seconds.',
-          style: const TextStyle(fontSize: 13, height: 1.5)),
-      actionsAlignment: MainAxisAlignment.spaceBetween,
-      actions: [
-        TextButton(
-          onPressed: () {
-            Navigator.pop(dctx);
-            setState(() {
-              _guestMode = true;
-              _data = _bootstrap();
-            });
-          },
-          child: Text(ar ? 'الاستمرار كزائر' : 'Continue as guest',
-              style: const TextStyle(color: UellowColors.muted,
-                  fontSize: 12.5, fontWeight: FontWeight.w600)),
-        ),
-        ElevatedButton.icon(
-          onPressed: () async {
-            Navigator.pop(dctx);
-            final ok = await showAuthSheet(context);
-            if (ok && mounted) setState(() => _data = _bootstrap());
-          },
-          icon: const Icon(Icons.login, size: 15),
-          label: Text(ar ? 'تسجيل الدخول' : 'Sign in',
-              style: const TextStyle(fontWeight: FontWeight.w900)),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: UellowColors.yellow,
-            foregroundColor: UellowColors.darkBrown,
-          ),
-        ),
-      ],
+      // v2.1.34 — both buttons on ONE row (AlertDialog actions stacked
+      // them vertically when the labels were too wide), so they moved
+      // into the content column as a side-by-side Row.
+      content: Column(mainAxisSize: MainAxisSize.min, children: [
+        Text(ar
+            ? 'بدون حساب ستفقد: متابعة حالة الطلب، نقاط الولاء والمكافآت، '
+              'حفظ العناوين، وسجلّ مشترياتك. يمكنك إنشاء حساب في ثوانٍ.'
+            : 'Without an account you lose: order tracking, loyalty points '
+              'and rewards, saved addresses, and your purchase history. '
+              'Creating an account takes seconds.',
+            style: const TextStyle(fontSize: 13, height: 1.5)),
+        const SizedBox(height: 16),
+        Row(children: [
+          Expanded(child: OutlinedButton(
+            onPressed: () {
+              Navigator.pop(dctx);
+              setState(() {
+                _guestMode = true;
+                _data = _bootstrap();
+              });
+            },
+            style: OutlinedButton.styleFrom(
+              foregroundColor: UellowColors.muted,
+              side: const BorderSide(color: UellowColors.border),
+              padding: const EdgeInsets.symmetric(vertical: 10),
+            ),
+            child: Text(ar ? 'الاستمرار كزائر' : 'Continue as guest',
+                maxLines: 1, overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                    fontSize: 11.5, fontWeight: FontWeight.w700)),
+          )),
+          const SizedBox(width: 8),
+          Expanded(child: ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(dctx);
+              final ok = await showAuthSheet(context);
+              if (ok && mounted) setState(() => _data = _bootstrap());
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: UellowColors.yellow,
+              foregroundColor: UellowColors.darkBrown,
+              padding: const EdgeInsets.symmetric(vertical: 10),
+            ),
+            child: Text(ar ? 'تسجيل الدخول' : 'Sign in',
+                maxLines: 1, overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                    fontSize: 12, fontWeight: FontWeight.w900)),
+          )),
+        ]),
+      ]),
     ));
   }
 

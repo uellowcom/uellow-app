@@ -1370,6 +1370,9 @@ class UellowAppSettings {
   final String supportPhone;
   final String whatsapp;
   final bool guestCheckout;
+  // v2.1.34 — where the quiet best-seller line shows on product cards:
+  // 'off' | 'category' | 'related' | 'all' (backend-controlled).
+  final String rankBadgeScope;
   final String googleClientId;
   final bool forceUpdate;
   final String minVersion;
@@ -1383,6 +1386,7 @@ class UellowAppSettings {
     required this.appName, this.logoUrl, required this.primaryColor,
     required this.darkColor, required this.supportEmail, required this.supportPhone,
     required this.whatsapp, this.guestCheckout = false,
+    this.rankBadgeScope = 'off',
     this.googleClientId = '',
     required this.forceUpdate, required this.minVersion,
     required this.maintenance, required this.maintenanceMessage,
@@ -1398,6 +1402,7 @@ class UellowAppSettings {
         supportPhone: (j['support_phone'] ?? '').toString(),
         whatsapp: (j['whatsapp'] ?? '').toString(),
         guestCheckout: j['guest_checkout'] == true,
+        rankBadgeScope: (j['rank_badge_scope'] ?? 'off').toString(),
         googleClientId: (j['google_client_id'] ?? '').toString(),
         forceUpdate: (j['force_update'] ?? false) as bool,
         minVersion: (j['min_version'] ?? '').toString(),

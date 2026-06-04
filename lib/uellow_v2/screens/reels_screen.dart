@@ -503,7 +503,16 @@ class _ReelSlideState extends State<_ReelSlide> with RouteAware {
     _resumeIfActive();
   }
 
-  void _openComments() {
+  void _openComments() async {
+    // v2.1.34 — comments are for registered users ONLY: guests get the
+    // sign-in sheet before the comments sheet even opens.
+    final token = await UellowApi.instance.tokenStore.readToken();
+    if (token == null || token.isEmpty) {
+      if (!mounted) return;
+      final ok = await showAuthSheet(context);
+      if (!ok || !mounted) return;
+    }
+    if (!mounted) return;
     _pause();
     showModalBottomSheet(
       context: context,

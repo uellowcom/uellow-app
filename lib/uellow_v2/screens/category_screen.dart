@@ -470,7 +470,9 @@ class _LatestSlider extends StatelessWidget {
           ]),
         ),
         SizedBox(
-          height: 245,
+          // v2.1.34 — 245→212: the compact card (no save/avail row) left a
+          // big empty white band under the price; height now hugs content.
+          height: 212,
           child: FutureBuilder<List<UellowProductCard>>(
             future: products,
             builder: (_, snap) {
@@ -492,6 +494,7 @@ class _LatestSlider extends StatelessWidget {
                 itemBuilder: (_, i) => SizedBox(
                   width: 140, child: ProductCard(
                       product: items[i],
+                      surface: 'category',
                       compact: true,
                       hideSavePill: true,
                       hideDiscount: true)),
@@ -534,7 +537,7 @@ class _ProductsGrid extends StatelessWidget {
             // card, no Save/Avail row, no discount badge/pill, smaller
             // fonts. The clean grid the user asked for.
             itemBuilder: (_, i) => ProductCard(
-                product: items[i],
+                product: items[i], surface: 'category',
                 compact: true, hideSavePill: true, hideDiscount: true),
           ),
         );
