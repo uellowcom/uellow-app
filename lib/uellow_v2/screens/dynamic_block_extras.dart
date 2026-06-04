@@ -2206,6 +2206,11 @@ class PillFilterBlock extends StatelessWidget {
 }
 
 // ─── Helper duplicated here to avoid circular import of `_openLink` ─────────
+// v2.1.40 — public wrapper: other screens (e.g. the flash block) route
+// builder link maps {type, value} through the same logic.
+void openBlockLink(BuildContext c, Map<String, dynamic>? link) =>
+    _openLink(c, link);
+
 void _openLink(BuildContext c, Map<String, dynamic>? link) {
   if (link == null) return;
   final type = link['type']?.toString();

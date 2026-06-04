@@ -1640,15 +1640,27 @@ class _FlashBlock extends StatelessWidget {
             ? linkedLabel
             : (ar ? 'فلاش سيل' : 'Flash Sale'));
     switch (variant) {
-      case 'dark':    return _FlashDark(items: items, title: title, ar: ar, endsAt: endsAt);
-      case 'minimal': return _FlashMinimal(items: items, title: title, ar: ar, endsAt: endsAt);
-      case 'hero':    return _FlashHero(items: items, title: title, ar: ar, endsAt: endsAt);
+      case 'dark':    return _FlashDark(items: items, title: title, ar: ar, endsAt: endsAt, onOpen: _open);
+      case 'minimal': return _FlashMinimal(items: items, title: title, ar: ar, endsAt: endsAt, onOpen: _open);
+      case 'hero':    return _FlashHero(items: items, title: title, ar: ar, endsAt: endsAt, onOpen: _open);
       // v2.1.36 — new promo designs:
-      case 'royal':   return _FlashRoyal(items: items, title: title, ar: ar, endsAt: endsAt);
-      case 'custom':  return _FlashCustom(items: items, title: title, ar: ar, endsAt: endsAt, p: p);
+      case 'royal':   return _FlashRoyal(items: items, title: title, ar: ar, endsAt: endsAt, onOpen: _open);
+      case 'custom':  return _FlashCustom(items: items, title: title, ar: ar, endsAt: endsAt, p: p, onOpen: _open);
       case 'classic':
-      default:        return _FlashClassic(items: items, title: title, ar: ar, endsAt: endsAt);
+      default:        return _FlashClassic(items: items, title: title, ar: ar, endsAt: endsAt, onOpen: _open);
     }
+  }
+
+  // v2.1.40 — tap target: a builder-designed promotion PAGE (props.link
+  // set from the builder) wins over the default /flash screen. So you can
+  // design a campaign landing page and point this block at it.
+  void _open(BuildContext context) {
+    final l = (p['link'] as Map?)?.cast<String, dynamic>();
+    if (l != null && (l['value'] ?? '').toString().isNotEmpty) {
+      openBlockLink(context, l);
+      return;
+    }
+    Navigator.pushNamed(context, Routes.flash);
   }
 
   static Duration _parseEndsAt(dynamic v) {
@@ -1666,15 +1678,16 @@ class _FlashBlock extends StatelessWidget {
 // ── Variant: CLASSIC (the legacy yellow/orange one) ────────────────────────
 
 class _FlashClassic extends StatelessWidget {
-  const _FlashClassic({required this.items, required this.title, required this.ar, required this.endsAt});
+  const _FlashClassic({required this.items, required this.title, required this.ar, required this.endsAt, required this.onOpen});
   final List<UellowProductCard> items;
   final String title;
   final bool ar;
   final Duration endsAt;
+  final void Function(BuildContext) onOpen;
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: () => Navigator.pushNamed(context, Routes.flash),
+      onTap: () => onOpen(context),
       child: Container(
         margin: const EdgeInsets.fromLTRB(8, 4, 8, 8),
         decoration: BoxDecoration(
@@ -1751,15 +1764,16 @@ class _FlashClassic extends StatelessWidget {
 // ── Variant: DARK — premium black/neon ────────────────────────────────────
 
 class _FlashDark extends StatelessWidget {
-  const _FlashDark({required this.items, required this.title, required this.ar, required this.endsAt});
+  const _FlashDark({required this.items, required this.title, required this.ar, required this.endsAt, required this.onOpen});
   final List<UellowProductCard> items;
   final String title;
   final bool ar;
   final Duration endsAt;
+  final void Function(BuildContext) onOpen;
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: () => Navigator.pushNamed(context, Routes.flash),
+      onTap: () => onOpen(context),
       child: Container(
         margin: const EdgeInsets.fromLTRB(8, 4, 8, 8),
         decoration: BoxDecoration(
@@ -1820,11 +1834,12 @@ class _FlashDark extends StatelessWidget {
 // ── Variant: MINIMAL — clean, red accents ─────────────────────────────────
 
 class _FlashMinimal extends StatelessWidget {
-  const _FlashMinimal({required this.items, required this.title, required this.ar, required this.endsAt});
+  const _FlashMinimal({required this.items, required this.title, required this.ar, required this.endsAt, required this.onOpen});
   final List<UellowProductCard> items;
   final String title;
   final bool ar;
   final Duration endsAt;
+  final void Function(BuildContext) onOpen;
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -1853,7 +1868,7 @@ class _FlashMinimal extends StatelessWidget {
             _DhmsCounter(initial: endsAt, minimal: true),
             const SizedBox(width: 8),
             TextButton(
-              onPressed: () => Navigator.pushNamed(context, Routes.flash),
+              onPressed: () => onOpen(context),
               style: TextButton.styleFrom(
                   foregroundColor: const Color(0xFFC0392B),
                   textStyle: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w800),
@@ -1882,15 +1897,16 @@ class _FlashMinimal extends StatelessWidget {
 // ── Variant: ROYAL — premium deep-purple & gold (v2.1.36) ─────────────────
 
 class _FlashRoyal extends StatelessWidget {
-  const _FlashRoyal({required this.items, required this.title, required this.ar, required this.endsAt});
+  const _FlashRoyal({required this.items, required this.title, required this.ar, required this.endsAt, required this.onOpen});
   final List<UellowProductCard> items;
   final String title;
   final bool ar;
   final Duration endsAt;
+  final void Function(BuildContext) onOpen;
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: () => Navigator.pushNamed(context, Routes.flash),
+      onTap: () => onOpen(context),
       child: Container(
         margin: const EdgeInsets.fromLTRB(8, 4, 8, 8),
         decoration: BoxDecoration(
@@ -1966,12 +1982,14 @@ Color _flashHexColor(dynamic raw, Color fallback) {
 
 class _FlashCustom extends StatelessWidget {
   const _FlashCustom({required this.items, required this.title,
-      required this.ar, required this.endsAt, required this.p});
+      required this.ar, required this.endsAt, required this.p,
+      required this.onOpen});
   final List<UellowProductCard> items;
   final String title;
   final bool ar;
   final Duration endsAt;
   final Map<String, dynamic> p;
+  final void Function(BuildContext) onOpen;
   @override
   Widget build(BuildContext context) {
     final c1 = _flashHexColor(p['flash_c1'], const Color(0xFFF5C320));
@@ -1985,7 +2003,7 @@ class _FlashCustom extends StatelessWidget {
     final emoji = ((p['flash_emoji'] ?? '⚡').toString());
     final badge = _tx(p, ar, 'flash_badge', '');
     return GestureDetector(
-      onTap: () => Navigator.pushNamed(context, Routes.flash),
+      onTap: () => onOpen(context),
       child: Container(
         margin: const EdgeInsets.fromLTRB(8, 4, 8, 8),
         decoration: BoxDecoration(
@@ -2058,11 +2076,12 @@ class _FlashCustom extends StatelessWidget {
 // ── Variant: HERO — full-bleed single-product spotlight ───────────────────
 
 class _FlashHero extends StatefulWidget {
-  const _FlashHero({required this.items, required this.title, required this.ar, required this.endsAt});
+  const _FlashHero({required this.items, required this.title, required this.ar, required this.endsAt, required this.onOpen});
   final List<UellowProductCard> items;
   final String title;
   final bool ar;
   final Duration endsAt;
+  final void Function(BuildContext) onOpen;
   @override
   State<_FlashHero> createState() => _FlashHeroState();
 }
