@@ -265,6 +265,12 @@ class _TryOnScreenState extends State<TryOnScreen> {
       backgroundColor: UellowColors.bg,
       body: SafeArea(bottom: false, child: ListView(padding: EdgeInsets.zero, children: [
         _Header(ar: ar),
+        // v2.1.47 — measurements come FIRST: this screen opens from the
+        // account "My sizes" tile, so the profile is the main content.
+        _MeasurementsCard(
+          profile: _profile, loading: _profileLoading, ar: ar,
+          onEdit: _openEditMeasurements,
+        ),
         _PreviewCard(
           generatedUrl: _generatedImageUrl,
           loading: _generating, error: _error,
@@ -285,10 +291,6 @@ class _TryOnScreenState extends State<TryOnScreen> {
           onColor: (i) => setState(() => _colorIdx = i),
           onSize: (s) => setState(() => _selectedSize = s),
           ar: ar,
-        ),
-        _MeasurementsCard(
-          profile: _profile, loading: _profileLoading, ar: ar,
-          onEdit: _openEditMeasurements,
         ),
         _ActionsBar(
           ar: ar, generating: _generating,
@@ -701,91 +703,199 @@ class _MeasurementsCard extends StatelessWidget {
   final bool loading;
   final bool ar;
   final VoidCallback onEdit;
+
+  static const _metrics = [
+    ('height',      Icons.height,                  'Height',     'الطول',          'cm'),
+    ('weight',      Icons.monitor_weight_outlined, 'Weight',     'الوزن',          'kg'),
+    ('chest',       Icons.accessibility_new,       'Chest',      'الصدر',          'cm'),
+    ('waist',       Icons.straighten,              'Waist',      'الخصر',          'cm'),
+    ('shoulder',    Icons.open_in_full,            'Shoulder',   'الأكتاف',        'cm'),
+    ('hip',         Icons.airline_seat_recline_normal, 'Hip',    'الورك',          'cm'),
+    ('arm_length',  Icons.pan_tool_alt_outlined,   'Arm',        'طول الذراع',     'cm'),
+    ('inseam',      Icons.airline_seat_legroom_extra, 'Inseam',  'الساق الداخلية', 'cm'),
+    ('thigh',       Icons.linear_scale,            'Thigh',      'الفخذ',          'cm'),
+    ('shoe_size_eu',Icons.do_not_step_outlined,    'Shoe EU',    'الحذاء EU',      ''),
+  ];
+
+  bool _has(dynamic v) =>
+      v != null && v != false && v != '' && !(v is num && v == 0);
+
+  String _fmtNum(dynamic v) {
+    if (v is num) {
+      return v == v.roundToDouble()
+          ? v.toInt().toString() : v.toStringAsFixed(1);
+    }
+    return '$v';
+  }
+
   @override
   Widget build(BuildContext context) {
+    final pct = ((profile?['completion_pct'] as num?)?.toDouble() ?? 0)
+        .clamp(0, 100).toDouble();
+    final filled = profile == null ? 0 : _metrics
+        .where((m) => _has(profile![m.$1])).length;
     return Container(
-      margin: const EdgeInsets.fromLTRB(14, 10, 14, 0),
-      padding: const EdgeInsets.all(14),
-      decoration: const BoxDecoration(
+      margin: const EdgeInsets.fromLTRB(14, 12, 14, 0),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.all(Radius.circular(14)),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFF1ECE0)),
+        boxShadow: const [BoxShadow(color: Color(0x0A000000),
+            blurRadius: 10, offset: Offset(0, 3))],
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        // ── calm header: icon · title/subtitle · completion ring ──
         Row(children: [
-          const Icon(Icons.straighten, size: 16, color: UellowColors.darkBrown),
-          const SizedBox(width: 6),
-          Expanded(child: Text(ar ? 'مقاساتك' : 'Your measurements',
-              style: UT.h3)),
-          TextButton.icon(
-            onPressed: onEdit,
-            icon: const Icon(Icons.edit_outlined, size: 14),
-            label: Text(ar ? 'تعديل' : 'Edit',
-                style: const TextStyle(fontWeight: FontWeight.w800)),
-            style: TextButton.styleFrom(foregroundColor: UellowColors.darkBrown),
+          Container(
+            width: 38, height: 38, alignment: Alignment.center,
+            decoration: const BoxDecoration(
+                color: Color(0xFFF7F3E8), shape: BoxShape.circle),
+            child: const Icon(Icons.straighten,
+                size: 18, color: UellowColors.darkBrown),
+          ),
+          const SizedBox(width: 10),
+          Expanded(child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(ar ? 'مقاساتي' : 'My measurements',
+                style: const TextStyle(fontSize: 15,
+                    fontWeight: FontWeight.w900, color: UellowColors.ink)),
+            Text(ar
+                    ? 'محفوظة في حسابك وتُستخدم لاقتراح المقاس المناسب'
+                    : 'Saved to your account — used for size advice',
+                style: const TextStyle(fontSize: 10.5,
+                    color: UellowColors.muted, height: 1.3)),
+          ])),
+          if (profile != null) SizedBox(
+            width: 44, height: 44,
+            child: Stack(alignment: Alignment.center, children: [
+              SizedBox(width: 44, height: 44,
+                  child: CircularProgressIndicator(
+                    value: pct / 100, strokeWidth: 4,
+                    backgroundColor: const Color(0xFFF1ECE0),
+                    color: pct >= 100
+                        ? UellowColors.successDk : UellowColors.yellow,
+                  )),
+              Text('${pct.toInt()}%', style: const TextStyle(
+                  fontSize: 10, fontWeight: FontWeight.w900,
+                  color: UellowColors.darkBrown)),
+            ]),
           ),
         ]),
-        const SizedBox(height: 6),
-        if (loading) const Padding(padding: EdgeInsets.all(20),
-            child: Center(child: CircularProgressIndicator(
-                color: UellowColors.darkBrown)))
-        else if (profile == null) Text(ar
-            ? 'سجّل الدخول وحدّث ملف القياسات الخاص بك للحصول على توصيات أدق.'
-            : 'Sign in and complete your body profile for accurate recommendations.',
-            style: UT.subtitle)
-        else Wrap(spacing: 12, runSpacing: 10, children: _rows(ar)),
+        const SizedBox(height: 14),
+        if (loading)
+          const Padding(padding: EdgeInsets.all(24),
+              child: Center(child: CircularProgressIndicator(
+                  color: UellowColors.darkBrown)))
+        else if (profile == null)
+          _signedOut()
+        else ...[
+          // ── identity chips ──
+          Wrap(spacing: 6, runSpacing: 6, children: [
+            if (_has(profile!['gender']))
+              _chip(profile!['gender'] == 'male'
+                  ? (ar ? '👤 رجل' : '👤 Male')
+                  : (ar ? '👤 امرأة' : '👤 Female')),
+            if (_has(profile!['body_type']))
+              _chip('${ar ? "الجسم: " : "Body: "}${profile!['body_type']}'),
+            if (_has(profile!['preferred_fit']))
+              _chip('${ar ? "القَصّة: " : "Fit: "}${profile!['preferred_fit']}'),
+          ]),
+          if (_has(profile!['gender']) || _has(profile!['body_type'])
+              || _has(profile!['preferred_fit']))
+            const SizedBox(height: 10),
+          // ── measurement grid (always shows every slot — calm) ──
+          GridView.count(
+            crossAxisCount: 3,
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            mainAxisSpacing: 8, crossAxisSpacing: 8,
+            childAspectRatio: 1.55,
+            children: [
+              for (final m in _metrics) _tile(m),
+            ],
+          ),
+          const SizedBox(height: 12),
+          // ── single calm CTA ──
+          SizedBox(width: double.infinity, child: OutlinedButton.icon(
+            onPressed: onEdit,
+            icon: const Icon(Icons.edit_outlined, size: 15),
+            label: Text(
+                filled == 0
+                    ? (ar ? 'أضف مقاساتي' : 'Add my measurements')
+                    : (ar ? 'تعديل المقاسات' : 'Edit measurements'),
+                style: const TextStyle(fontWeight: FontWeight.w800,
+                    fontSize: 12.5)),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: UellowColors.darkBrown,
+              side: const BorderSide(color: Color(0xFFE5DCC2)),
+              padding: const EdgeInsets.symmetric(vertical: 11),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12)),
+            ),
+          )),
+        ],
       ]),
     );
   }
 
-  List<Widget> _rows(bool ar) {
-    final p = profile!;
-    final pairs = <(String, String, String)>[];
-    void add(String key, String en, String arl) {
-      final v = p[key];
-      if (v == null || (v is num && v == 0) || v == false || v == '') return;
-      pairs.add((ar ? arl : en, '$v', _unitFor(key)));
-    }
-    add('height',     'Height',       'الطول');
-    add('weight',     'Weight',       'الوزن');
-    add('chest',      'Chest',        'الصدر');
-    add('waist',      'Waist',        'الخصر');
-    add('shoulder',   'Shoulder',     'الأكتاف');
-    add('hip',        'Hip',          'الورك');
-    add('arm_length', 'Arm length',   'طول الذراع');
-    add('inseam',     'Inseam',       'الساق الداخلية');
-    add('thigh',      'Thigh',        'الفخذ');
-    add('shoe_size_eu', 'Shoe (EU)',  'مقاس الحذاء EU');
-    add('shoe_size_us', 'Shoe (US)',  'مقاس الحذاء US');
-    add('body_type',    'Body type',  'نوع الجسم');
-    add('preferred_fit','Preferred fit', 'القَصّة المفضلة');
-    if (pairs.isEmpty) {
-      return [Text(ar ? 'لم تتم إضافة قياسات بعد.' : 'No measurements yet.',
-          style: UT.subtitle)];
-    }
-    return pairs.map((t) => Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-      decoration: BoxDecoration(
-        color: UellowColors.yellowFaint,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: UellowColors.warnBg),
-      ),
-      child: Row(mainAxisSize: MainAxisSize.min, children: [
-        Text('${t.$1} ', style: const TextStyle(fontSize: 10.5,
-            fontWeight: FontWeight.w700, color: UellowColors.muted)),
-        Text(t.$2, style: const TextStyle(fontWeight: FontWeight.w900,
-            color: UellowColors.darkBrown)),
-        if (t.$3.isNotEmpty) Padding(padding: const EdgeInsets.only(left: 3),
-            child: Text(t.$3, style: const TextStyle(fontSize: 10,
-                color: UellowColors.muted, fontWeight: FontWeight.w700))),
-      ]),
-    )).toList();
-  }
+  Widget _signedOut() => Column(children: [
+    const Icon(Icons.lock_outline, size: 30, color: UellowColors.muted),
+    const SizedBox(height: 8),
+    Text(ar
+            ? 'سجّل الدخول لعرض مقاساتك المحفوظة في حسابك'
+            : 'Sign in to view the measurements saved on your account',
+        textAlign: TextAlign.center,
+        style: const TextStyle(fontSize: 12, color: UellowColors.muted,
+            height: 1.5)),
+  ]);
 
-  String _unitFor(String key) {
-    if (key.startsWith('shoe')) return '';
-    if (key == 'weight') return 'kg';
-    if (['body_type', 'preferred_fit', 'gender', 'age_range'].contains(key)) return '';
-    return 'cm';
+  Widget _chip(String label) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+    decoration: BoxDecoration(
+      color: const Color(0xFFF7F3E8),
+      borderRadius: BorderRadius.circular(999),
+    ),
+    child: Text(label, style: const TextStyle(fontSize: 10.5,
+        fontWeight: FontWeight.w700, color: UellowColors.darkBrown)),
+  );
+
+  Widget _tile((String, IconData, String, String, String) m) {
+    final v = profile![m.$1];
+    final has = _has(v);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      decoration: BoxDecoration(
+        color: has ? const Color(0xFFFDFBF4) : const Color(0xFFFAFAFA),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+            color: has ? const Color(0xFFEFE6CC) : const Color(0xFFEFEFEF)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Row(children: [
+            Icon(m.$2, size: 12,
+                color: has ? const Color(0xFFB8860B) : UellowColors.muted),
+            const SizedBox(width: 4),
+            Flexible(child: Text(ar ? m.$4 : m.$3,
+                maxLines: 1, overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 9,
+                    fontWeight: FontWeight.w700,
+                    color: UellowColors.muted))),
+          ]),
+          const SizedBox(height: 3),
+          Text(
+              has
+                  ? '${_fmtNum(v)}${m.$5.isEmpty ? '' : ' ${m.$5}'}'
+                  : '—',
+              style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w900,
+                  color: has
+                      ? UellowColors.ink : const Color(0xFFC9C2B2))),
+        ],
+      ),
+    );
   }
 }
 
