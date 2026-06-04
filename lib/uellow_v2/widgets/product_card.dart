@@ -429,6 +429,7 @@ class _Image extends StatelessWidget {
     required this.product, required this.hasDiscount,
     required this.discountPct, required this.faved, required this.onFav,
     this.clean = false,
+    this.extraBadges = const [],
   });
   final UellowProductCard product;
   final bool hasDiscount;
@@ -438,6 +439,9 @@ class _Image extends StatelessWidget {
   // v2.1.28 — clean image for the rich card: discount %, free-shipping
   // and rank badges all moved off the photo per design.
   final bool clean;
+  // v2.1.32 — overflow badges (beyond the 3-per-bottom-row cap) render
+  // ON the photo at the bottom-end (right in EN, left in AR).
+  final List<Widget> extraBadges;
   @override
   Widget build(BuildContext context) {
     return AspectRatio(
@@ -453,6 +457,16 @@ class _Image extends StatelessWidget {
               placeholder: (_, __) => const ColoredBox(color: UellowColors.border),
               errorWidget: (_, __, ___) => const ColoredBox(color: UellowColors.border),
             ),
+          ),
+          if (extraBadges.isNotEmpty) PositionedDirectional(
+            bottom: 6, end: 6,
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              for (var i = 0; i < extraBadges.length; i++) Padding(
+                padding: EdgeInsetsDirectional.only(
+                    start: i == 0 ? 0 : 3),
+                child: extraBadges[i],
+              ),
+            ]),
           ),
           if (discountPct > 0 && !clean) Positioned(
             top: 8, left: 8,
@@ -685,16 +699,83 @@ class _RichLayout extends StatelessWidget {
   final bool faved;
   final VoidCallback onFav;
 
+  // v2.1.32 — ALL bottom badges in priority order. The first 3 live in
+  // the bottom row; everything beyond overflows onto the photo
+  // (bottom-end, language-aware).
+  List<Widget> _allBadges(bool ar) {
+    final out = <Widget>[];
+    Widget coin(String emoji, String label, Color bg, Color fg) => Container(
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+      decoration: BoxDecoration(
+          color: bg, borderRadius: BorderRadius.circular(999),
+          boxShadow: const [BoxShadow(color: Color(0x14000000),
+              blurRadius: 3, offset: Offset(0, 1))]),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Text(emoji, style: const TextStyle(fontSize: 8)),
+        const SizedBox(width: 2),
+        Text(label, style: TextStyle(fontSize: 7.5,
+            fontWeight: FontWeight.w900, color: fg, letterSpacing: 0.2)),
+      ]),
+    );
+    out.add(_AvailPill(product: product));
+    if (product.priceTrend?['is_lowest'] == true) {
+      out.add(coin('🔥', ar ? 'أقل سعر' : 'LOWEST',
+          const Color(0xFFFFF3E0), const Color(0xFFBF360C)));
+    }
+    if (product.badges.contains('sale')) {
+      out.add(coin('⚡', ar ? 'عرض' : 'SALE',
+          const Color(0xFFFFEBEE), const Color(0xFFC62828)));
+    }
+    if ((product.rank?['rank'] ?? 99) == 1) {
+      out.add(coin('🏆', ar ? 'الأفضل' : 'BEST',
+          const Color(0xFFFFF8E1), const Color(0xFF8B6508)));
+    }
+    if (product.badges.contains('new')) {
+      out.add(coin('✨', ar ? 'جديد' : 'NEW',
+          const Color(0xFFE3F2FD), const Color(0xFF1565C0)));
+    }
+    if (product.badges.contains('free_shipping')) {
+      out.add(Container(
+        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+        decoration: BoxDecoration(color: UellowColors.yellow,
+            borderRadius: BorderRadius.circular(4)),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          const Icon(Icons.local_shipping_outlined, size: 10,
+              color: UellowColors.darkBrown),
+          const SizedBox(width: 2),
+          Text(ar ? 'شحن مجاني' : 'FREE',
+              style: const TextStyle(fontSize: 7.5,
+                  fontWeight: FontWeight.w900,
+                  color: UellowColors.darkBrown, letterSpacing: 0.2)),
+        ]),
+      ));
+    }
+    if (product.hasVideo) {
+      out.add(Container(
+        padding: const EdgeInsets.all(2.5),
+        decoration: BoxDecoration(
+            color: Colors.black.withValues(alpha: 0.75),
+            shape: BoxShape.circle),
+        child: const Icon(Icons.play_arrow_rounded,
+            size: 10, color: Colors.white),
+      ));
+    }
+    return out;
+  }
+
   @override
   Widget build(BuildContext context) {
     final ar = lang.toLowerCase().startsWith('ar');
+    final badges = _allBadges(ar);
+    final bottom = badges.take(3).toList();
+    final overflow = badges.skip(3).toList();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // v2.1.28 — clean photo: no discount/free-ship/rank overlays.
+        // v2.1.28 — clean photo; overflow badges land on it bottom-end.
         _Image(product: product, hasDiscount: hasDiscount,
             discountPct: discountPct, faved: faved, onFav: onFav,
-            clean: true),
+            clean: true, extraBadges: overflow),
         Padding(
           padding: const EdgeInsets.fromLTRB(8, 4, 8, 6),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -797,37 +878,11 @@ class _RichLayout extends StatelessWidget {
                 product: product, ar: ar,
                 saveAmount: hasDiscount ? saveAmount : 0)),
             const SizedBox(height: 3),
-            // ── bottom: availability + promo coins + free ship + video ──
+            // ── bottom: max 3 badges; the rest moved onto the photo ──
             SizedBox(height: 17, child: Row(children: [
-              _AvailPill(product: product),
-              const SizedBox(width: 4),
-              Expanded(child: _CoinsRow(product: product, ar: ar)),
-              if (product.badges.contains('free_shipping')) Container(
-                margin: const EdgeInsetsDirectional.only(start: 4),
-                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                decoration: BoxDecoration(
-                  color: UellowColors.yellow,
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: Row(mainAxisSize: MainAxisSize.min, children: [
-                  const Icon(Icons.local_shipping_outlined, size: 10,
-                      color: UellowColors.darkBrown),
-                  const SizedBox(width: 2),
-                  Text(ar ? 'شحن مجاني' : 'FREE',
-                      style: const TextStyle(fontSize: 7.5,
-                          fontWeight: FontWeight.w900,
-                          color: UellowColors.darkBrown, letterSpacing: 0.2)),
-                ]),
-              ),
-              if (product.hasVideo) Container(
-                margin: const EdgeInsetsDirectional.only(start: 4),
-                padding: const EdgeInsets.all(2.5),
-                decoration: BoxDecoration(
-                  color: Colors.black.withValues(alpha: 0.75),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(Icons.play_arrow_rounded,
-                    size: 10, color: Colors.white),
+              for (var i = 0; i < bottom.length; i++) Padding(
+                padding: EdgeInsetsDirectional.only(start: i == 0 ? 0 : 4),
+                child: bottom[i],
               ),
             ])),
           ]),
@@ -844,49 +899,6 @@ Color _hex(Object? raw, Color fallback) {
     return Color(int.parse(s, radix: 16));
   } catch (_) {
     return fallback;
-  }
-}
-
-class _CoinsRow extends StatelessWidget {
-  const _CoinsRow({required this.product, required this.ar});
-  final UellowProductCard product;
-  final bool ar;
-  @override
-  Widget build(BuildContext context) {
-    final coins = <Widget>[];
-    void coin(String emoji, String label, Color bg, Color fg) {
-      coins.add(Container(
-        margin: const EdgeInsetsDirectional.only(end: 4),
-        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
-        decoration: BoxDecoration(
-          color: bg, borderRadius: BorderRadius.circular(999)),
-        child: Row(mainAxisSize: MainAxisSize.min, children: [
-          Text(emoji, style: const TextStyle(fontSize: 8)),
-          const SizedBox(width: 2),
-          Text(label, style: TextStyle(fontSize: 7.5,
-              fontWeight: FontWeight.w900, color: fg, letterSpacing: 0.2)),
-        ]),
-      ));
-    }
-    if (product.priceTrend?['is_lowest'] == true) {
-      coin('🔥', ar ? 'أقل سعر' : 'LOWEST', const Color(0xFFFFF3E0),
-          const Color(0xFFBF360C));
-    }
-    if (product.badges.contains('sale')) {
-      coin('⚡', ar ? 'عرض' : 'SALE', const Color(0xFFFFEBEE),
-          const Color(0xFFC62828));
-    }
-    if ((product.rank?['rank'] ?? 99) == 1) {
-      coin('🏆', ar ? 'الأفضل' : 'BEST', const Color(0xFFFFF8E1),
-          const Color(0xFF8B6508));
-    }
-    if (product.badges.contains('new')) {
-      coin('✨', ar ? 'جديد' : 'NEW', const Color(0xFFE3F2FD),
-          const Color(0xFF1565C0));
-    }
-    if (coins.isEmpty) return const SizedBox.shrink();
-    return ListView(scrollDirection: Axis.horizontal,
-        physics: const NeverScrollableScrollPhysics(), children: coins);
   }
 }
 
