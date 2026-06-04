@@ -1625,8 +1625,19 @@ class _FlashBlock extends StatelessWidget {
       catch (_) { return null; }
     }).whereType<UellowProductCard>().toList();
     if (items.isEmpty) return const SizedBox.shrink();
-    final endsAt = _parseEndsAt(p['ends_at']);
-    final title = _tx(p, ar, 'title', ar ? 'فلاش سيل' : 'Flash Sale');
+    // v2.1.37 — when the block is LINKED (flash sale or promotion), the
+    // backend sends the live end-time + label in the resolved data; they
+    // beat any manual props so the countdown is always the real one.
+    final endsAt = _parseEndsAt(
+        (data['flash_end_datetime'] ?? '').toString().isNotEmpty
+            ? data['flash_end_datetime']
+            : p['ends_at']);
+    final linkedLabel = ((data['flash_label'] as Map?)?[ar ? 'ar' : 'en']
+        ?? '').toString();
+    final title = _tx(p, ar, 'title',
+        linkedLabel.isNotEmpty
+            ? linkedLabel
+            : (ar ? 'فلاش سيل' : 'Flash Sale'));
     switch (variant) {
       case 'dark':    return _FlashDark(items: items, title: title, ar: ar, endsAt: endsAt);
       case 'minimal': return _FlashMinimal(items: items, title: title, ar: ar, endsAt: endsAt);
