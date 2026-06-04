@@ -339,8 +339,10 @@ class UellowApi {
           {Map<String, dynamic>? query, bool auth = false}) =>
       _request('GET', path, query: query, requireAuth: auth);
   Future<Map<String, dynamic>> _post(String path,
-          {Object? body, bool auth = false}) =>
-      _request('POST', path, body: body, requireAuth: auth);
+          {Object? body, bool auth = false,
+           Duration timeout = kDefaultTimeout}) =>
+      _request('POST', path, body: body, requireAuth: auth,
+          timeout: timeout);
 
   /// Raw binary GET (e.g. for the invoice PDF). Uses the same headers
   /// + auth as the JSON helpers but returns bytes verbatim instead of
@@ -1109,11 +1111,13 @@ class _BeenaApi {
     required String message, List<Map<String, dynamic>>? history,
     int? productId,
   }) async {
+    // v2.1.55 — Claude calls can take 20-40s; the default 25s timeout
+    // was a major source of "sorry, error" replies.
     final res = await _c._post(EP.beenaChat, body: {
       'message': message,
       if (history   != null) 'history': history,
       if (productId != null) 'product_id': productId,
-    });
+    }, timeout: const Duration(seconds: 70));
     return res['data'] as Map<String, dynamic>;
   }
 }

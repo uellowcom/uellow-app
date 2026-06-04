@@ -1015,9 +1015,17 @@ class _ShippingMethodList extends StatelessWidget {
       final winMap = zone?['delivery_window'] as Map?;
       final window = (winMap?[lang] as String?)
           ?? (winMap?['en'] as String?) ?? '';
+      // v2.1.55 — schedule/cutoff awareness: out-of-hours methods (e.g.
+      // express after 9 PM) render dimmed with a professional
+      // "unavailable now" chip.
+      final unavailable = m['available_now'] == false;
+      final availNote = ((m['availability_note'] as Map?)?[lang]
+          ?? (m['availability_note'] as Map?)?['en'] ?? '').toString();
       return GestureDetector(
         onTap: () => onSelect(id),
-        child: Container(
+        child: Opacity(
+          opacity: unavailable ? 0.62 : 1.0,
+          child: Container(
           margin: const EdgeInsets.only(bottom: 8),
           padding: EdgeInsets.all(on ? 11 : 12),
           decoration: BoxDecoration(
@@ -1043,8 +1051,33 @@ class _ShippingMethodList extends StatelessWidget {
             const SizedBox(width: 12),
             Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               // v2.1.15 — smaller label per request (long names were loud).
-              Text(name, style: const TextStyle(
-                  fontSize: 12, fontWeight: FontWeight.w800, color: UellowColors.ink)),
+              Row(children: [
+                Flexible(child: Text(name, style: const TextStyle(
+                    fontSize: 12, fontWeight: FontWeight.w800,
+                    color: UellowColors.ink))),
+                if (unavailable) Container(
+                  margin: const EdgeInsetsDirectional.only(start: 6),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 6, vertical: 1.5),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFF1F0),
+                    border: Border.all(color: const Color(0xFFFFC9C5)),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(lang == 'ar' ? '⏰ غير متاح الآن' : '⏰ Unavailable now',
+                      style: const TextStyle(fontSize: 8.5,
+                          fontWeight: FontWeight.w900,
+                          color: Color(0xFFB91C1C))),
+                ),
+              ]),
+              if (unavailable && availNote.isNotEmpty) Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: Text(availNote, maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 9.5,
+                        color: Color(0xFFB91C1C),
+                        fontWeight: FontWeight.w600)),
+              ),
               if (desc.isNotEmpty) Padding(
                 padding: const EdgeInsets.only(top: 2),
                 child: Text(desc, maxLines: 2, overflow: TextOverflow.ellipsis,
@@ -1101,6 +1134,7 @@ class _ShippingMethodList extends StatelessWidget {
                     fontSize: 14, fontWeight: FontWeight.w900,
                     color: UellowColors.darkBrown)),
           ]),
+        ),
         ),
       );
     }).toList());
