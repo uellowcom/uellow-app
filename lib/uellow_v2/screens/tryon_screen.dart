@@ -610,11 +610,21 @@ class _TryOnScreenState extends State<TryOnScreen> {
           onSize: (s) => setState(() => _selectedSize = s),
           ar: ar,
         ),
+        // v2.1.54 — specialist replies & votes for MY requests.
+        _ReviewerRepliesCard(ar: ar),
         // v2.1.50 — measurements moved to the BOTTOM per request.
         _MeasurementsCard(
           profile: _profile, loading: _profileLoading, ar: ar,
           onEdit: _openEditMeasurements,
         ),
+        // v2.1.54 — measurement history (what changed, when).
+        if (((_profile?['history'] as List?) ?? const []).isNotEmpty)
+          _MeasureHistoryCard(
+              history: ((_profile?['history'] as List?) ?? const [])
+                  .cast<Map>()
+                  .map((m) => m.cast<String, dynamic>())
+                  .toList(),
+              ar: ar),
         _ActionsBar(
           ar: ar, generating: _generating,
           canGenerate: _product != null && _photos.isNotEmpty,
@@ -1265,29 +1275,21 @@ class _ActionsBar extends StatelessWidget {
           ),
         )),
         const SizedBox(height: 10),
+        // v2.1.54 — redesigned row: Ask-reviewers (blue, distinct) +
+        // Add-to-cart (dark, distinct), one-line smaller labels;
+        // Share shrank to an icon-only square. All always enabled.
         Row(children: [
-          Expanded(child: OutlinedButton.icon(
-            onPressed: hasGenerated ? onShare : null,
-            icon: const Icon(Icons.share_outlined, size: 16),
-            label: Text(ar ? 'مشاركة' : 'Share',
-                style: const TextStyle(fontWeight: FontWeight.w800)),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: UellowColors.darkBrown,
-              side: const BorderSide(color: UellowColors.border, width: 1.5),
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              shape: const RoundedRectangleBorder(
-                  borderRadius: BorderRadius.all(Radius.circular(12))),
-            ),
-          )),
-          const SizedBox(width: 8),
-          Expanded(child: OutlinedButton.icon(
-            onPressed: hasGenerated ? onAskReviewers : null,
-            icon: const Icon(Icons.forum_outlined, size: 16),
+          Expanded(child: ElevatedButton.icon(
+            onPressed: onAskReviewers,
+            icon: const Text('🎓', style: TextStyle(fontSize: 13)),
             label: Text(ar ? 'اسأل المراجعين' : 'Ask reviewers',
-                style: const TextStyle(fontWeight: FontWeight.w800)),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: UellowColors.darkBrown,
-              side: const BorderSide(color: UellowColors.border, width: 1.5),
+                maxLines: 1, overflow: TextOverflow.ellipsis,
+                softWrap: false,
+                style: const TextStyle(
+                    fontWeight: FontWeight.w800, fontSize: 11)),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF1565C0),
+              foregroundColor: Colors.white, elevation: 0,
               padding: const EdgeInsets.symmetric(vertical: 12),
               shape: const RoundedRectangleBorder(
                   borderRadius: BorderRadius.all(Radius.circular(12))),
@@ -1295,26 +1297,39 @@ class _ActionsBar extends StatelessWidget {
           )),
           const SizedBox(width: 8),
           Expanded(child: ElevatedButton.icon(
-            onPressed: canGenerate ? onAddToCart : null,
-            icon: const Icon(Icons.add_shopping_cart, size: 16),
+            onPressed: onAddToCart,
+            icon: const Icon(Icons.add_shopping_cart, size: 14),
             label: Text(ar ? 'أضف للسلة' : 'Add to cart',
-                style: const TextStyle(fontWeight: FontWeight.w800)),
+                maxLines: 1, overflow: TextOverflow.ellipsis,
+                softWrap: false,
+                style: const TextStyle(
+                    fontWeight: FontWeight.w800, fontSize: 11)),
             style: ElevatedButton.styleFrom(
               backgroundColor: UellowColors.darkBrown,
-              foregroundColor: UellowColors.yellowLight,
-              disabledBackgroundColor: const Color(0x55412402),
+              foregroundColor: UellowColors.yellowLight, elevation: 0,
               padding: const EdgeInsets.symmetric(vertical: 12),
               shape: const RoundedRectangleBorder(
                   borderRadius: BorderRadius.all(Radius.circular(12))),
             ),
+          )),
+          const SizedBox(width: 8),
+          // share — icon only
+          SizedBox(width: 44, height: 44, child: OutlinedButton(
+            onPressed: onShare,
+            style: OutlinedButton.styleFrom(
+              foregroundColor: UellowColors.darkBrown,
+              side: const BorderSide(color: UellowColors.border, width: 1.5),
+              padding: EdgeInsets.zero,
+              shape: const RoundedRectangleBorder(
+                  borderRadius: BorderRadius.all(Radius.circular(12))),
+            ),
+            child: const Icon(Icons.share_outlined, size: 17),
           )),
         ]),
       ]),
     );
   }
 }
-
-// ─── Product picker sheet (search products) ──────────────────────────
 
 class _ProductPickerSheet extends StatefulWidget {
   @override
@@ -1705,3 +1720,333 @@ class _SegRow extends StatelessWidget {
   }
 }
 
+// ─── Reviewer replies & votes (v2.1.54) ──────────────────────────────
+// The customer's specialist requests: live status, the reviewer's
+// verdict + quality/value scores, chat replies, and group-vote tallies.
+class _ReviewerRepliesCard extends StatefulWidget {
+  const _ReviewerRepliesCard({required this.ar});
+  final bool ar;
+  @override
+  State<_ReviewerRepliesCard> createState() => _ReviewerRepliesCardState();
+}
+
+class _ReviewerRepliesCardState extends State<_ReviewerRepliesCard> {
+  List<Map<String, dynamic>> _items = const [];
+  bool _loaded = false;
+  bool _expanded = false;
+
+  @override
+  void initState() { super.initState(); _load(); }
+
+  Future<void> _load() async {
+    try {
+      final token = await UellowApi.instance.tokenStore.readToken();
+      if (token == null) { setState(() => _loaded = true); return; }
+      final r = await http.get(
+        Uri.parse('${UellowApi.instance.baseUrl}/api/mobile/v2/reviewers/my-requests'),
+        headers: {'Accept': 'application/json',
+                  'Authorization': 'Bearer $token'},
+      ).timeout(const Duration(seconds: 8));
+      final j = jsonDecode(utf8.decode(r.bodyBytes)) as Map<String, dynamic>;
+      if (mounted && j['success'] == true) {
+        setState(() {
+          _items = ((j['data']?['items'] as List?) ?? const [])
+              .cast<Map>().map((m) => m.cast<String, dynamic>()).toList();
+          _loaded = true;
+        });
+      } else if (mounted) {
+        setState(() => _loaded = true);
+      }
+    } catch (_) {
+      if (mounted) setState(() => _loaded = true);
+    }
+  }
+
+  Color _verdictColor(String v) => v == 'recommend'
+      ? UellowColors.successDk
+      : v == 'not_recommend' ? UellowColors.danger : const Color(0xFF1565C0);
+
+  Color _stateColor(String s) => switch (s) {
+    'completed' => UellowColors.successDk,
+    'active' || 'accepted' => const Color(0xFF1565C0),
+    'expired' || 'cancelled' => UellowColors.muted,
+    _ => const Color(0xFFB45309),
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_loaded || _items.isEmpty) return const SizedBox.shrink();
+    final ar = widget.ar;
+    final shown = _expanded ? _items : _items.take(2).toList();
+    return Container(
+      margin: const EdgeInsets.fromLTRB(14, 10, 14, 0),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft, end: Alignment.bottomRight,
+          colors: [Color(0xFFF3F7FF), Colors.white],
+        ),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFE3EAF6)),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          const Text('🎓', style: TextStyle(fontSize: 15)),
+          const SizedBox(width: 6),
+          Expanded(child: Text(ar ? 'ردود المراجعين' : 'Reviewer replies',
+              style: const TextStyle(fontSize: 13.5,
+                  fontWeight: FontWeight.w900, color: UellowColors.ink))),
+          IconButton(
+            icon: const Icon(Icons.refresh, size: 17,
+                color: UellowColors.muted),
+            visualDensity: VisualDensity.compact,
+            onPressed: _load,
+          ),
+        ]),
+        for (final it in shown) _requestTile(it, ar),
+        if (_items.length > 2) Center(child: TextButton(
+          onPressed: () => setState(() => _expanded = !_expanded),
+          child: Text(
+              _expanded
+                  ? (ar ? 'عرض أقل' : 'Show less')
+                  : (ar ? 'عرض الكل (${_items.length})'
+                        : 'Show all (${_items.length})'),
+              style: const TextStyle(fontSize: 11.5,
+                  fontWeight: FontWeight.w800,
+                  color: Color(0xFF1565C0))),
+        )),
+      ]),
+    );
+  }
+
+  Widget _requestTile(Map<String, dynamic> it, bool ar) {
+    final rv = (it['reviewer'] as Map?)?.cast<String, dynamic>();
+    final verdict = (it['verdict'] ?? '').toString();
+    final votes = (it['votes'] as Map?)?.cast<String, dynamic>();
+    final replies = ((it['replies'] as List?) ?? const [])
+        .cast<Map>().map((m) => m.cast<String, dynamic>()).toList();
+    final q = (it['quality'] as num?)?.toInt() ?? 0;
+    final v = (it['value'] as num?)?.toInt() ?? 0;
+    final state = (it['state'] ?? '').toString();
+    return Container(
+      margin: const EdgeInsets.only(top: 8),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border.all(color: const Color(0xFFE3EAF6)),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: CachedNetworkImage(
+              imageUrl: ((it['product'] as Map?)?['image'] ?? '').toString(),
+              width: 36, height: 36, fit: BoxFit.cover,
+              errorWidget: (_, __, ___) => Container(width: 36, height: 36,
+                  color: const Color(0xFFF1F5F9),
+                  child: const Icon(Icons.image_outlined, size: 16,
+                      color: UellowColors.muted)),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text((((it['product'] as Map?)?['name'] as Map?)?[
+                    ar ? 'ar' : 'en'] ?? '').toString(),
+                maxLines: 1, overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 11.5,
+                    fontWeight: FontWeight.w800, color: UellowColors.ink)),
+            Text('${rv?['name'] ?? ''} · ${(it['date'] ?? '').toString()}',
+                maxLines: 1, overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 9,
+                    color: UellowColors.muted)),
+          ])),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+            decoration: BoxDecoration(
+              color: _stateColor(state).withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(999),
+            ),
+            child: Text(
+                (((it['state_label'] as Map?)?[ar ? 'ar' : 'en']) ?? '')
+                    .toString(),
+                style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900,
+                    color: _stateColor(state))),
+          ),
+        ]),
+        // verdict + scores
+        if (verdict.isNotEmpty) Padding(
+          padding: const EdgeInsets.only(top: 6),
+          child: Row(children: [
+            Container(
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 7, vertical: 2),
+              decoration: BoxDecoration(
+                color: _verdictColor(verdict).withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(5),
+              ),
+              child: Text(
+                  (((it['verdict_label'] as Map?)?[ar ? 'ar' : 'en'])
+                      ?? '').toString(),
+                  style: TextStyle(fontSize: 9.5,
+                      fontWeight: FontWeight.w900,
+                      color: _verdictColor(verdict))),
+            ),
+            if (q > 0) Padding(
+              padding: const EdgeInsetsDirectional.only(start: 8),
+              child: Text(ar ? 'الجودة $q/5' : 'Quality $q/5',
+                  style: const TextStyle(fontSize: 9,
+                      fontWeight: FontWeight.w700,
+                      color: UellowColors.muted)),
+            ),
+            if (v > 0) Padding(
+              padding: const EdgeInsetsDirectional.only(start: 8),
+              child: Text(ar ? 'القيمة $v/5' : 'Value $v/5',
+                  style: const TextStyle(fontSize: 9,
+                      fontWeight: FontWeight.w700,
+                      color: UellowColors.muted)),
+            ),
+          ]),
+        ),
+        // group votes tally
+        if (votes != null && (votes['voted'] as num? ?? 0) > 0) Padding(
+          padding: const EdgeInsets.only(top: 6),
+          child: Wrap(spacing: 6, children: [
+            _voteChip('👍 ${votes['recommend']}',
+                UellowColors.successDk),
+            _voteChip('👎 ${votes['not_recommend']}',
+                UellowColors.danger),
+            _voteChip('😐 ${votes['neutral']}',
+                const Color(0xFF1565C0)),
+            Text(ar
+                    ? '${votes['voted']}/${votes['total']} صوّتوا'
+                    : '${votes['voted']}/${votes['total']} voted',
+                style: const TextStyle(fontSize: 9,
+                    color: UellowColors.muted,
+                    fontWeight: FontWeight.w700)),
+          ]),
+        ),
+        // reviewer notes / latest reply bubble
+        if ((it['notes'] ?? '').toString().isNotEmpty) Padding(
+          padding: const EdgeInsets.only(top: 6),
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF3F7FF),
+              borderRadius: BorderRadius.circular(9),
+            ),
+            child: Text((it['notes'] ?? '').toString(),
+                maxLines: 3, overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 10.5, height: 1.45,
+                    color: UellowColors.text)),
+          ),
+        )
+        else if (replies.isNotEmpty) Padding(
+          padding: const EdgeInsets.only(top: 6),
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF3F7FF),
+              borderRadius: BorderRadius.circular(9),
+            ),
+            child: Text('💬 ${replies.last['text']}',
+                maxLines: 3, overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 10.5, height: 1.45,
+                    color: UellowColors.text)),
+          ),
+        ),
+      ]),
+    );
+  }
+
+  Widget _voteChip(String label, Color c) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+    decoration: BoxDecoration(
+      color: c.withValues(alpha: 0.1),
+      borderRadius: BorderRadius.circular(999),
+    ),
+    child: Text(label, style: TextStyle(fontSize: 9.5,
+        fontWeight: FontWeight.w800, color: c)),
+  );
+}
+
+// ─── Measurement history (v2.1.54) ───────────────────────────────────
+// Snapshots appended on every save — date + the values that changed.
+class _MeasureHistoryCard extends StatelessWidget {
+  const _MeasureHistoryCard({required this.history, required this.ar});
+  final List<Map<String, dynamic>> history;
+  final bool ar;
+
+  static const _names = {
+    'height': ('Height', 'الطول'), 'weight': ('Weight', 'الوزن'),
+    'chest': ('Chest', 'الصدر'), 'waist': ('Waist', 'الخصر'),
+    'shoulder': ('Shoulder', 'الأكتاف'), 'hip': ('Hip', 'الورك'),
+    'arm_length': ('Arm', 'الذراع'), 'inseam': ('Inseam', 'الساق'),
+    'thigh': ('Thigh', 'الفخذ'), 'shoe_size_eu': ('Shoe EU', 'الحذاء'),
+    'shoe_size_us': ('Shoe US', 'الحذاء US'),
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(14, 10, 14, 0),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFF1ECE0)),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          const Icon(Icons.history, size: 16, color: UellowColors.darkBrown),
+          const SizedBox(width: 6),
+          Text(ar ? 'سجل القياسات' : 'Measurement history',
+              style: const TextStyle(fontSize: 13,
+                  fontWeight: FontWeight.w900, color: UellowColors.ink)),
+        ]),
+        const SizedBox(height: 4),
+        for (final h in history.take(6)) Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Column(children: [
+              Container(width: 8, height: 8, decoration: const BoxDecoration(
+                  color: UellowColors.yellow, shape: BoxShape.circle)),
+              Container(width: 2, height: 26,
+                  color: const Color(0xFFF1ECE0)),
+            ]),
+            const SizedBox(width: 10),
+            Expanded(child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text((h['date'] ?? '').toString(),
+                  style: const TextStyle(fontSize: 9.5,
+                      fontWeight: FontWeight.w800,
+                      color: UellowColors.muted)),
+              const SizedBox(height: 3),
+              Wrap(spacing: 6, runSpacing: 4, children: [
+                for (final e in ((h['values'] as Map?) ?? const {}).entries)
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 7, vertical: 2.5),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFDFBF4),
+                      border: Border.all(color: const Color(0xFFEFE6CC)),
+                      borderRadius: BorderRadius.circular(7),
+                    ),
+                    child: Text(
+                        '${ar ? (_names[e.key]?.$2 ?? e.key) : (_names[e.key]?.$1 ?? e.key)}'
+                        ': ${(e.value is num && (e.value as num) == (e.value as num).roundToDouble()) ? (e.value as num).toInt() : e.value}',
+                        style: const TextStyle(fontSize: 9.5,
+                            fontWeight: FontWeight.w800,
+                            color: UellowColors.darkBrown)),
+                  ),
+              ]),
+            ])),
+          ]),
+        ),
+      ]),
+    );
+  }
+}
