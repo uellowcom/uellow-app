@@ -57,6 +57,13 @@ class _ProductCardState extends State<ProductCard> {
   bool _faved = false;
 
   @override
+  void initState() {
+    super.initState();
+    // v2.1.29 — heart survives navigation: read the session cache.
+    _faved = UellowApi.instance.wishlist.isCached(widget.product.id);
+  }
+
+  @override
   Widget build(BuildContext context) {
     final product = widget.product;
     final lang = UellowApi.instance.lang;

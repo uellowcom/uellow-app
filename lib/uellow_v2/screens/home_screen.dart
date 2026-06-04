@@ -45,6 +45,8 @@ class _HomeScreenState extends State<HomeScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) AdsService.showOpenAds(context);
     });
+    // v2.1.29 — warm the wishlist cache so card hearts render red.
+    UellowApi.instance.wishlist.warm();
   }
 
   /// Fetch the builder-designed `home` page. Returns null on any failure so

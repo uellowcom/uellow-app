@@ -180,6 +180,10 @@ class _ProductScreenState extends State<ProductScreen> {
           && ((p.priceHistory!['points'] as List?)?.length ?? 0) >= 2)
         SliverToBoxAdapter(child: _PriceHistoryBlock(
             history: p.priceHistory!, trend: p.priceTrend)),
+      // v2.1.29 — compact premium reviews highlight (low height).
+      if (p.rating.count > 0)
+        SliverToBoxAdapter(child: _ReviewsHighlight(productId: p.id,
+            avg: p.rating.avg, count: p.rating.count)),
       // Show whenever there's at least one bulk tier — even a single
       // "buy 5+ → save 5%" hint is useful.
       if (p.bulkPricing.isNotEmpty)
@@ -570,6 +574,36 @@ class _Title extends StatelessWidget {
                 label: lang == 'ar'
                     ? '${p.viewCount} مشاهدة'
                     : '${p.viewCount} views'),
+          // v2.1.29 — Price-Intelligence badge at the end of the line.
+          if (p.priceTrend != null) Builder(builder: (_) {
+            final t = p.priceTrend!;
+            final ar2 = lang.toLowerCase().startsWith('ar');
+            final dir = (t['direction'] ?? 'stable').toString();
+            final lowest = t['is_lowest'] == true;
+            final down = dir == 'down' || lowest;
+            final stable = dir == 'stable' && !lowest;
+            final color = stable
+                ? const Color(0xFF1565C0)
+                : (down ? UellowColors.successDk : UellowColors.danger);
+            return Container(
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.10),
+                border: Border.all(color: color.withValues(alpha: 0.45)),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                Icon(stable ? Icons.trending_flat
+                        : (down ? Icons.trending_down : Icons.trending_up),
+                    size: 12, color: color),
+                const SizedBox(width: 3),
+                Text((((t['label'] as Map?)?[ar2 ? 'ar' : 'en']) ?? '')
+                        .toString(),
+                    style: TextStyle(fontSize: 10,
+                        fontWeight: FontWeight.w800, color: color)),
+              ]),
+            );
+          }),
         ]),
         const SizedBox(height: 8),
         Row(children: [
@@ -584,6 +618,35 @@ class _Title extends StatelessWidget {
           const SizedBox(width: 4),
           Text('(${p.rating.count})',
               style: const TextStyle(color: UellowColors.muted)),
+          // v2.1.29 — Best-Seller rank badge inline with the ratings.
+          if (p.ranks.isNotEmpty) Flexible(child: Padding(
+            padding: const EdgeInsetsDirectional.only(start: 8),
+            child: GestureDetector(
+              onTap: () {
+                final cid = p.ranks.first['category_id'] as int?;
+                if (cid != null) {
+                  Navigator.pushNamed(context, '/collection',
+                      arguments: {'category_id': cid});
+                }
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                      colors: [Color(0xFFFFD700), Color(0xFFE8A800)]),
+                  borderRadius: BorderRadius.circular(999),
+                  boxShadow: const [BoxShadow(color: Color(0x33B8860B),
+                      blurRadius: 4, offset: Offset(0, 2))],
+                ),
+                child: Text(
+                  '🏆 ${(((p.ranks.first['label'] as Map?)?[lang.toLowerCase().startsWith('ar') ? 'ar' : 'en']) ?? '')}',
+                  maxLines: 1, overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 9.5,
+                      fontWeight: FontWeight.w900, color: Color(0xFF412402)),
+                ),
+              ),
+            ),
+          )),
         ]),
       ]),
     );
@@ -1707,7 +1770,7 @@ class _BulkPricing extends StatelessWidget {
       borderRadius: BorderRadius.circular(12),
       child: Stack(clipBehavior: Clip.none, children: [
         Container(
-          padding: EdgeInsets.fromLTRB(4, (best || selected) ? 17 : 10, 4, 10),
+          padding: EdgeInsets.fromLTRB(4, (best || selected) ? 22 : 10, 4, 10),
           decoration: BoxDecoration(
             color: highlightDark ? UellowColors.darkBrown : Colors.white,
             border: Border.all(
@@ -1769,22 +1832,20 @@ class _BulkPricing extends StatelessWidget {
           ),
           child: const Icon(Icons.check, size: 10, color: UellowColors.darkBrown),
         )),
-        if (best && !selected) Positioned(top: 2, left: 0, right: 0, child: Center(
+        // v2.1.29 — smaller RED chip raised above the tile, with clear
+        // breathing room from the qty pill below it.
+        if (best && !selected) Positioned(top: 0, left: 0, right: 0, child: Center(
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
           decoration: BoxDecoration(
-            color: UellowColors.yellow,
+            color: UellowColors.danger,
             borderRadius: BorderRadius.circular(999),
-            border: Border.all(color: Colors.white, width: 1.5),
+            border: Border.all(color: Colors.white, width: 1),
           ),
-          child: Row(mainAxisSize: MainAxisSize.min, children: [
-            const Icon(Icons.star, color: UellowColors.darkBrown, size: 10),
-            const SizedBox(width: 3),
-            Text(ar ? 'الأفضل' : 'BEST',
-                style: const TextStyle(fontSize: 9,
-                    fontWeight: FontWeight.w900, color: UellowColors.darkBrown,
-                    letterSpacing: 0.4)),
-          ]),
+          child: Text(ar ? 'الأفضل' : 'BEST',
+              style: const TextStyle(fontSize: 7.5,
+                  fontWeight: FontWeight.w900, color: Colors.white,
+                  letterSpacing: 0.3)),
         ),
       )),
     ]));
@@ -2091,6 +2152,116 @@ class _SheetHeader extends StatelessWidget {
 
 // ─── Reviews block (live from /products/<id>/reviews) ──────────────
 
+// ─── Compact premium reviews highlight (v2.1.29) ───────────────────
+// One slim luxurious strip: big average, golden stars, count, and a
+// mini 5→1 distribution meter — tap scrolls intent to the full reviews.
+
+class _ReviewsHighlight extends StatefulWidget {
+  const _ReviewsHighlight({required this.productId,
+      required this.avg, required this.count});
+  final int productId;
+  final double avg;
+  final int count;
+  @override
+  State<_ReviewsHighlight> createState() => _ReviewsHighlightState();
+}
+
+class _ReviewsHighlightState extends State<_ReviewsHighlight> {
+  Map<String, dynamic> _breakdown = const {};
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final r = await http.get(Uri.parse(
+          '${UellowApi.instance.baseUrl}/api/mobile/v2/products/'
+          '${widget.productId}/reviews?page=1'),
+          headers: {'Accept': 'application/json'});
+      final j = jsonDecode(utf8.decode(r.bodyBytes)) as Map<String, dynamic>;
+      final bd = ((j['data']?['summary'] as Map?)?['breakdown'] as Map?)
+          ?.cast<String, dynamic>();
+      if (mounted && bd != null) setState(() => _breakdown = bd);
+    } catch (_) {}
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ar = UellowApi.instance.lang.toLowerCase().startsWith('ar');
+    final total = widget.count == 0 ? 1 : widget.count;
+    return Container(
+      margin: const EdgeInsets.only(top: 8),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.centerLeft, end: Alignment.centerRight,
+          colors: [Color(0xFFFFFBEF), Colors.white],
+        ),
+      ),
+      child: Row(children: [
+        // Big average
+        Column(children: [
+          Text(widget.avg.toStringAsFixed(1),
+              style: const TextStyle(fontSize: 26, height: 1.0,
+                  fontWeight: FontWeight.w900, color: UellowColors.darkBrown)),
+          const SizedBox(height: 2),
+          Row(mainAxisSize: MainAxisSize.min, children: [
+            for (var i = 0; i < 5; i++) Icon(
+              i < widget.avg.round() ? Icons.star_rounded
+                                     : Icons.star_outline_rounded,
+              size: 11, color: const Color(0xFFFFB400)),
+          ]),
+          const SizedBox(height: 2),
+          Text(ar ? '${widget.count} تقييم' : '${widget.count} reviews',
+              style: const TextStyle(fontSize: 9.5,
+                  color: UellowColors.muted, fontWeight: FontWeight.w700)),
+        ]),
+        const SizedBox(width: 16),
+        // Mini distribution meter 5→1
+        Expanded(child: Column(children: [
+          for (final star in ['5', '4', '3', '2', '1']) Padding(
+            padding: const EdgeInsets.symmetric(vertical: 1.5),
+            child: Row(children: [
+              SizedBox(width: 8, child: Text(star,
+                  style: const TextStyle(fontSize: 8.5,
+                      color: UellowColors.muted,
+                      fontWeight: FontWeight.w800))),
+              const SizedBox(width: 4),
+              Expanded(child: ClipRRect(
+                borderRadius: BorderRadius.circular(99),
+                child: Container(
+                  height: 4, color: const Color(0xFFF0EDE4),
+                  alignment: AlignmentDirectional.centerStart,
+                  child: FractionallySizedBox(
+                    widthFactor: (((_breakdown[star] as num?)?.toDouble()
+                        ?? 0) / total).clamp(0.0, 1.0),
+                    child: Container(color: const Color(0xFFFFB400)),
+                  ),
+                ),
+              )),
+            ]),
+          ),
+        ])),
+        const SizedBox(width: 12),
+        // verified hint
+        Column(children: [
+          const Icon(Icons.verified_outlined, size: 18,
+              color: UellowColors.successDk),
+          const SizedBox(height: 3),
+          Text(ar ? 'تقييمات\nموثوقة' : 'Verified\nreviews',
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 8.5, height: 1.2,
+                  color: UellowColors.successDk,
+                  fontWeight: FontWeight.w800)),
+        ]),
+      ]),
+    );
+  }
+}
+
 class _ReviewsBlock extends StatefulWidget {
   const _ReviewsBlock({required this.productId});
   final int productId;
@@ -2381,9 +2552,9 @@ class _RelatedInfiniteState extends State<_RelatedInfinite> {
   bool _loading = false;
   bool _hasMore = true;
   int _autoRounds = 0;
-  // Unlimited infinite scroll — keep fetching while the backend reports
-  // hasNext. We don't surface a manual "Load more" button anymore.
-  static const int _kAutoLimit = 1 << 31;
+  // v2.1.29 — infinite-load the first 3 rounds, then show a Load-more
+  // button (per design) while the backend reports hasNext.
+  static const int _kAutoLimit = 3;
   @override
   void initState() { super.initState(); _loadMore(); }
   Future<void> _loadMore() async {

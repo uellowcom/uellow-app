@@ -918,22 +918,48 @@ class _WishlistApi {
   _WishlistApi(this._c);
   final UellowApi _c;
 
+  // v2.1.29 — in-memory cache of wishlisted TEMPLATE ids so hearts stay
+  // red across navigation. Warmed once per session; updated on toggle.
+  static final Set<int> _cache = {};
+  static bool _warmed = false;
+  bool isCached(int productId) => _cache.contains(productId);
+
+  Future<void> warm({bool force = false}) async {
+    if (_warmed && !force) return;
+    try {
+      final token = await _c.tokenStore.readToken();
+      if (token == null || token.isEmpty) return;
+      final items = await list();
+      _cache
+        ..clear()
+        ..addAll(items.map((p) => p.id));
+      _warmed = true;
+    } catch (_) {}
+  }
+
   Future<List<UellowProductCard>> list() async {
     final res = await _c._get(EP.wishlist, auth: true);
-    return (res['data'] as List)
+    final items = (res['data'] as List)
         .map((e) => UellowProductCard.fromJson(e))
         .toList();
+    _cache
+      ..clear()
+      ..addAll(items.map((p) => p.id));
+    _warmed = true;
+    return items;
   }
 
   Future<bool> add(int productId) async {
     final res = await _c._post(EP.wishlistAdd, auth: true,
         body: {'product_id': productId});
+    _cache.add(productId);
     return res['data']?['added'] == true;
   }
 
   Future<bool> remove(int productId) async {
     final res = await _c._post(EP.wishlistRemove, auth: true,
         body: {'product_id': productId});
+    _cache.remove(productId);
     return res['data']?['removed'] == true;
   }
 }

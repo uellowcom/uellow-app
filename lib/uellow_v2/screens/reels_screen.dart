@@ -395,6 +395,7 @@ class _ReelSlideState extends State<_ReelSlide> with RouteAware {
         ..setLooping(true)
         ..setVolume(reelsMuted.value ? 0 : 1)
         ..play();
+      _reportView();
       if (mounted) setState(() {});
     } catch (_) {
       if (mounted) setState(() => _initFailed = true);
@@ -428,6 +429,20 @@ class _ReelSlideState extends State<_ReelSlide> with RouteAware {
     reelsMuted.removeListener(_applyMute);
     _ctrl?.dispose();
     super.dispose();
+  }
+
+  // v2.1.29 — count a view ONCE per video per session the moment it
+  // starts playing (Bunny stats lag a day; this moves instantly).
+  static final Set<int> _viewReported = {};
+  void _reportView() {
+    if (_videoId == 0 || _viewReported.contains(_videoId)) return;
+    _viewReported.add(_videoId);
+    http.post(Uri.parse('${UellowApi.instance.baseUrl}'
+        '/api/mobile/v2/videos/$_videoId/view'),
+        headers: {'Content-Type': 'application/json'}, body: '{}')
+        .then((_) {
+      if (mounted) setState(() => _views += 1);
+    }).catchError((_) => http.Response('', 599));
   }
 
   Future<void> _toggleFav() async {

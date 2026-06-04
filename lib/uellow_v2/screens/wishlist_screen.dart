@@ -101,7 +101,26 @@ class _WishlistScreenState extends State<WishlistScreen> {
             if (snap.connectionState != ConnectionState.done) {
               return const Center(child: CircularProgressIndicator(color: UellowColors.darkBrown));
             }
-            final items = snap.data ?? [];
+            var items = snap.data ?? [];
+            // v2.1.29 — the top chips actually FILTER now:
+            // 0 all · 1 in stock · 2 on sale · 3 price drop · 4 recent.
+            switch (_filter) {
+              case 1:
+                items = items.where((p) => p.inStock).toList();
+                break;
+              case 2:
+                items = items.where((p) => p.comparePrice != null
+                    && p.comparePrice!.amount > p.price.amount).toList();
+                break;
+              case 3:
+                items = items.where((p) =>
+                    p.priceTrend?['direction'] == 'down'
+                    || p.priceTrend?['is_lowest'] == true).toList();
+                break;
+              case 4:
+                items = items.reversed.toList().take(20).toList();
+                break;
+            }
             if (items.isEmpty) return _empty();
             return GridView.builder(
               padding: const EdgeInsets.all(12),
