@@ -1719,7 +1719,9 @@ class _BulkPricing extends StatelessWidget {
                 color: UellowColors.darkBrown.withValues(alpha: 0.18),
                 blurRadius: 10, offset: const Offset(0, 4))] : null,
           ),
-          child: Column(children: [
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,   // v2.1.28 — centered
+            children: [
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
               decoration: BoxDecoration(

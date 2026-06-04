@@ -421,12 +421,16 @@ class _Image extends StatelessWidget {
   const _Image({
     required this.product, required this.hasDiscount,
     required this.discountPct, required this.faved, required this.onFav,
+    this.clean = false,
   });
   final UellowProductCard product;
   final bool hasDiscount;
   final int discountPct;
   final bool faved;
   final VoidCallback onFav;
+  // v2.1.28 — clean image for the rich card: discount %, free-shipping
+  // and rank badges all moved off the photo per design.
+  final bool clean;
   @override
   Widget build(BuildContext context) {
     return AspectRatio(
@@ -443,7 +447,7 @@ class _Image extends StatelessWidget {
               errorWidget: (_, __, ___) => const ColoredBox(color: UellowColors.border),
             ),
           ),
-          if (discountPct > 0) Positioned(
+          if (discountPct > 0 && !clean) Positioned(
             top: 8, left: 8,
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
@@ -484,7 +488,7 @@ class _Image extends StatelessWidget {
             ),
           ),
           // v2.1.24 — Best Seller rank badge (gold, Amazon-style).
-          if (product.rank != null) Positioned(
+          if (product.rank != null && !clean) Positioned(
             top: 8, left: 8, right: 8,
             child: Align(
               alignment: AlignmentDirectional.topStart,
@@ -515,7 +519,7 @@ class _Image extends StatelessWidget {
             ),
           ),
           // v2.0.82 — Free shipping badge (when the product is tagged)
-          if (product.badges.contains('free_shipping')) Positioned(
+          if (product.badges.contains('free_shipping') && !clean) Positioned(
             bottom: 8, left: 8,
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
@@ -680,20 +684,19 @@ class _RichLayout extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        // v2.1.28 — clean photo: no discount/free-ship/rank overlays.
         _Image(product: product, hasDiscount: hasDiscount,
-            discountPct: discountPct, faved: faved, onFav: onFav),
+            discountPct: discountPct, faved: faved, onFav: onFav,
+            clean: true),
         Padding(
-          padding: const EdgeInsets.fromLTRB(8, 5, 8, 7),
+          padding: const EdgeInsets.fromLTRB(8, 4, 8, 6),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            // ── promo coins ──
-            SizedBox(height: 16, child: _CoinsRow(product: product, ar: ar)),
-            const SizedBox(height: 2),
             // ── name (2 lines) ──
             SizedBox(height: 30, child: Text(product.name.current(lang),
                 maxLines: 2, overflow: TextOverflow.ellipsis,
                 style: const TextStyle(fontSize: 11, height: 1.25,
                     color: UellowColors.ink, fontWeight: FontWeight.w700))),
-            const SizedBox(height: 3),
+            const SizedBox(height: 2),
             // ── price row ──
             Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
               Text(product.price.amount.toStringAsFixed(3),
@@ -720,33 +723,39 @@ class _RichLayout extends StatelessWidget {
                 ),
               ],
             ]),
-            const SizedBox(height: 3),
-            // ── rating + price-intelligence ──
+            const SizedBox(height: 2),
+            // ── FULL 5 stars + (count) + price-intelligence indicator ──
             SizedBox(height: 14, child: Row(children: [
-              const Icon(Icons.star_rounded, size: 12, color: Color(0xFFFFC107)),
-              const SizedBox(width: 2),
-              Text(product.rating.avg > 0
-                      ? product.rating.avg.toStringAsFixed(1) : '—',
-                  style: const TextStyle(fontSize: 10,
-                      fontWeight: FontWeight.w800, color: UellowColors.ink)),
-              if (product.rating.count > 0) ...[
-                const SizedBox(width: 2),
-                Text('(${product.rating.count})', style: const TextStyle(
-                    fontSize: 9, color: UellowColors.muted)),
-              ],
+              for (var i = 0; i < 5; i++) Icon(
+                i < product.rating.avg.round()
+                    ? Icons.star_rounded : Icons.star_outline_rounded,
+                size: 11,
+                color: i < product.rating.avg.round()
+                    ? const Color(0xFFFFC107) : const Color(0xFFCFCFCF),
+              ),
+              const SizedBox(width: 3),
+              Text('(${product.rating.count})', style: const TextStyle(
+                  fontSize: 9, color: UellowColors.muted,
+                  fontWeight: FontWeight.w600)),
               if (product.priceTrend != null) ...[
                 const SizedBox(width: 6),
                 Builder(builder: (_) {
                   final t = product.priceTrend!;
-                  final down = t['direction'] == 'down'
-                      || t['is_lowest'] == true;
-                  final color = down
-                      ? UellowColors.successDk : UellowColors.danger;
+                  final dir = (t['direction'] ?? 'stable').toString();
+                  final lowest = t['is_lowest'] == true;
+                  final down = dir == 'down' || lowest;
+                  final stable = dir == 'stable' && !lowest;
+                  // v2.1.28 — stable gets its OWN look (flat blue icon).
+                  final color = stable
+                      ? const Color(0xFF1565C0)
+                      : (down ? UellowColors.successDk : UellowColors.danger);
+                  final icon = stable
+                      ? Icons.trending_flat
+                      : (down ? Icons.arrow_downward : Icons.arrow_upward);
                   final pct = (t['change_pct'] as num?)?.toDouble() ?? 0;
                   return Row(mainAxisSize: MainAxisSize.min, children: [
-                    Icon(down ? Icons.arrow_downward : Icons.arrow_upward,
-                        size: 10, color: color),
-                    if (pct > 0) Text('${pct.toStringAsFixed(0)}%',
+                    Icon(icon, size: 11, color: color),
+                    if (!stable && pct > 0) Text('${pct.toStringAsFixed(0)}%',
                         style: TextStyle(fontSize: 9,
                             fontWeight: FontWeight.w800, color: color)),
                   ]);
@@ -758,12 +767,12 @@ class _RichLayout extends StatelessWidget {
             SizedBox(height: 14, child: _InfoTicker(
                 product: product, ar: ar,
                 saveAmount: hasDiscount ? saveAmount : 0)),
-            const SizedBox(height: 4),
-            // ── bottom: availability + FREE + video ──
+            const SizedBox(height: 3),
+            // ── bottom: availability + promo coins + free ship + video ──
             SizedBox(height: 17, child: Row(children: [
-              Expanded(child: Align(
-                  alignment: AlignmentDirectional.centerStart,
-                  child: _AvailPill(product: product))),
+              _AvailPill(product: product),
+              const SizedBox(width: 4),
+              Expanded(child: _CoinsRow(product: product, ar: ar)),
               if (product.badges.contains('free_shipping')) Container(
                 margin: const EdgeInsetsDirectional.only(start: 4),
                 padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
@@ -771,13 +780,14 @@ class _RichLayout extends StatelessWidget {
                   color: UellowColors.yellow,
                   borderRadius: BorderRadius.circular(4),
                 ),
-                child: Row(mainAxisSize: MainAxisSize.min, children: const [
-                  Icon(Icons.local_shipping_outlined, size: 10,
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  const Icon(Icons.local_shipping_outlined, size: 10,
                       color: UellowColors.darkBrown),
-                  SizedBox(width: 2),
-                  Text('FREE', style: TextStyle(fontSize: 8,
-                      fontWeight: FontWeight.w900,
-                      color: UellowColors.darkBrown, letterSpacing: 0.4)),
+                  const SizedBox(width: 2),
+                  Text(ar ? 'شحن مجاني' : 'FREE',
+                      style: const TextStyle(fontSize: 7.5,
+                          fontWeight: FontWeight.w900,
+                          color: UellowColors.darkBrown, letterSpacing: 0.2)),
                 ]),
               ),
               if (product.hasVideo) Container(
@@ -863,18 +873,18 @@ class _InfoTickerState extends State<_InfoTicker> {
     super.initState();
     final p = widget.product;
     final ar = widget.ar;
+    // v2.1.28 — no views; fuller, friendlier phrases.
     _items = [
       if (widget.saveAmount > 0)
-        (ar ? '💰 وفّر ${widget.saveAmount.toStringAsFixed(3)} ${p.price.displaySymbol("ar")}'
-            : '💰 Save ${widget.saveAmount.toStringAsFixed(3)} ${p.price.displaySymbol("en")}'),
-      ar ? '🚚 توصيل سريع' : '🚚 Fast delivery',
-      if (p.viewCount > 0)
-        (ar ? '👁 ${_fmt(p.viewCount)} مشاهدة' : '👁 ${_fmt(p.viewCount)} views'),
+        (ar ? '💰 وفّر ${widget.saveAmount.toStringAsFixed(3)} ${p.price.displaySymbol("ar")} عند الشراء الآن'
+            : '💰 Save ${widget.saveAmount.toStringAsFixed(3)} ${p.price.displaySymbol("en")} when you buy now'),
+      ar ? '🚚 توصيل سريع يصلك خلال ساعات' : '🚚 Fast delivery within hours',
       if (p.soldCount > 0)
-        (ar ? '🛒 ${_fmt(p.soldCount)} عملية بيع' : '🛒 ${_fmt(p.soldCount)} sold'),
+        (ar ? '🛒 أكثر من ${_fmt(p.soldCount)} عملية شراء ناجحة'
+            : '🛒 Over ${_fmt(p.soldCount)} successful purchases'),
       if (p.rank != null)
-        (ar ? '🏆 الأفضل في ${_short((p.rank!['category'] as Map?)?['ar'] ?? '')}'
-            : '🏆 Best in ${_short((p.rank!['category'] as Map?)?['en'] ?? '')}'),
+        (ar ? '🏆 الأفضل مبيعاً في قسم ${_short((p.rank!['category'] as Map?)?['ar'] ?? '')}'
+            : '🏆 Best seller in ${_short((p.rank!['category'] as Map?)?['en'] ?? '')}'),
     ];
     if (_items.length > 1) {
       _timer = Timer.periodic(const Duration(milliseconds: 2400), (_) {
