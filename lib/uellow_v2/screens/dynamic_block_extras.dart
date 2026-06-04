@@ -1505,12 +1505,16 @@ class DiscountStripBlock extends StatelessWidget {
         itemBuilder: (_, i) {
           final pp = (items[i] as Map).cast<String, dynamic>();
           final endIso = pp['flash_end_datetime']?.toString();
-          return Stack(children: [
-            _richCard(pp, width: 150),
+          // v2.1.53 — Positioned.fill: the bare Stack gave the card LOOSE
+          // constraints so its bottom badge row (⚡عرض…) fell below the
+          // row's clip and never showed. Now the card gets the same tight
+          // box as the other layouts.
+          return SizedBox(width: 150, child: Stack(children: [
+            Positioned.fill(child: _richCard(pp, width: 150)),
             if (endIso != null && endIso.isNotEmpty)
               PositionedDirectional(top: 6, start: 6,
                   child: _MiniCountdown(endIso: endIso, accent: accent)),
-          ]);
+          ]));
         },
       ),
     );
