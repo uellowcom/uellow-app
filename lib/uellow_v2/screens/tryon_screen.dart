@@ -243,10 +243,65 @@ class _TryOnScreenState extends State<TryOnScreen> {
         }
         return;
       }
+      // v2.1.52 — async generation: poll the status endpoint until the
+      // image is ready (~2s interval, 2.5 min budget).
+      final imageId = (data['image_id'] as num?)?.toInt();
+      if (data['success'] == true && imageId != null) {
+        for (var i = 0; i < 75; i++) {
+          await Future.delayed(const Duration(seconds: 2));
+          if (!mounted) return;
+          try {
+            final st = await http.get(
+              Uri.parse('${UellowApi.instance.baseUrl}'
+                  '/api/mobile/v2/tryon/status/$imageId'),
+              headers: {'Accept': 'application/json',
+                        if (token != null) 'Authorization': 'Bearer $token'},
+            ).timeout(const Duration(seconds: 10));
+            final sj = jsonDecode(utf8.decode(st.bodyBytes))
+                as Map<String, dynamic>;
+            final sd = (sj['data'] as Map?)?.cast<String, dynamic>() ?? {};
+            final status = (sd['status'] ?? '').toString();
+            final rUrl = (sd['result_url'] ?? '').toString();
+            if (status == 'done' && rUrl.isNotEmpty) {
+              setState(() {
+                _generatedImageUrl = rUrl; _generating = false;
+              });
+              return;
+            }
+            if (status == 'failed') {
+              setState(() {
+                _generating = false;
+                _error = ar ? 'فشل التوليد، جرّب صورة أوضح'
+                            : 'Generation failed — try a clearer photo';
+              });
+              return;
+            }
+          } catch (_) {}
+        }
+        if (mounted) {
+          setState(() {
+            _generating = false;
+            _error = ar ? 'انتهت المهلة، حاول مرة أخرى'
+                        : 'Timed out, please try again';
+          });
+        }
+        return;
+      }
       if (mounted) {
+        final err = (data['error'] ?? '').toString();
+        // friendly messages for the engine's known rejections
+        final msgs = {
+          'no_photo': ar ? 'أضف صورتك أولاً' : 'Add your photo first',
+          'price_below_min': ar ? 'هذا المنتج غير مؤهل للتجربة (سعر منخفض)'
+                                : 'Product not eligible (price too low)',
+          'category_not_eligible': ar ? 'هذه الفئة غير مدعومة للتجربة بعد'
+                                      : 'This category is not supported yet',
+          'product_image_missing': ar ? 'لا توجد صورة للمنتج'
+                                      : 'Product has no image',
+        };
         setState(() {
           _generating = false;
-          _error = (data['error']?.toString())
+          _error = msgs[err]
               ?? (ar ? 'فشل التوليد، حاول لاحقاً' : 'Generation failed, try later');
         });
       }
