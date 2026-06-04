@@ -2613,7 +2613,7 @@ class _ExploreMoreBlockState extends State<ExploreMoreBlock> {
         gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
           crossAxisCount: _columns,
           crossAxisSpacing: 8, mainAxisSpacing: 8,
-          childAspectRatio: _columns == 2 ? 0.58 : 0.52,
+          childAspectRatio: _columns == 2 ? 0.585 : 0.52,   // v2.1.33 rich
         ),
         itemCount: _gridLength(),
         itemBuilder: (_, i) {
@@ -2696,7 +2696,7 @@ class _ProductTile extends StatelessWidget {
     final badges = ((meta['badges'] as List?) ?? const []).cast<dynamic>();
     final isSponsored = meta['sponsored'] == true;
     return Stack(children: [
-      ProductCard(product: product),
+      ProductCard(rich: true, product: product),
       if (showBadges && badges.isNotEmpty)
         Positioned(
           top: 4, right: 4,

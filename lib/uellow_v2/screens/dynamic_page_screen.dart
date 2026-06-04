@@ -829,15 +829,26 @@ class _ProductsBlock extends StatelessWidget {
     ]);
   }
 
+  // v2.1.33 — carousel + grid_2 (incl. Bestsellers) render the SAME
+  // rich card as the category page. grid_3 stays compact (too narrow).
+  Widget _richCard(Map<String, dynamic> prod) {
+    try {
+      return ProductCard(rich: true,
+          product: UellowProductCard.fromJson(prod));
+    } catch (_) {
+      return _card(prod);
+    }
+  }
+
   Widget _carousel(List<Map<String, dynamic>> items) {
-    return SizedBox(height: 260,
+    return SizedBox(height: 300,
       child: ListView.separated(
         physics: const ClampingScrollPhysics(),
         padding: const EdgeInsets.symmetric(horizontal: 14),
         scrollDirection: Axis.horizontal,
         itemCount: items.length,
         separatorBuilder: (_, __) => const SizedBox(width: 8),
-        itemBuilder: (_, i) => SizedBox(width: 152, child: _card(items[i])),
+        itemBuilder: (_, i) => SizedBox(width: 160, child: _richCard(items[i])),
       ));
   }
 
@@ -849,9 +860,11 @@ class _ProductsBlock extends StatelessWidget {
         gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: cols,
             mainAxisSpacing: 8, crossAxisSpacing: 8,
-            childAspectRatio: cols == 3 ? 0.62 : 0.66),
+            childAspectRatio: cols == 3 ? 0.62 : 0.585),
         itemCount: items.length,
-        itemBuilder: (_, i) => _card(items[i], compact: cols == 3),
+        itemBuilder: (_, i) => cols == 3
+            ? _card(items[i], compact: true)
+            : _richCard(items[i]),
       ));
   }
 

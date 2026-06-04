@@ -2928,10 +2928,11 @@ class _RelatedInfiniteState extends State<_RelatedInfinite> {
             shrinkWrap: true, physics: const NeverScrollableScrollPhysics(),
             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: 2, mainAxisSpacing: 8, crossAxisSpacing: 8,
-              childAspectRatio: 0.55,
+              childAspectRatio: 0.585,
             ),
             itemCount: _items.length,
-            itemBuilder: (_, i) => ProductCard(product: _items[i]),
+            // v2.1.33 — rich card everywhere products grid.
+            itemBuilder: (_, i) => ProductCard(rich: true, product: _items[i]),
           ),
           if (_loading && _items.isNotEmpty) const Padding(
             padding: EdgeInsets.symmetric(vertical: 10),

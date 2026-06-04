@@ -1249,7 +1249,7 @@ class _ExploreMoreSliverState extends State<_ExploreMoreSliver> {
         SliverGrid(
           gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: 2, crossAxisSpacing: 8, mainAxisSpacing: 8,
-            childAspectRatio: 0.58,
+            childAspectRatio: 0.585,
           ),
           delegate: SliverChildBuilderDelegate(
             (_, i) {
@@ -1260,7 +1260,7 @@ class _ExploreMoreSliverState extends State<_ExploreMoreSliver> {
                   && i >= _items.length - 4) {
                 WidgetsBinding.instance.addPostFrameCallback((_) => _loadMore());
               }
-              return ProductCard(product: _items[i]);
+              return ProductCard(rich: true, product: _items[i]);
             },
             childCount: _items.length,
           ),
