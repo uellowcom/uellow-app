@@ -957,8 +957,20 @@ class _ActionTiles extends StatelessWidget {
         final label = ar ? _ar[i] : _en[i];
         final needsAuth = isGuest && !_public.contains(route);
         return InkWell(
-          onTap: () => Navigator.pushNamed(context,
-              needsAuth ? '/auth' : route),
+          onTap: () {
+            if (needsAuth) {
+              Navigator.pushNamed(context, '/auth');
+              return;
+            }
+            // v2.1.41 — "Tracking" used to push OrderScreen with id 0
+            // (→ 404). It now resolves the LATEST order and opens it,
+            // or falls back to the orders list when there are none.
+            if (route == Routes.order) {
+              _openTracking(context);
+              return;
+            }
+            Navigator.pushNamed(context, route);
+          },
           borderRadius: BorderRadius.circular(12),
           child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
             Container(
@@ -979,6 +991,29 @@ class _ActionTiles extends StatelessWidget {
         );
       },
     );
+  }
+
+  // v2.1.41 — Tracking tile: open the user's most recent order's
+  // tracking; with no orders yet, land on the (empty-state) orders list.
+  Future<void> _openTracking(BuildContext context) async {
+    final ar = UellowApi.instance.lang == 'ar';
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final page = await UellowApi.instance.orders.list(page: 1, perPage: 1);
+      if (!context.mounted) return;
+      if (page.items.isNotEmpty) {
+        Navigator.pushNamed(context, Routes.order,
+            arguments: {'id': page.items.first.id});
+      } else {
+        Navigator.pushNamed(context, '/orders');
+        messenger.showSnackBar(SnackBar(content: Text(
+            ar ? 'لا توجد طلبات لتتبعها بعد' : 'No orders to track yet')));
+      }
+    } on UellowApiException {
+      if (context.mounted) Navigator.pushNamed(context, '/orders');
+    } catch (_) {
+      if (context.mounted) Navigator.pushNamed(context, '/orders');
+    }
   }
 }
 
