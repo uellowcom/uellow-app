@@ -411,29 +411,50 @@ class _FlashLayout extends StatelessWidget {
   Widget build(BuildContext context) {
     // v2.0.62 — Compact pro design: smaller card, lighter typography,
     // styled "Save" pill, no bottom % badge.
+    // v2.1.36 — price row reformatted: localized currency symbol (د.ك in
+    // Arabic), baseline-tidy layout, old price pushed to the row end; the
+    // discount % moved ONTO the photo as a small premium corner badge.
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      _Image(product: product, hasDiscount: hasDiscount,
-          discountPct: discountPct, faved: faved, onFav: onFav),
+      Stack(children: [
+        _Image(product: product, hasDiscount: false,
+            discountPct: 0, faved: faved, onFav: onFav),
+        if (discountPct > 0) PositionedDirectional(
+          top: 6, end: 6,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2.5),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                  colors: [Color(0xFFE53935), Color(0xFFB71C1C)]),
+              borderRadius: BorderRadius.circular(999),
+              boxShadow: const [BoxShadow(
+                  color: Color(0x59B71C1C), blurRadius: 6,
+                  offset: Offset(0, 2))],
+            ),
+            child: Text('-$discountPct%',
+                style: const TextStyle(color: Colors.white, fontSize: 8.5,
+                    fontWeight: FontWeight.w900, letterSpacing: 0.2,
+                    height: 1.0)),
+          ),
+        ),
+      ]),
       Padding(
         padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          // Price row — smaller, refined
-          Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+          // Price row — current price + localized symbol, old price at
+          // the end of the row (never crowds the new price).
+          Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
             Text(product.price.amount.toStringAsFixed(3),
-                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w900,
-                    color: UellowColors.danger, letterSpacing: -0.2)),
-            const SizedBox(width: 2),
-            Padding(padding: const EdgeInsets.only(bottom: 1),
-                child: Text(product.price.symbol,
-                    style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w800,
-                        color: UellowColors.danger))),
-            if (hasDiscount) ...[
-              const SizedBox(width: 6),
-              Padding(padding: const EdgeInsets.only(bottom: 2),
-                  child: MidStrikePrice(
-                      text: product.comparePrice!.amount.toStringAsFixed(3),
-                      fontSize: 9, color: UellowColors.muted)),
-            ],
+                style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w900,
+                    color: UellowColors.danger, letterSpacing: -0.2, height: 1.0)),
+            const SizedBox(width: 3),
+            Text(product.price.displaySymbol(lang),
+                style: const TextStyle(fontSize: 8.5, fontWeight: FontWeight.w800,
+                    color: Color(0xFFC62828))),
+            const Spacer(),
+            if (hasDiscount)
+              MidStrikePrice(
+                  text: product.comparePrice!.amount.toStringAsFixed(3),
+                  fontSize: 9, color: UellowColors.muted),
           ]),
           if (hasDiscount) ...[
             const SizedBox(height: 5),

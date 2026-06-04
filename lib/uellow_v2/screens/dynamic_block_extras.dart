@@ -275,6 +275,10 @@ class DynSectionHeader extends StatelessWidget {
     final headerMode = (props['header_image_mode'] as String?)
         ?? (headerImg.isNotEmpty ? 'banner' : 'beside');
     final iconSize = ((props['header_icon_size'] as num?)?.toDouble() ?? 22).clamp(12, 64).toDouble();
+    // v2.1.36 — explicit image width/height from the builder; falls back
+    // to the square icon size when not set.
+    final imgW = ((props['header_image_w'] as num?)?.toDouble() ?? iconSize).clamp(12, 240).toDouble();
+    final imgH = ((props['header_image_h'] as num?)?.toDouble() ?? iconSize).clamp(12, 160).toDouble();
     final bannerHeight = ((props['header_banner_height'] as num?)?.toDouble() ?? 84).clamp(40, 240).toDouble();
     final bannerRadius = ((props['header_banner_radius'] as num?)?.toDouble() ?? 12).clamp(0, 32).toDouble();
     final bannerFit = (props['header_banner_fit'] as String?) ?? 'cover'; // cover | contain
@@ -340,10 +344,10 @@ class DynSectionHeader extends StatelessWidget {
     Widget? leading;
     if (headerImg.isNotEmpty) {
       leading = ClipRRect(
-        borderRadius: BorderRadius.circular(iconSize / 5),
+        borderRadius: BorderRadius.circular(imgH / 5),
         child: CachedNetworkImage(
-          imageUrl: headerImg, width: iconSize, height: iconSize, fit: BoxFit.cover,
-          errorWidget: (_, __, ___) => SizedBox(width: iconSize, height: iconSize),
+          imageUrl: headerImg, width: imgW, height: imgH, fit: BoxFit.cover,
+          errorWidget: (_, __, ___) => SizedBox(width: imgW, height: imgH),
         ),
       );
     } else if (headerIcon.isNotEmpty) {
@@ -2433,7 +2437,9 @@ class _ExploreMoreBlockState extends State<ExploreMoreBlock> {
 
     return Stack(children: [
       Padding(
-        padding: const EdgeInsets.fromLTRB(10, 4, 10, 10),
+        // v2.1.36 — no bottom padding while the Load-more button shows;
+        // the button is the natural end of the block.
+        padding: EdgeInsets.fromLTRB(10, 4, 10, showLoadMoreBtn ? 0 : 10),
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           // ─── Header row ────────────────────────────────────────────────────
           if ((widget.p['show_title'] != false) && title.isNotEmpty)
@@ -2537,7 +2543,7 @@ class _ExploreMoreBlockState extends State<ExploreMoreBlock> {
             ),
           if (showLoadMoreBtn)
             Padding(
-              padding: const EdgeInsets.fromLTRB(40, 12, 40, 6),
+              padding: const EdgeInsets.fromLTRB(40, 10, 40, 0),
               child: ElevatedButton.icon(
                 onPressed: _loadMore,
                 icon: const Icon(Icons.arrow_downward, size: 16),
@@ -3474,6 +3480,13 @@ class _TabNavBlockState extends State<TabNavBlock> {
     if (tabs.isEmpty) return const SizedBox.shrink();
     final style = (widget.p['style'] as String?) ?? 'underline';
     final t = widget.t;
+    // v2.1.36 — builder-controlled alignment (start/center/end). Default
+    // 'start' is direction-aware: it lines up with the slider's leading
+    // edge in BOTH Arabic (right) and English (left).
+    final align = (widget.p['align'] as String?) ?? 'start';
+    final mainAlign = align == 'center'
+        ? MainAxisAlignment.center
+        : align == 'end' ? MainAxisAlignment.end : MainAxisAlignment.start;
     return Container(
       decoration: widget.p['sticky'] == true
           ? BoxDecoration(color: Colors.white,
@@ -3483,11 +3496,17 @@ class _TabNavBlockState extends State<TabNavBlock> {
         scrollDirection: Axis.horizontal,
         // v2.0.67 — zero vertical padding so the tab strip sits flush
         // beneath the search bar; let block envelope's pad_y handle spacing.
-        padding: const EdgeInsets.symmetric(horizontal: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 10),
         physics: const ClampingScrollPhysics(),
-        child: Row(children: [
-          for (int i = 0; i < tabs.length; i++) _tab(tabs[i] as Map, i, style, t),
-        ]),
+        child: ConstrainedBox(
+          // Let the alignment matter even when the tabs don't fill the
+          // full width (otherwise the Row hugs its children).
+          constraints: BoxConstraints(
+              minWidth: MediaQuery.of(context).size.width - 20),
+          child: Row(mainAxisAlignment: mainAlign, children: [
+            for (int i = 0; i < tabs.length; i++) _tab(tabs[i] as Map, i, style, t),
+          ]),
+        ),
       ),
     );
   }
@@ -3501,7 +3520,9 @@ class _TabNavBlockState extends State<TabNavBlock> {
         _openLink(context, (m['link'] as Map?)?.cast<String, dynamic>());
       },
       child: Container(
-        margin: EdgeInsets.only(right: style == 'underline' ? 18 : 6),
+        // v2.1.36 — direction-aware gap (was EdgeInsets.only(right:),
+        // which broke the start alignment in Arabic).
+        margin: EdgeInsetsDirectional.only(end: style == 'underline' ? 18 : 6),
         padding: style == 'underline'
             ? const EdgeInsets.symmetric(vertical: 4)
             : const EdgeInsets.symmetric(horizontal: 14, vertical: 6),

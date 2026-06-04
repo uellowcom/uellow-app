@@ -1631,6 +1631,9 @@ class _FlashBlock extends StatelessWidget {
       case 'dark':    return _FlashDark(items: items, title: title, ar: ar, endsAt: endsAt);
       case 'minimal': return _FlashMinimal(items: items, title: title, ar: ar, endsAt: endsAt);
       case 'hero':    return _FlashHero(items: items, title: title, ar: ar, endsAt: endsAt);
+      // v2.1.36 — new promo designs:
+      case 'royal':   return _FlashRoyal(items: items, title: title, ar: ar, endsAt: endsAt);
+      case 'custom':  return _FlashCustom(items: items, title: title, ar: ar, endsAt: endsAt, p: p);
       case 'classic':
       default:        return _FlashClassic(items: items, title: title, ar: ar, endsAt: endsAt);
     }
@@ -1860,6 +1863,180 @@ class _FlashMinimal extends StatelessWidget {
           ),
         ),
       ]),
+    );
+  }
+}
+
+// ── Variant: ROYAL — premium deep-purple & gold (v2.1.36) ─────────────────
+
+class _FlashRoyal extends StatelessWidget {
+  const _FlashRoyal({required this.items, required this.title, required this.ar, required this.endsAt});
+  final List<UellowProductCard> items;
+  final String title;
+  final bool ar;
+  final Duration endsAt;
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () => Navigator.pushNamed(context, Routes.flash),
+      child: Container(
+        margin: const EdgeInsets.fromLTRB(8, 4, 8, 8),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(18),
+          gradient: const LinearGradient(
+            begin: Alignment.topLeft, end: Alignment.bottomRight,
+            colors: [Color(0xFF2E1065), Color(0xFF4C1D95), Color(0xFF6D28D9)],
+          ),
+          boxShadow: const [BoxShadow(
+              color: Color(0x554C1D95), blurRadius: 20, offset: Offset(0, 7))],
+        ),
+        clipBehavior: Clip.antiAlias,
+        padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                    colors: [Color(0xFFFFE082), Color(0xFFD4AF37)]),
+                borderRadius: BorderRadius.circular(999),
+                boxShadow: [BoxShadow(
+                    color: const Color(0xFFD4AF37).withValues(alpha: 0.5),
+                    blurRadius: 10)],
+              ),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                const Text('👑', style: TextStyle(fontSize: 11)),
+                const SizedBox(width: 3),
+                Text(ar ? 'عروض ملكية' : 'ROYAL DEALS',
+                    style: const TextStyle(color: Color(0xFF2E1065),
+                    fontSize: 9.5, fontWeight: FontWeight.w900,
+                    letterSpacing: 0.8)),
+              ]),
+            ),
+            const SizedBox(width: 9),
+            Expanded(child: Text(title, style: const TextStyle(
+                color: Colors.white, fontSize: 14, fontWeight: FontWeight.w900))),
+            _DhmsCounter(initial: endsAt, dark: true),
+          ]),
+          const SizedBox(height: 12),
+          SizedBox(height: 220,
+            child: ListView.separated(
+              physics: const ClampingScrollPhysics(),
+              scrollDirection: Axis.horizontal,
+              itemCount: items.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 8),
+              itemBuilder: (_, i) => SizedBox(
+                  width: 138,
+                  child: ProductCard(product: items[i], inFlashSale: true)),
+            ),
+          ),
+        ]),
+      ),
+    );
+  }
+}
+
+// ── Variant: CUSTOM — every visual knob editable from the builder ─────────
+// (v2.1.36) colors 1+2 (1 = solid), pattern on/off, badge emoji + label,
+// text color, corner radius, card width — change anything later without
+// touching the app.
+
+Color _flashHexColor(dynamic raw, Color fallback) {
+  try {
+    var s = (raw ?? '').toString().replaceAll('#', '').trim();
+    if (s.isEmpty) return fallback;
+    if (s.length == 6) s = 'FF$s';
+    return Color(int.parse(s, radix: 16));
+  } catch (_) {
+    return fallback;
+  }
+}
+
+class _FlashCustom extends StatelessWidget {
+  const _FlashCustom({required this.items, required this.title,
+      required this.ar, required this.endsAt, required this.p});
+  final List<UellowProductCard> items;
+  final String title;
+  final bool ar;
+  final Duration endsAt;
+  final Map<String, dynamic> p;
+  @override
+  Widget build(BuildContext context) {
+    final c1 = _flashHexColor(p['flash_c1'], const Color(0xFFF5C320));
+    final c2raw = (p['flash_c2'] ?? '').toString().trim();
+    final c2 = c2raw.isEmpty ? c1 : _flashHexColor(c2raw, c1);
+    final txt = _flashHexColor(p['flash_text_color'], Colors.white);
+    final radius = ((p['flash_radius'] as num?)?.toDouble() ?? 18).clamp(0, 32).toDouble();
+    final cardW = ((p['flash_card_width'] as num?)?.toDouble() ?? 132).clamp(100, 180).toDouble();
+    final showPattern = p['flash_pattern'] != false;
+    final showCounter = p['flash_show_counter'] != false;
+    final emoji = ((p['flash_emoji'] ?? '⚡').toString());
+    final badge = _tx(p, ar, 'flash_badge', '');
+    return GestureDetector(
+      onTap: () => Navigator.pushNamed(context, Routes.flash),
+      child: Container(
+        margin: const EdgeInsets.fromLTRB(8, 4, 8, 8),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(radius),
+          boxShadow: [BoxShadow(
+              color: c2.withValues(alpha: 0.35),
+              blurRadius: 16, offset: const Offset(0, 6))],
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Stack(children: [
+          Positioned.fill(child: Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft, end: Alignment.bottomRight,
+                colors: [c1, c2],
+              ),
+            ),
+          )),
+          if (showPattern)
+            Positioned.fill(child: IgnorePointer(child: CustomPaint(
+              painter: _DiagonalStripes(),
+            ))),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: [
+                Text(emoji, style: const TextStyle(fontSize: 15)),
+                const SizedBox(width: 4),
+                Flexible(child: Text(title, maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(color: txt,
+                        fontSize: 13, fontWeight: FontWeight.w900,
+                        letterSpacing: 0.2))),
+                if (badge.isNotEmpty) Container(
+                  margin: const EdgeInsetsDirectional.only(start: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: txt,
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(badge, style: TextStyle(
+                      color: c2, fontSize: 9,
+                      fontWeight: FontWeight.w900)),
+                ),
+                const Spacer(),
+                if (showCounter) _DhmsCounter(initial: endsAt),
+              ]),
+              const SizedBox(height: 10),
+              SizedBox(height: 178,
+                child: ListView.separated(
+                  physics: const ClampingScrollPhysics(),
+                  scrollDirection: Axis.horizontal,
+                  itemCount: items.length,
+                  separatorBuilder: (_, __) => const SizedBox(width: 8),
+                  itemBuilder: (_, i) => SizedBox(
+                      width: cardW,
+                      child: ProductCard(product: items[i], inFlashSale: true)),
+                ),
+              ),
+            ]),
+          ),
+        ]),
+      ),
     );
   }
 }
