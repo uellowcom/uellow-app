@@ -473,7 +473,7 @@ class _Image extends StatelessWidget {
                   )),
             ),
           ),
-          if (product.hasVideo) Positioned(
+          if (product.hasVideo && !clean) Positioned(
             top: 8, right: 8,
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
@@ -698,8 +698,30 @@ class _RichLayout extends StatelessWidget {
         Padding(
           padding: const EdgeInsets.fromLTRB(8, 4, 8, 6),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            // ── name (2 lines) ──
-            SizedBox(height: 30, child: Text(product.name.current(lang),
+            // ── name (2 lines) — promo coin inline BEFORE the name ──
+            SizedBox(height: 30, child: Text.rich(TextSpan(children: [
+              if (product.promo != null) WidgetSpan(
+                alignment: PlaceholderAlignment.middle,
+                child: Container(
+                  margin: const EdgeInsetsDirectional.only(end: 4),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 5, vertical: 1),
+                  decoration: BoxDecoration(
+                    color: _hex(product.promo!['bg'], const Color(0xFFFFF8E1)),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(
+                    '${product.promo!['emoji'] ?? ''} '
+                    '${((product.promo!['label'] as Map?)?[lang.toLowerCase().startsWith('ar') ? 'ar' : 'en'] ?? '')}',
+                    style: TextStyle(fontSize: 7.5,
+                        fontWeight: FontWeight.w900,
+                        color: _hex(product.promo!['fg'],
+                            const Color(0xFF8B6508))),
+                  ),
+                ),
+              ),
+              TextSpan(text: product.name.current(lang)),
+            ]),
                 maxLines: 2, overflow: TextOverflow.ellipsis,
                 style: const TextStyle(fontSize: 11, height: 1.25,
                     color: UellowColors.ink, fontWeight: FontWeight.w700))),
@@ -815,6 +837,16 @@ class _RichLayout extends StatelessWidget {
   }
 }
 
+Color _hex(Object? raw, Color fallback) {
+  try {
+    var s = (raw ?? '').toString().replaceAll('#', '');
+    if (s.length == 6) s = 'FF$s';
+    return Color(int.parse(s, radix: 16));
+  } catch (_) {
+    return fallback;
+  }
+}
+
 class _CoinsRow extends StatelessWidget {
   const _CoinsRow({required this.product, required this.ar});
   final UellowProductCard product;
@@ -880,24 +912,38 @@ class _InfoTickerState extends State<_InfoTicker> {
     super.initState();
     final p = widget.product;
     final ar = widget.ar;
-    // v2.1.28 — no views; fuller, friendlier phrases.
+    // v2.1.30 — views + cart-adds added; trimmed phrases; ENDLESS loop.
     _items = [
       if (widget.saveAmount > 0)
-        (ar ? '💰 وفّر ${widget.saveAmount.toStringAsFixed(3)} ${p.price.displaySymbol("ar")} عند الشراء الآن'
-            : '💰 Save ${widget.saveAmount.toStringAsFixed(3)} ${p.price.displaySymbol("en")} when you buy now'),
-      ar ? '🚚 توصيل سريع يصلك خلال ساعات' : '🚚 Fast delivery within hours',
+        (ar ? '💰 وفّر ${widget.saveAmount.toStringAsFixed(3)} ${p.price.displaySymbol("ar")} الآن'
+            : '💰 Save ${widget.saveAmount.toStringAsFixed(3)} ${p.price.displaySymbol("en")} now'),
+      ar ? '🚚 توصيل سريع خلال ساعات' : '🚚 Fast delivery in hours',
+      if (p.viewCount > 0)
+        (ar ? '👁 شاهده ${_fmt(p.viewCount)} شخص'
+            : '👁 Viewed by ${_fmt(p.viewCount)} people'),
+      if (p.cartAdds > 0)
+        (ar ? '🛒 أضافه ${_fmt(p.cartAdds)} شخص للسلة'
+            : '🛒 ${_fmt(p.cartAdds)} people added to cart'),
       if (p.soldCount > 0)
-        (ar ? '🛒 أكثر من ${_fmt(p.soldCount)} عملية شراء ناجحة'
-            : '🛒 Over ${_fmt(p.soldCount)} successful purchases'),
+        (ar ? '✅ أكثر من ${_fmt(p.soldCount)} عملية شراء'
+            : '✅ Over ${_fmt(p.soldCount)} purchases'),
       if (p.rank != null)
-        (ar ? '🏆 الأفضل مبيعاً في قسم ${_short((p.rank!['category'] as Map?)?['ar'] ?? '')}'
+        (ar ? '🏆 الأفضل مبيعاً في ${_short((p.rank!['category'] as Map?)?['ar'] ?? '')}'
             : '🏆 Best seller in ${_short((p.rank!['category'] as Map?)?['en'] ?? '')}'),
     ];
-    if (_items.length > 1) {
-      _timer = Timer.periodic(const Duration(milliseconds: 2400), (_) {
-        if (mounted) setState(() => _i = (_i + 1) % _items.length);
-      });
-    }
+    _scheduleNext();
+  }
+
+  // Self-rescheduling chain — survives anything Timer.periodic might
+  // silently drop; the rotation NEVER stops.
+  void _scheduleNext() {
+    if (_items.length <= 1) return;
+    _timer?.cancel();
+    _timer = Timer(const Duration(milliseconds: 2400), () {
+      if (!mounted) return;
+      setState(() => _i = (_i + 1) % _items.length);
+      _scheduleNext();
+    });
   }
 
   String _fmt(int n) => n >= 1000

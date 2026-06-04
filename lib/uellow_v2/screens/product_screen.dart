@@ -121,6 +121,7 @@ class _ProductScreenState extends State<ProductScreen> {
       slivers: [
       SliverToBoxAdapter(child: _Gallery(
         images: gallery, videos: p.videos, page: _galleryPage,
+        promo: p.promo,
         onChanged: (i) => setState(() => _galleryPage = i),
         onShare: () => Share.share(
           'Check out ${p.name.current(UellowApi.instance.lang)} on Uellow\n'
@@ -227,7 +228,9 @@ class _Gallery extends StatelessWidget {
     required this.images, required this.videos,
     required this.page, required this.onChanged,
     required this.onShare, required this.onWishlist, required this.inWishlist,
+    this.promo,
   });
+  final Map<String, dynamic>? promo;
   final List<String> images;
   final List<UellowProductVideo> videos;
   final int page;
@@ -271,6 +274,24 @@ class _Gallery extends StatelessWidget {
             return CachedNetworkImage(imageUrl: it['url'] as String, fit: BoxFit.contain);
           },
         )),
+        // v2.1.30 — promotion coin beside the gallery banner.
+        if (promo != null) PositionedDirectional(top: 14, start: 60,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+            decoration: BoxDecoration(
+              color: _hexColor(promo!['bg'], const Color(0xFFFFF8E1)),
+              borderRadius: BorderRadius.circular(999),
+              boxShadow: const [BoxShadow(color: Color(0x22000000),
+                  blurRadius: 6, offset: Offset(0, 2))],
+            ),
+            child: Text(
+              '${promo!['emoji'] ?? ''} '
+              '${((promo!['label'] as Map?)?[UellowApi.instance.lang.toLowerCase().startsWith('ar') ? 'ar' : 'en'] ?? '')}'
+              '${((promo!['discount_pct'] as num?) ?? 0) > 0 ? ' -${(promo!['discount_pct'] as num).toInt()}%' : ''}',
+              style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w900,
+                  color: _hexColor(promo!['fg'], const Color(0xFF8B6508))),
+            ),
+          )),
         // Video pill in top-center to flag the gallery has a clip
         if (videos.isNotEmpty) Positioned(top: 14, left: 0, right: 0,
           child: Center(child: Container(
@@ -1172,6 +1193,16 @@ class _Attributes extends StatelessWidget {
         )),
       ),
     );
+  }
+}
+
+Color _hexColor(Object? raw, Color fallback) {
+  try {
+    var s = (raw ?? '').toString().replaceAll('#', '');
+    if (s.length == 6) s = 'FF\$s';
+    return Color(int.parse(s, radix: 16));
+  } catch (_) {
+    return fallback;
   }
 }
 

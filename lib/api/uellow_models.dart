@@ -422,6 +422,9 @@ class UellowProductCard {
   final Map<String, dynamic>? rank;
   // v2.1.25 — price-intelligence indicator {direction, change_pct, is_lowest, label}.
   final Map<String, dynamic>? priceTrend;
+  // v2.1.30 — social proof + promotion coin.
+  final int cartAdds;
+  final Map<String, dynamic>? promo;
   // v2.0.73 — sold/view counts surfaced as small badges on the product
   // card. Backend may omit them; defaults to 0 so layout stays stable.
   final int soldCount;
@@ -437,6 +440,8 @@ class UellowProductCard {
     this.hasVideo = false,
     this.rank,
     this.priceTrend,
+    this.cartAdds = 0,
+    this.promo,
     this.soldCount = 0,
     this.viewCount = 0,
   });
@@ -463,6 +468,8 @@ class UellowProductCard {
         hasVideo: (j['has_video'] ?? false) as bool,
         rank: (j['rank'] as Map?)?.cast<String, dynamic>(),
         priceTrend: (j['price_trend'] as Map?)?.cast<String, dynamic>(),
+        cartAdds: (j['cart_adds'] as num?)?.toInt() ?? 0,
+        promo: (j['promo'] as Map?)?.cast<String, dynamic>(),
         soldCount: (j['sold_count'] ?? 0) as int,
         viewCount: (j['view_count'] ?? 0) as int,
       );
@@ -514,6 +521,8 @@ class UellowProductFull extends UellowProductCard {
     bool hasVideo = false,
     Map<String, dynamic>? rank,
     Map<String, dynamic>? priceTrend,
+    int cartAdds = 0,
+    Map<String, dynamic>? promo,
     this.ranks = const [],
     this.priceHistory,
     this.flashEndsAt, this.flashTitle,
@@ -524,6 +533,7 @@ class UellowProductFull extends UellowProductCard {
             isPublished: isPublished, badges: badges, vendor: vendor,
             allowOutOfStockOrder: allowOutOfStockOrder,
             hasVideo: hasVideo, rank: rank, priceTrend: priceTrend,
+            cartAdds: cartAdds, promo: promo,
             soldCount: soldCount, viewCount: viewCount);
 
   factory UellowProductFull.fromJson(Map<String, dynamic> j) => UellowProductFull(
@@ -553,6 +563,8 @@ class UellowProductFull extends UellowProductCard {
         hasVideo: (j['has_video'] ?? false) as bool,
         rank: (j['rank'] as Map?)?.cast<String, dynamic>(),
         priceTrend: (j['price_trend'] as Map?)?.cast<String, dynamic>(),
+        cartAdds: (j['cart_adds'] as num?)?.toInt() ?? 0,
+        promo: (j['promo'] as Map?)?.cast<String, dynamic>(),
         priceHistory: (j['price_history'] as Map?)?.cast<String, dynamic>(),
         ranks: ((j['ranks'] as List?) ?? const [])
             .map((e) => (e as Map).cast<String, dynamic>())
