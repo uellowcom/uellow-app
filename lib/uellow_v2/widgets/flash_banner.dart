@@ -21,7 +21,7 @@ class FlashBanner extends StatelessWidget {
       this.discountPct, this.productCount,
       this.title, this.subtitle, this.onTap,
       this.colors, this.emoji, this.pattern = true,
-      this.patternStyle, this.iconUrl});
+      this.patternStyle, this.iconUrl, this.iconBg});
   /// Sale end timestamp. If null, shows a placeholder D/H/M/S.
   final DateTime? endsAt;
   /// When true, renders the slim 36px-tall strip (for under product image).
@@ -50,6 +50,8 @@ class FlashBanner extends StatelessWidget {
   /// v2.1.39 — campaign icon IMAGE (replaces the discount circle / emoji
   /// in the leading slot when provided).
   final String? iconUrl;
+  /// v2.1.43 — background color of the round icon holder.
+  final Color? iconBg;
   @override
   Widget build(BuildContext context) {
     final ar = UellowApi.instance.lang == 'ar';
@@ -141,19 +143,25 @@ class FlashBanner extends StatelessWidget {
       // campaign icon IMAGE > discount % > emoji.
       Container(
         width: 46, height: 46,
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           shape: BoxShape.circle,
-          color: Colors.white,
-          boxShadow: [BoxShadow(
+          color: iconBg ?? Colors.white,
+          boxShadow: const [BoxShadow(
               color: Color(0x33000000), blurRadius: 6, offset: Offset(0, 2))],
         ),
         clipBehavior: Clip.antiAlias,
         alignment: Alignment.center,
         child: (iconUrl != null && iconUrl!.isNotEmpty)
-            ? CachedNetworkImage(
-                imageUrl: iconUrl!, width: 46, height: 46, fit: BoxFit.cover,
-                errorWidget: (_, __, ___) =>
-                    Text(emoji ?? '⚡', style: const TextStyle(fontSize: 22)))
+            // v2.1.43 — contain + inset: the icon always sits CENTERED
+            // and fully visible inside the circle (cover used to crop it).
+            ? Padding(
+                padding: const EdgeInsets.all(5),
+                child: CachedNetworkImage(
+                  imageUrl: iconUrl!, width: 36, height: 36,
+                  fit: BoxFit.contain,
+                  errorWidget: (_, __, ___) =>
+                      Text(emoji ?? '⚡', style: const TextStyle(fontSize: 22)),
+                ))
             : discountPct != null
             ? Column(mainAxisAlignment: MainAxisAlignment.center, children: [
                 Text('-${discountPct}%', style: const TextStyle(

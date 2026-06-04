@@ -177,6 +177,7 @@ class _ProductScreenState extends State<ProductScreen> {
             // replaces the discount circle when set).
             patternStyle: (b['pattern_style'] ?? 'stripes').toString(),
             iconUrl: iconUrl.isEmpty ? null : iconUrl,
+            iconBg: _hexColor(b['icon_bg'], Colors.white),
             discountPct: (iconUrl.isEmpty && pct > 0) ? pct : null,
             title: ((b['title'] as Map?)?[l] ?? '').toString(),
             subtitle: ((b['subtitle'] as Map?)?[l] ?? '').toString().isEmpty
@@ -310,26 +311,8 @@ class _Gallery extends StatelessWidget {
             return CachedNetworkImage(imageUrl: it['url'] as String, fit: BoxFit.contain);
           },
         )),
-        // v2.1.30 — promotion coin on the gallery.
-        // v2.1.39 — moved to BOTTOM-start: at top-start:60 it sat under
-        // the share/wishlist buttons in Arabic (RTL) and never showed.
-        if (promo != null) PositionedDirectional(bottom: 18, start: 12,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-            decoration: BoxDecoration(
-              color: _hexColor(promo!['bg'], const Color(0xFFFFF8E1)),
-              borderRadius: BorderRadius.circular(999),
-              boxShadow: const [BoxShadow(color: Color(0x22000000),
-                  blurRadius: 6, offset: Offset(0, 2))],
-            ),
-            child: Text(
-              '${promo!['emoji'] ?? ''} '
-              '${((promo!['label'] as Map?)?[UellowApi.instance.lang.toLowerCase().startsWith('ar') ? 'ar' : 'en'] ?? '')}'
-              '${((promo!['discount_pct'] as num?) ?? 0) > 0 ? ' -${(promo!['discount_pct'] as num).toInt()}%' : ''}',
-              style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w900,
-                  color: _hexColor(promo!['fg'], const Color(0xFF8B6508))),
-            ),
-          )),
+        // v2.1.43 — gallery promotion coin REMOVED per request (the
+        // flash-style promo banner below the gallery is enough).
         // Video pill in top-center to flag the gallery has a clip
         if (videos.isNotEmpty) Positioned(top: 14, left: 0, right: 0,
           child: Center(child: Container(
@@ -1435,24 +1418,51 @@ class _CompactDeliveryState extends State<_CompactDelivery> {
           .timeout(const Duration(seconds: 8));
       final j = jsonDecode(utf8.decode(r.bodyBytes)) as Map<String, dynamic>;
       if (j['success'] == true && mounted) {
-        setState(() => _etaLines = ((j['data']?['lines'] as List?) ?? const [])
-            .cast<Map>().map((m) => m.cast<String, dynamic>()).toList());
+        var lines = ((j['data']?['lines'] as List?) ?? const [])
+            .cast<Map>().map((m) => m.cast<String, dynamic>()).toList();
+        // v2.1.43 — a country filter with no scoped carriers returned an
+        // empty list → the block fell back to "pick your address" even
+        // for signed-in users. Retry once WITHOUT the country filter.
+        if (lines.isEmpty && cc.isNotEmpty) {
+          try {
+            final r2 = await http.get(Uri.parse(
+                '${UellowApi.instance.baseUrl}/api/mobile/v2/orders/delivery-eta'))
+                .timeout(const Duration(seconds: 8));
+            final j2 = jsonDecode(utf8.decode(r2.bodyBytes))
+                as Map<String, dynamic>;
+            if (j2['success'] == true) {
+              lines = ((j2['data']?['lines'] as List?) ?? const [])
+                  .cast<Map>().map((m) => m.cast<String, dynamic>()).toList();
+            }
+          } catch (_) {}
+        }
+        if (mounted) setState(() => _etaLines = lines);
       }
     } catch (_) {}
   }
 
   Future<void> _loadAddress() async {
     // v2.1.22 — "Country - City" format (per the map), as agreed.
+    // v2.1.43 — robust fallbacks: an address with no country/city used to
+    // produce an EMPTY summary, so signed-in users with a default address
+    // still saw "اختر عنوانك". Now: country-city → city → name → street.
     try {
       final addrs = await UellowApi.instance.addresses.list();
       if (addrs.isNotEmpty) {
         final savedId = await UellowApi.instance.tokenStore.readAddressId();
         final pick = addrs.firstWhere((a) => a.id == savedId,
-            orElse: () => addrs.first);
+            orElse: () => addrs.firstWhere((a) => a.isDefault,
+                orElse: () => addrs.first));
         final parts = [pick.country, pick.city]
             .where((s) => s.isNotEmpty).toList();
-        if (mounted) setState(() => _summary = parts.join(' - '));
-        return;
+        var summary = parts.join(' - ');
+        if (summary.isEmpty) summary = pick.city;
+        if (summary.isEmpty) summary = pick.name;
+        if (summary.isEmpty) summary = pick.street;
+        if (summary.isNotEmpty) {
+          if (mounted) setState(() => _summary = summary);
+          return;
+        }
       }
     } catch (_) {/* guest or 401 */}
     try {
@@ -2266,8 +2276,12 @@ class _SpecsDialog extends StatelessWidget {
     }
     if (p.sku.isNotEmpty) rows.add((ar ? 'رقم المنتج' : 'SKU', p.sku));
     if (p.barcode.isNotEmpty) rows.add((ar ? 'الباركود' : 'Barcode', p.barcode));
-    rows.add((ar ? 'الضمان' : 'Warranty',
-        ar ? '${p.warrantyMonths} شهر' : '${p.warrantyMonths} months'));
+    // v2.1.43 — warranty row only when the product ACTUALLY has one
+    // (it used to default to 12 months and show on every product).
+    if (p.warrantyMonths > 0) {
+      rows.add((ar ? 'الضمان' : 'Warranty',
+          ar ? '${p.warrantyMonths} شهر' : '${p.warrantyMonths} months'));
+    }
     return Container(
       constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.88),
       decoration: const BoxDecoration(

@@ -577,7 +577,7 @@ class UellowProductFull extends UellowProductCard {
             .toList(),
         sku: (j['sku'] ?? '').toString(),
         barcode: (j['barcode'] ?? '').toString(),
-        warrantyMonths: (j['warranty_months'] ?? 12) as int,
+        warrantyMonths: (j['warranty_months'] ?? 0) as int,
         shippingInfoLabel: UellowText.fromJson(j['shipping_info_label']),
         soldCount: (j['sold_count'] ?? 0) as int,
         viewCount: (j['view_count'] ?? 0) as int,
