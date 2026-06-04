@@ -1068,9 +1068,38 @@ class _ShippingMethodList extends StatelessWidget {
                 ]),
               ),
             ])),
-            Text(price?.format() ?? '—', style: const TextStyle(
-                fontSize: 14, fontWeight: FontWeight.w900,
-                color: UellowColors.darkBrown)),
+            // v2.1.51 — free shipping (flags / threshold / coupon) shows
+            // a clear green "FREE SHIPPING" instead of 0.000.
+            m['is_free'] == true
+                ? Column(crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: UellowColors.success,
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: Text(lang == 'ar' ? '🚚 شحن مجاني' : '🚚 FREE',
+                          style: const TextStyle(fontSize: 10.5,
+                              fontWeight: FontWeight.w900,
+                              color: Colors.white)),
+                    ),
+                    if (((m['free_label'] as Map?)?[lang] ?? '')
+                        .toString().isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 2),
+                        child: Text(
+                            ((m['free_label'] as Map?)?[lang] ?? '')
+                                .toString(),
+                            style: const TextStyle(fontSize: 8.5,
+                                color: UellowColors.successDk,
+                                fontWeight: FontWeight.w700)),
+                      ),
+                  ])
+                : Text(price?.format() ?? '—', style: const TextStyle(
+                    fontSize: 14, fontWeight: FontWeight.w900,
+                    color: UellowColors.darkBrown)),
           ]),
         ),
       );

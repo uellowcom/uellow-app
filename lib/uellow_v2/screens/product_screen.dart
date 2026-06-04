@@ -1553,6 +1553,7 @@ class _DeliveryDialog extends StatefulWidget {
 
 class _DeliveryDialogState extends State<_DeliveryDialog> {
   late Future<List<UellowAddress>> _future;
+  bool _signedIn = false;
   // v2.1.35 — the dialog now shows the FULL delivery picture: every
   // method with live availability, cutoff, price and free-over rule.
   List<Map<String, dynamic>> _etaLines = const [];
@@ -1562,6 +1563,10 @@ class _DeliveryDialogState extends State<_DeliveryDialog> {
     super.initState();
     _future = UellowApi.instance.addresses.list().catchError((_) => <UellowAddress>[]);
     _loadEta();
+    // v2.1.51 — guests must not see "Manage addresses".
+    UellowApi.instance.tokenStore.readToken().then((t) {
+      if (mounted) setState(() => _signedIn = t != null && t.isNotEmpty);
+    });
   }
 
   Future<void> _loadEta() async {
@@ -1774,7 +1779,10 @@ class _DeliveryDialogState extends State<_DeliveryDialog> {
         )),
         Padding(padding: const EdgeInsets.fromLTRB(18, 10, 18, 18),
             child: Column(children: [
-              SizedBox(width: double.infinity, child: ElevatedButton.icon(
+              // v2.1.51 — signed-in only; guests get the sign-in CTA from
+              // the empty-state instead.
+              if (_signedIn)
+                SizedBox(width: double.infinity, child: ElevatedButton.icon(
                 onPressed: () {
                   Navigator.pop(context);
                   Navigator.pushNamed(context, '/addresses');

@@ -552,7 +552,9 @@ class _ShippingMethods extends StatelessWidget {
             const SizedBox(width: 10),
             Expanded(child: Text(m.name.current(lang),
                 style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13))),
-            Text(m.isFree ? 'FREE' : (m.rate?.format() ?? '—'),
+            Text(m.isFree
+                    ? (lang == 'ar' ? '🚚 شحن مجاني' : '🚚 FREE')
+                    : (m.rate?.format() ?? '—'),
                 style: TextStyle(
                   fontWeight: FontWeight.w900,
                   color: m.isFree ? UellowColors.successDk : UellowColors.darkBrown,

@@ -1,7 +1,7 @@
 name: uellow
 description: Uellow Marketplace — v2 mobile app
 publish_to: 'none'
-version: 2.1.50+150
+version: 2.1.51+151
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
