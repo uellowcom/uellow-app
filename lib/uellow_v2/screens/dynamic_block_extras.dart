@@ -267,7 +267,12 @@ class DynSectionHeader extends StatelessWidget {
     //               its own title (text title is hidden). The image keeps
     //               its natural aspect ratio inside a rounded card with a
     //               soft shadow.
-    final headerImg = (props['header_image_url'] as String?) ?? '';
+    // v2.1.46 — bilingual header image: the AR variant (when set) is
+    // used in Arabic mode, otherwise the EN/default one.
+    final headerImgEn = (props['header_image_url'] as String?) ?? '';
+    final headerImgAr = (props['header_image_url_ar'] as String?) ?? '';
+    final headerImg = (ar && headerImgAr.isNotEmpty)
+        ? headerImgAr : headerImgEn;
     final headerIcon = (props['header_icon'] as String?) ?? '';
     // v2.0.73 — when the admin uploads a header image, default to BANNER
     // (full-width). Was defaulting to a small beside-the-title icon, but
