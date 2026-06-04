@@ -2921,9 +2921,16 @@ class _ReviewsBlockState extends State<_ReviewsBlock> {
   }
   Future<Map<String, dynamic>?> _fetch() async {
     try {
+      // v2.1.38 — send the token when signed in: the backend then also
+      // returns the user's OWN pending review (marked "under review").
+      final token = await UellowApi.instance.tokenStore.readToken();
       final r = await http.get(
         Uri.parse('${UellowApi.instance.baseUrl}/api/mobile/v2/products/${widget.productId}/reviews'),
-        headers: {'Accept': 'application/json'},
+        headers: {
+          'Accept': 'application/json',
+          if (token != null && token.isNotEmpty)
+            'Authorization': 'Bearer $token',
+        },
       );
       final body = jsonDecode(utf8.decode(r.bodyBytes)) as Map<String, dynamic>;
       if (body['success'] == true) return body['data'] as Map<String, dynamic>;
@@ -3054,20 +3061,52 @@ class _ReviewsBlockState extends State<_ReviewsBlock> {
                     ])),
                   ]),
                 )
-              else for (final r in reviews.take(3)) _reviewCard(r as Map<String, dynamic>),
-              if (reviews.length > 3) Padding(
-                padding: const EdgeInsets.only(top: 10),
-                child: SizedBox(width: double.infinity, child: ElevatedButton(
-                  onPressed: () {},
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: UellowColors.yellowSoft,
-                    foregroundColor: UellowColors.darkBrown, elevation: 0,
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                  ),
-                  child: Text('${T.t('reviews.see_all')} ($total)',
-                      style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13)),
-                )),
-              ),
+              else ...[
+                // v2.1.38 — ONE full review; the second peeks through a
+                // white fade as a teaser; "المزيد" opens the full dialog
+                // (all reviews + photos).
+                _reviewCard(reviews.first as Map<String, dynamic>),
+                if (reviews.length > 1)
+                  Stack(children: [
+                    SizedBox(
+                      height: 64,
+                      child: ClipRect(child: OverflowBox(
+                        alignment: Alignment.topCenter,
+                        maxHeight: 200,
+                        child: _reviewCard(
+                            reviews[1] as Map<String, dynamic>),
+                      )),
+                    ),
+                    Positioned.fill(child: IgnorePointer(child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            Colors.white.withValues(alpha: 0.25),
+                            Colors.white.withValues(alpha: 0.95),
+                          ],
+                        ),
+                      ),
+                    ))),
+                  ]),
+                if (reviews.length > 1 || total > 1) Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: SizedBox(width: double.infinity, child: ElevatedButton.icon(
+                    onPressed: () => _openAllReviews(
+                        context, reviews, avg, total),
+                    icon: const Icon(Icons.reviews_outlined, size: 15),
+                    label: Text(ar ? 'المزيد ($total)' : 'More ($total)',
+                        style: const TextStyle(
+                            fontWeight: FontWeight.w800, fontSize: 13)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: UellowColors.yellowSoft,
+                      foregroundColor: UellowColors.darkBrown, elevation: 0,
+                      padding: const EdgeInsets.symmetric(vertical: 11),
+                    ),
+                  )),
+                ),
+              ],
             ]);
           },
         ),
@@ -3091,6 +3130,10 @@ class _ReviewsBlockState extends State<_ReviewsBlock> {
     final rating = (r['rating'] as num?)?.toDouble() ?? 0;
     final body = (r['body'] as String?) ?? '';
     final verified = r['verified_purchase'] == true;
+    final pending = r['pending'] == true;
+    final photos = ((r['photos'] as List?) ?? const [])
+        .map((e) => e.toString()).where((s) => s.isNotEmpty).toList();
+    final ar = UellowApi.instance.lang == 'ar';
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(12),
@@ -3112,18 +3155,34 @@ class _ReviewsBlockState extends State<_ReviewsBlock> {
           const SizedBox(width: 8),
           Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Row(children: [
-              Text(author, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
+              Flexible(child: Text(author,
+                  maxLines: 1, overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13))),
               if (verified) Padding(
-                padding: const EdgeInsets.only(left: 6),
+                padding: const EdgeInsetsDirectional.only(start: 6),
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
                   decoration: BoxDecoration(
                     color: UellowColors.success,
                     borderRadius: BorderRadius.circular(4),
                   ),
-                  child: Text(UellowApi.instance.lang == 'ar' ? 'موثّق' : 'VERIFIED',
+                  child: Text(ar ? 'موثّق' : 'VERIFIED',
                       style: const TextStyle(
                       color: Colors.white, fontSize: 9, fontWeight: FontWeight.w800)),
+                ),
+              ),
+              // v2.1.38 — author sees their not-yet-approved review.
+              if (pending) Padding(
+                padding: const EdgeInsetsDirectional.only(start: 6),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFF3CD),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(ar ? '⏳ قيد المراجعة' : '⏳ Under review',
+                      style: const TextStyle(color: Color(0xFF8A6D00),
+                          fontSize: 9, fontWeight: FontWeight.w800)),
                 ),
               ),
             ]),
@@ -3137,7 +3196,95 @@ class _ReviewsBlockState extends State<_ReviewsBlock> {
           child: Text(body, style: const TextStyle(
               fontSize: 13, color: UellowColors.ink, height: 1.5)),
         ),
+        // v2.1.38 — review photos: 56px thumbs, tap → full-screen viewer.
+        if (photos.isNotEmpty) Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: SizedBox(height: 56, child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            itemCount: photos.length,
+            separatorBuilder: (_, __) => const SizedBox(width: 6),
+            itemBuilder: (ctx, i) => GestureDetector(
+              onTap: () => _openPhoto(ctx, photos, i),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: CachedNetworkImage(
+                  imageUrl: photos[i], width: 56, height: 56,
+                  fit: BoxFit.cover,
+                  placeholder: (_, __) => Container(
+                      width: 56, height: 56, color: UellowColors.border),
+                  errorWidget: (_, __, ___) => const SizedBox.shrink(),
+                ),
+              ),
+            ),
+          )),
+        ),
       ]),
+    );
+  }
+
+  void _openPhoto(BuildContext context, List<String> photos, int index) {
+    showDialog(context: context, builder: (_) => Dialog.fullscreen(
+      backgroundColor: Colors.black,
+      child: Stack(children: [
+        PageView.builder(
+          controller: PageController(initialPage: index),
+          itemCount: photos.length,
+          itemBuilder: (_, i) => InteractiveViewer(
+            child: Center(child: CachedNetworkImage(imageUrl: photos[i])),
+          ),
+        ),
+        PositionedDirectional(top: 30, end: 12, child: IconButton(
+          icon: const Icon(Icons.close, color: Colors.white, size: 26),
+          onPressed: () => Navigator.of(context, rootNavigator: true).pop(),
+        )),
+      ]),
+    ));
+  }
+
+  // v2.1.38 — full reviews dialog: avg header + every review with photos.
+  void _openAllReviews(BuildContext context,
+      List reviews, double avg, int total) {
+    final ar = UellowApi.instance.lang == 'ar';
+    showModalBottomSheet(
+      context: context, isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => SizedBox(
+        height: MediaQuery.of(ctx).size.height * 0.85,
+        child: Column(children: [
+          const SizedBox(height: 10),
+          Container(width: 36, height: 4,
+              decoration: BoxDecoration(color: UellowColors.border,
+                  borderRadius: BorderRadius.circular(2))),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(18, 12, 18, 4),
+            child: Row(children: [
+              Text(ar ? 'التقييمات' : 'Reviews', style: UT.h2),
+              const SizedBox(width: 8),
+              const Icon(Icons.star_rounded,
+                  size: 16, color: UellowColors.yellow),
+              Text(' ${avg.toStringAsFixed(1)}',
+                  style: const TextStyle(fontSize: 14,
+                      fontWeight: FontWeight.w900,
+                      color: UellowColors.ink)),
+              Text(ar ? '  ·  $total تقييم' : '  ·  $total reviews',
+                  style: const TextStyle(fontSize: 12,
+                      color: UellowColors.muted,
+                      fontWeight: FontWeight.w600)),
+              const Spacer(),
+              IconButton(icon: const Icon(Icons.close, size: 20),
+                  onPressed: () => Navigator.pop(ctx)),
+            ]),
+          ),
+          Expanded(child: ListView.builder(
+            padding: const EdgeInsets.fromLTRB(16, 6, 16, 24),
+            itemCount: reviews.length,
+            itemBuilder: (_, i) =>
+                _reviewCard(reviews[i] as Map<String, dynamic>),
+          )),
+        ]),
+      ),
     );
   }
 }

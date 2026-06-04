@@ -153,9 +153,13 @@ class FlashBanner extends StatelessWidget {
       Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisAlignment: MainAxisAlignment.center, children: [
         Row(children: [
-          Text(t, style: const TextStyle(color: Colors.white,
-              fontSize: 16, fontWeight: FontWeight.w900,
-              letterSpacing: 0.4, height: 1.1)),
+          // v2.1.38 — Flexible + ellipsis: a long title can never run
+          // under the countdown anymore.
+          Flexible(child: Text(t, maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(color: Colors.white,
+                  fontSize: 15, fontWeight: FontWeight.w900,
+                  letterSpacing: 0.3, height: 1.1))),
           const SizedBox(width: 6),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
@@ -179,8 +183,11 @@ class FlashBanner extends StatelessWidget {
               style: const TextStyle(color: Color(0xCCFFFFFF), fontSize: 10)),
         ),
       ])),
-      // Right: D/H/M/S countdown
-      _DhmsCounter(endsAt: endsAt, compact: false),
+      // Right: D/H/M/S countdown — v2.1.38: smaller cells + a safe gap
+      // from the text, and FittedBox auto-shrinks it on narrow screens.
+      const SizedBox(width: 8),
+      FittedBox(fit: BoxFit.scaleDown,
+          child: _DhmsCounter(endsAt: endsAt, compact: false)),
     ]);
   }
 }
@@ -246,8 +253,9 @@ class _DhmsCounterState extends State<_DhmsCounter> {
     final labels = ar
         ? const ['يوم', 'ساعة', 'دقيقة', 'ثانية']
         : const ['DAY', 'HR', 'MIN', 'SEC'];
-    final sz = widget.compact ? 14.0 : 32.0;
-    final fs = widget.compact ? 8.0 : 13.0;
+    // v2.1.38 — full cells shrunk 32→26 (they crowded the banner title).
+    final sz = widget.compact ? 14.0 : 26.0;
+    final fs = widget.compact ? 8.0 : 11.0;
     final vals = [_two(d), _two(h), _two(m), _two(s)];
     final letters = const ['D', 'H', 'M', 'S'];
     return Row(mainAxisSize: MainAxisSize.min, children: [
