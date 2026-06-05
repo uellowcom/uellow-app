@@ -623,10 +623,9 @@ class _LineCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final lang = UellowApi.instance.lang;
     return GestureDetector(
-      // v2.1.34 — tapping a cart line opens its product page.
-      onTap: selectMode
-          ? onSelectToggle
-          : () => UellowRouter.goProduct(context, line.productId),
+      // v2.1.70 — the ROW only toggles selection (in select mode);
+      // opening the product moved to the IMAGE tap per ali@uellow.
+      onTap: selectMode ? onSelectToggle : null,
       child: Container(
       margin: const EdgeInsets.fromLTRB(14, 10, 14, 0),
       padding: const EdgeInsets.all(12),
@@ -649,11 +648,17 @@ class _LineCard extends StatelessWidget {
             color: selected ? UellowColors.darkBrown : UellowColors.muted,
           ),
         ),
-        ClipRRect(
-          borderRadius: const BorderRadius.all(Radius.circular(10)),
-          child: CachedNetworkImage(
-            imageUrl: line.image, width: 84, height: 84, fit: BoxFit.cover,
-            placeholder: (_, __) => Container(color: UellowColors.border, width: 84, height: 84),
+        GestureDetector(
+          // v2.1.70 — image tap = open the product page.
+          onTap: selectMode
+              ? onSelectToggle
+              : () => UellowRouter.goProduct(context, line.productId),
+          child: ClipRRect(
+            borderRadius: const BorderRadius.all(Radius.circular(10)),
+            child: CachedNetworkImage(
+              imageUrl: line.image, width: 84, height: 84, fit: BoxFit.cover,
+              placeholder: (_, __) => Container(color: UellowColors.border, width: 84, height: 84),
+            ),
           ),
         ),
         const SizedBox(width: 12),
