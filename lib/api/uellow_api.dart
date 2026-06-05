@@ -139,6 +139,11 @@ class UellowApi {
   final UellowTokenStore tokenStore;
   final http.Client _http;
 
+  /// v2.1.59 — raw GET for endpoints without a typed wrapper yet.
+  Future<Map<String, dynamic>> getRaw(String path,
+          {Map<String, dynamic>? query, bool auth = false}) =>
+      _get(path, query: query, auth: auth);
+
   /// Switch which Odoo website the app talks to. Used when the user
   /// changes country in the picker — every subsequent request goes
   /// against the new domain. Persisted via tokenStore so the choice
@@ -289,9 +294,13 @@ class UellowApi {
         statusCode: 0,
       );
     } on TimeoutException {
+      // v2.1.59 — friendly, actionable copy instead of the raw
+      // "UellowApiException(TIMEOUT)" feel.
       throw UellowApiException(
         code: 'TIMEOUT',
-        message: lang == 'ar' ? 'انتهت مهلة الطلب' : 'Request timed out',
+        message: lang == 'ar'
+            ? '⏳ الاتصال يأخذ وقتاً أطول من المعتاد — حاول مرة أخرى أو اسحب الشاشة للتحديث'
+            : '⏳ Taking longer than usual — please retry or pull to refresh',
         statusCode: 0,
       );
     } on HttpException catch (e) {

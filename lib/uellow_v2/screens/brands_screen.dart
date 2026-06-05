@@ -1,10 +1,14 @@
 // =============================================================================
-// BrandsScreen — A-Z scroll bar + featured carousel + brands grid.
-// Wires to /api/mobile/v2/vendors.
+// BrandsScreen (v2.1.59 full rewrite) — REAL brands directory:
+// alphabetical grid of square brand tiles (logo + untranslated name +
+// product count), search box, and root-category chips that re-filter
+// the list from the backend. The old screen was demo data.
 // =============================================================================
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
 import '../../api/uellow_api.dart';
+import '../../api/uellow_models.dart';
 import '../theme/uellow_theme.dart';
 
 class BrandsScreen extends StatefulWidget {
@@ -14,198 +18,174 @@ class BrandsScreen extends StatefulWidget {
 }
 
 class _BrandsScreenState extends State<BrandsScreen> {
-  String _letter = 'A';
-  // Demo brand list grouped by letter
-  static const _demo = <String, List<(String, Color)>>{
-    'A': [('Anker', Color(0xFFFF4D4D)), ('Apple', Colors.black), ('Acer', Color(0xFF10B981))],
-    'B': [('Bestrio', Color(0xFF412402)), ('Borofone', Color(0xFF06B6D4)), ('Bose', Color(0xFF000000))],
-    'H': [('Huawei', Color(0xFF10B981)), ('Hago', Color(0xFFF59E0B))],
-    'S': [('Samsung', Color(0xFF3B82F6)), ('Sumo', Color(0xFFF5C320)), ('Sayona', Color(0xFFEC4899)), ('Sing-e', Color(0xFF84CC16))],
-    'V': [('Vidvie', Color(0xFF8B5CF6))],
-    'X': [('Xiaomi', Color(0xFFFF9500))],
-  };
+  List<Map<String, dynamic>>? _brands;
+  List<UellowCategory> _roots = const [];
+  int _catId = 0;                  // 0 = all
+  final _q = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+    UellowApi.instance.categories.tree().then((v) {
+      if (mounted) setState(() => _roots = v);
+    }).catchError((_) {});
+  }
+
+  Future<void> _load() async {
+    setState(() => _brands = null);
+    try {
+      final res = await UellowApi.instance.getRaw(
+          '/api/mobile/v2/brands',
+          query: {if (_catId > 0) 'category_id': _catId});
+      final v = List<Map<String, dynamic>>.from(
+          (res['data']?['brands'] as List?) ?? const []);
+      // alphabetical per spec
+      v.sort((a, b) => (a['name'] ?? '').toString().toLowerCase()
+          .compareTo((b['name'] ?? '').toString().toLowerCase()));
+      if (mounted) setState(() => _brands = v);
+    } catch (_) {
+      if (mounted) setState(() => _brands = const []);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: UellowColors.bg,
-      appBar: AppBar(
-        leading: const BackButton(color: UellowColors.darkBrown),
-        title: Text(UellowApi.instance.lang == 'ar' ? 'كل الماركات' : 'All Brands', style: UT.h1),
-      ),
-      body: SafeArea(bottom: false, child: Stack(children: [
-        ListView(padding: EdgeInsets.zero, children: [
-          _searchBar(),
-          _featured(),
-          for (final letter in _demo.keys) ...[
-            _groupHeader(letter),
-            _brandGrid(_demo[letter]!),
-          ],
-          const SizedBox(height: 30),
-        ]),
-        _AlphabetBar(active: _letter, onTap: (l) => setState(() => _letter = l)),
-      ])),
-    );
-  }
-
-  Widget _searchBar() {
-    return Container(
-      color: Colors.white,
-      padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
-      child: Container(
-        height: 40, padding: const EdgeInsets.symmetric(horizontal: 14),
-        decoration: const BoxDecoration(
-          color: UellowColors.border,
-          borderRadius: BorderRadius.all(Radius.circular(12)),
+    final ar = UellowApi.instance.lang == 'ar';
+    final all = _brands;
+    final q = _q.text.trim().toLowerCase();
+    final brands = all == null
+        ? null
+        : (q.isEmpty
+            ? all
+            : all.where((b) => (b['name'] ?? '').toString()
+                .toLowerCase().contains(q)).toList());
+    return Directionality(
+      textDirection: ar ? TextDirection.rtl : TextDirection.ltr,
+      child: Scaffold(
+        backgroundColor: UellowColors.bg,
+        appBar: AppBar(
+          backgroundColor: Colors.white,
+          foregroundColor: UellowColors.darkBrown,
+          title: Text(ar ? '🏷️ الماركات' : '🏷️ Brands',
+              style: const TextStyle(fontWeight: FontWeight.w900,
+                  fontSize: 16)),
         ),
-        child: Row(children: [
-          const Icon(Icons.search, size: 18, color: UellowColors.muted),
-          const SizedBox(width: 10),
-          Text(UellowApi.instance.lang == 'ar' ? 'ابحث عن ماركة أو متجر…' : 'Search brand or vendor…',
-              style: const TextStyle(fontSize: 13, color: UellowColors.muted)),
-        ]),
-      ),
-    );
-  }
-
-  Widget _featured() {
-    return Container(
-      color: Colors.white,
-      padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        const Padding(
-          padding: EdgeInsets.only(bottom: 12),
-          child: Text('⭐ Featured brands this week', style: UT.h3),
-        ),
-        SizedBox(height: 130, child: ListView.separated(
-          scrollDirection: Axis.horizontal,
-          itemCount: 3,
-          separatorBuilder: (_, __) => const SizedBox(width: 10),
-          itemBuilder: (_, i) {
-            final cards = [
-              (LinearGradient(colors: [UellowColors.darkBrown, const Color(0xFF7A4A08)]),
-                  'A', 'Anker Official', 'UP TO 35% OFF', UellowColors.yellowLight),
-              (const LinearGradient(colors: [UellowColors.danger, Color(0xFFC81212)]),
-                  'H', 'Huawei Store', 'NEW LAUNCH', Colors.white),
-              (const LinearGradient(colors: [Color(0xFF3B82F6), Color(0xFF1E40AF)]),
-                  'S', 'Samsung', 'EXCLUSIVE', Colors.white),
-            ];
-            final c = cards[i];
-            return SizedBox(width: 140, child: Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                gradient: c.$1, borderRadius: BorderRadius.circular(14),
-              ),
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Container(
-                  width: 44, height: 44,
-                  decoration: BoxDecoration(
-                    color: c.$5,
+        body: Column(children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 4),
+            child: TextField(
+              controller: _q,
+              onChanged: (_) => setState(() {}),
+              decoration: InputDecoration(
+                hintText: ar ? 'ابحث عن ماركة…' : 'Search a brand…',
+                prefixIcon: const Icon(Icons.search, size: 18),
+                isDense: true, filled: true, fillColor: Colors.white,
+                border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
-                  ),
-                  alignment: Alignment.center,
-                  child: Text(c.$2, style: TextStyle(
-                      color: c.$5 == UellowColors.yellowLight
-                          ? UellowColors.darkBrown : c.$1.colors.first,
-                      fontWeight: FontWeight.w900, fontSize: 20)),
-                ),
-                const SizedBox(height: 10),
-                Text(c.$3, style: TextStyle(
-                    color: c.$5, fontSize: 14, fontWeight: FontWeight.w800)),
-                const SizedBox(height: 6),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: c.$5, borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Text(c.$4, style: TextStyle(
-                      color: c.$5 == UellowColors.yellowLight
-                          ? UellowColors.darkBrown : c.$1.colors.first,
-                      fontSize: 10, fontWeight: FontWeight.w800)),
-                ),
-              ]),
-            ));
-          },
-        )),
-      ]),
-    );
-  }
-
-  Widget _groupHeader(String letter) {
-    return Container(
-      color: Colors.white,
-      margin: const EdgeInsets.only(top: 8),
-      padding: const EdgeInsets.fromLTRB(14, 12, 14, 6),
-      child: Text(letter, style: const TextStyle(
-          fontSize: 16, fontWeight: FontWeight.w900, color: UellowColors.darkBrown)),
-    );
-  }
-
-  Widget _brandGrid(List<(String, Color)> brands) {
-    return Container(
-      color: Colors.white,
-      padding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
-      child: GridView.builder(
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 4, crossAxisSpacing: 8, mainAxisSpacing: 8, childAspectRatio: 0.92,
-        ),
-        itemCount: brands.length,
-        itemBuilder: (_, i) {
-          final (name, color) = brands[i];
-          return Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: UellowColors.yellowFaint,
-              border: Border.all(color: UellowColors.border),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-              Container(
-                width: 44, height: 44,
-                decoration: BoxDecoration(
-                  color: color, borderRadius: BorderRadius.circular(12),
-                ),
-                alignment: Alignment.center,
-                child: Text(name[0], style: const TextStyle(
-                    color: Colors.white, fontWeight: FontWeight.w900, fontSize: 17)),
+                    borderSide: BorderSide.none),
               ),
-              const SizedBox(height: 6),
-              Text(name, maxLines: 1, overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700,
-                      color: UellowColors.ink)),
-              const SizedBox(height: 1),
-              const Text('★ 4.6', style: TextStyle(fontSize: 9.5, color: UellowColors.muted)),
-            ]),
-          );
+            ),
+          ),
+          SizedBox(height: 40, child: ListView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(
+                horizontal: 12, vertical: 5),
+            children: [
+              _chip(ar ? 'الكل' : 'All', 0),
+              for (final c in _roots.take(12))
+                _chip(c.name.current(UellowApi.instance.lang), c.id),
+            ],
+          )),
+          Expanded(child: brands == null
+              ? const Center(child: CircularProgressIndicator(
+                  color: UellowColors.darkBrown))
+              : brands.isEmpty
+                  ? Center(child: Text(
+                      ar ? 'لا توجد ماركات هنا' : 'No brands here',
+                      style: UT.body))
+                  : GridView.builder(
+                      padding: const EdgeInsets.fromLTRB(12, 8, 12, 24),
+                      gridDelegate:
+                          const SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: 3, mainAxisSpacing: 10,
+                        crossAxisSpacing: 10, childAspectRatio: 0.86,
+                      ),
+                      itemCount: brands.length,
+                      itemBuilder: (_, i) => _tile(brands[i], ar),
+                    )),
+        ]),
+      ),
+    );
+  }
+
+  Widget _chip(String label, int id) {
+    final on = _catId == id;
+    return Padding(
+      padding: const EdgeInsetsDirectional.only(end: 6),
+      child: ChoiceChip(
+        label: Text(label, style: TextStyle(fontSize: 11.5,
+            fontWeight: FontWeight.w800,
+            color: on ? UellowColors.yellowLight : UellowColors.ink)),
+        selected: on,
+        selectedColor: UellowColors.darkBrown,
+        backgroundColor: Colors.white,
+        showCheckmark: false,
+        onSelected: (_) {
+          setState(() => _catId = id);
+          _load();
         },
       ),
     );
   }
-}
 
-class _AlphabetBar extends StatelessWidget {
-  const _AlphabetBar({required this.active, required this.onTap});
-  final String active;
-  final ValueChanged<String> onTap;
-  static const _letters = ['#','A','B','C','D','E','F','G','H','I','J','K','L',
-      'M','N','O','P','Q','R','S','T','U','V','W','X','Y','Z'];
-  @override
-  Widget build(BuildContext context) {
-    return Positioned(right: 4, top: 80, bottom: 80, child: Center(
-      child: Column(mainAxisSize: MainAxisSize.min, children: [
-        for (final l in _letters) GestureDetector(
-          onTap: () => onTap(l),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-            child: Text(l, style: TextStyle(
-              fontSize: 10, fontWeight: FontWeight.w700,
-              color: l == active ? UellowColors.danger : UellowColors.muted,
-            )),
-          ),
+  Widget _tile(Map<String, dynamic> b, bool ar) {
+    final name = (b['name'] ?? '').toString();
+    final img = (b['image'] as String?) ?? '';
+    final count = (b['product_count'] as num?)?.toInt() ?? 0;
+    return GestureDetector(
+      onTap: () => Navigator.pushNamed(context, '/collection', arguments: {
+        'brand_value_id': (b['value_id'] as num?)?.toInt(),
+        'brand_name': name,
+      }),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: UellowColors.border),
         ),
-      ]),
-    ));
+        padding: const EdgeInsets.all(8),
+        child: Column(children: [
+          Expanded(child: img.isNotEmpty
+              ? CachedNetworkImage(
+                  imageUrl: img.startsWith('http')
+                      ? img : '${UellowApi.instance.baseUrl}$img',
+                  fit: BoxFit.contain,
+                  errorWidget: (_, __, ___) => _letter(name))
+              : _letter(name)),
+          const SizedBox(height: 4),
+          Text(name, maxLines: 1, overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 10.5,
+                  fontWeight: FontWeight.w800, color: UellowColors.ink)),
+          Text(ar ? '$count منتج' : '$count items',
+              style: const TextStyle(fontSize: 8.5,
+                  color: UellowColors.muted,
+                  fontWeight: FontWeight.w700)),
+        ]),
+      ),
+    );
   }
+
+  Widget _letter(String name) => Center(child: Container(
+        width: 44, height: 44, alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: UellowColors.yellowSoft,
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Text(name.isEmpty ? '🏷️' : name[0].toUpperCase(),
+            style: const TextStyle(fontSize: 19,
+                fontWeight: FontWeight.w900,
+                color: UellowColors.darkBrown)),
+      ));
 }

@@ -21,6 +21,7 @@ import '../services/first_launch_service.dart';
 import '../theme/uellow_l10n.dart';
 import '../theme/uellow_theme.dart';
 import '../widgets/announcement_strip.dart';
+import '../widgets/review_requests_strip.dart';
 import 'compare_screen.dart' show CompareService;
 import 'auth_screen.dart';
 import '../widgets/flash_banner.dart';
@@ -48,6 +49,26 @@ class _ProductScreenState extends State<ProductScreen> {
   final _kReviews = GlobalKey();
   final _kRelated = GlobalKey();
   int _sectionTab = 0;
+  // v2.1.59 — tabs hide at the top and slide in once you scroll; the
+  // yellow underline FOLLOWS the section currently on screen.
+  final _scrollCtrl = ScrollController();
+  bool _showTabs = false;
+
+  void _onScroll() {
+    final show = _scrollCtrl.hasClients && _scrollCtrl.offset > 340;
+    var active = _sectionTab;
+    final keys = [_kOverview, _kDetails, _kReviews, _kRelated];
+    for (var i = 0; i < keys.length; i++) {
+      final ctx = keys[i].currentContext;
+      if (ctx == null) continue;
+      final box = ctx.findRenderObject() as RenderBox?;
+      if (box == null || !box.attached) continue;
+      if (box.localToGlobal(Offset.zero).dy <= 140) active = i;
+    }
+    if (show != _showTabs || active != _sectionTab) {
+      setState(() { _showTabs = show; _sectionTab = active; });
+    }
+  }
 
   void _goSection(int i) {
     setState(() => _sectionTab = i);
@@ -64,6 +85,13 @@ class _ProductScreenState extends State<ProductScreen> {
   void initState() {
     super.initState();
     _future = UellowApi.instance.products.detail(widget.productId);
+    _scrollCtrl.addListener(_onScroll);
+  }
+
+  @override
+  void dispose() {
+    _scrollCtrl.dispose();
+    super.dispose();
   }
 
   @override
@@ -136,7 +164,9 @@ class _ProductScreenState extends State<ProductScreen> {
       gallery = [selectedColorVal.image!, ...gallery.where((u) => u != selectedColorVal.image)];
     }
 
-    return CustomScrollView(
+    return Stack(children: [
+      CustomScrollView(
+      controller: _scrollCtrl,
       // v2.0.78 — AlwaysScrollableScrollPhysics so the RefreshIndicator
       // above can trigger even when the page hasn't fully overflowed.
       physics: const AlwaysScrollableScrollPhysics(),
@@ -226,12 +256,10 @@ class _ProductScreenState extends State<ProductScreen> {
                 : ((b['subtitle'] as Map?)?[l] ?? '').toString(),
           );
         })),
-      // v2.1.56 — sticky section tabs; pin to the top once the gallery
-      // scrolls away and jump to their section on tap.
-      SliverPersistentHeader(pinned: true, delegate: _SectionTabs(
-          tab: _sectionTab, onTap: _goSection)),
       // v2.1.57 — targeted announcement strip (admin-controlled).
       const SliverToBoxAdapter(child: AnnouncementStrip(screen: 'product')),
+      // v2.1.59 — pending/replied specialist-request strip.
+      const SliverToBoxAdapter(child: ReviewRequestsStrip()),
       SliverToBoxAdapter(child: KeyedSubtree(
           key: _kOverview, child: _Title(p: p))),
       SliverToBoxAdapter(child: _PriceRow(p: p)),
@@ -254,7 +282,9 @@ class _ProductScreenState extends State<ProductScreen> {
         onSize: (s) => setState(() => _selectedSize = s),
       )),
       SliverToBoxAdapter(child: _CompactDelivery(
-          onTap: () => _showDeliverySheet(context))),
+          freeShipping: p.badges.contains('free_shipping'),
+          onTap: () => _showDeliverySheet(context,
+              freeShipping: p.badges.contains('free_shipping')))),
       // Brand block sits below shipping info per latest spec
       if (p.brand != null) SliverToBoxAdapter(child: _BrandBlock(brand: p.brand!)),
       // v2.1.24 — Best Seller rank strip (tappable → that category).
@@ -289,14 +319,28 @@ class _ProductScreenState extends State<ProductScreen> {
           productId: p.id,
           categoryId: p.categories.isNotEmpty ? p.categories.first.id : null))),
       const SliverToBoxAdapter(child: SizedBox(height: 80)),
+    ]),
+      // v2.1.59 — floating section tabs: hidden at the top, slide in on
+      // scroll; the active underline follows the visible section.
+      PositionedDirectional(top: 0, start: 0, end: 0,
+        child: AnimatedSlide(
+          duration: const Duration(milliseconds: 220),
+          offset: _showTabs ? Offset.zero : const Offset(0, -1.2),
+          child: AnimatedOpacity(
+            duration: const Duration(milliseconds: 180),
+            opacity: _showTabs ? 1 : 0,
+            child: _SectionTabsBar(tab: _sectionTab, onTap: _goSection),
+          ),
+        ),
+      ),
     ]);
   }
 
-  void _showDeliverySheet(BuildContext context) {
+  void _showDeliverySheet(BuildContext context, {bool freeShipping = false}) {
     showModalBottomSheet(
       context: context, isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => _DeliveryDialog(),
+      builder: (_) => _DeliveryDialog(freeShipping: freeShipping),
     );
   }
 
@@ -1456,8 +1500,11 @@ class _SparklinePainter extends CustomPainter {
 // ─── Compact delivery (clickable) ─────────────────────────────────
 
 class _CompactDelivery extends StatefulWidget {
-  const _CompactDelivery({required this.onTap});
+  const _CompactDelivery({required this.onTap,
+      this.freeShipping = false});
   final VoidCallback onTap;
+  // v2.1.59 — product flagged free-shipping → badge + free options.
+  final bool freeShipping;
   @override
   State<_CompactDelivery> createState() => _CompactDeliveryState();
 }
@@ -1567,9 +1614,27 @@ class _CompactDeliveryState extends State<_CompactDelivery> {
         const SizedBox(width: 10),
         Expanded(child: Column(
           crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(ar ? 'التوصيل إلى' : 'Deliver to',
-                style: const TextStyle(fontSize: 11,
-                    color: UellowColors.muted, fontWeight: FontWeight.w700)),
+            Row(children: [
+              Text(ar ? 'التوصيل إلى' : 'Deliver to',
+                  style: const TextStyle(fontSize: 11,
+                      color: UellowColors.muted,
+                      fontWeight: FontWeight.w700)),
+              if (widget.freeShipping) Padding(
+                padding: const EdgeInsetsDirectional.only(start: 6),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 6, vertical: 1.5),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFE6F7EF),
+                    borderRadius: BorderRadius.circular(5),
+                  ),
+                  child: Text(ar ? '🚚 توصيل مجاني' : '🚚 FREE delivery',
+                      style: const TextStyle(fontSize: 9,
+                          fontWeight: FontWeight.w900,
+                          color: UellowColors.successDk)),
+                ),
+              ),
+            ]),
             const SizedBox(height: 2),
             Text(has
                 ? _summary
@@ -1611,6 +1676,9 @@ class _CompactDeliveryState extends State<_CompactDelivery> {
 }
 
 class _DeliveryDialog extends StatefulWidget {
+  const _DeliveryDialog({this.freeShipping = false});
+  // v2.1.59 — flagged products: standard methods price → «مجاناً».
+  final bool freeShipping;
   @override
   State<_DeliveryDialog> createState() => _DeliveryDialogState();
 }
@@ -1654,8 +1722,15 @@ class _DeliveryDialogState extends State<_DeliveryDialog> {
     final name = ((l['name'] as Map?)?[ar ? 'ar' : 'en'] ?? '').toString();
     final text = ((l['text'] as Map?)?[ar ? 'ar' : 'en'] ?? '').toString();
     final cutoff = (l['cutoff'] ?? '').toString();
-    final price = (l['price'] as num?)?.toDouble();
+    var price = (l['price'] as num?)?.toDouble();
     final freeOver = (l['free_over'] as num?)?.toDouble();
+    // v2.1.59 — flagged free-shipping product: standard (non-express)
+    // methods become FREE in the dialog.
+    final nmEn = (((l['name'] as Map?)?['en']) ?? '')
+        .toString().toLowerCase();
+    final nmAr2 = (((l['name'] as Map?)?['ar']) ?? '').toString();
+    final isExpress = nmEn.contains('express') || nmAr2.contains('سريع');
+    if (widget.freeShipping && !isExpress) price = 0;
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(12),
@@ -1707,12 +1782,14 @@ class _DeliveryDialogState extends State<_DeliveryDialog> {
                       color: UellowColors.muted)),
             if (price != null)
               Text(price <= 0
-                      ? (ar ? '💰 التوصيل: مجاني' : '💰 Delivery: FREE')
+                      ? (ar ? '🚚 التوصيل: مجاناً' : '🚚 Delivery: FREE')
                       : (ar ? '💰 التوصيل: ${price.toStringAsFixed(3)} د.ك'
                             : '💰 Delivery: ${price.toStringAsFixed(3)} KD'),
-                  style: const TextStyle(fontSize: 10,
-                      fontWeight: FontWeight.w700,
-                      color: UellowColors.muted)),
+                  style: TextStyle(fontSize: 10,
+                      fontWeight: FontWeight.w900,
+                      color: price <= 0
+                          ? UellowColors.successDk
+                          : UellowColors.muted)),
             if (freeOver != null && freeOver > 0)
               Text(ar
                       ? '🎁 مجاني للطلبات فوق ${freeOver.toStringAsFixed(3)} د.ك'
@@ -2520,7 +2597,101 @@ class _ExpertReviewsBlockState extends State<_ExpertReviewsBlock> {
           ),
         ]),
         for (final it in _items.take(2)) _verdictCard(it, ar),
+        // v2.1.59 — more than 2 opinions → professional dialog with a
+        // stats header + the full list.
+        if (_items.length > 2) Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: Center(child: OutlinedButton.icon(
+            onPressed: () => _openAllVerdicts(context, ar),
+            icon: const Icon(Icons.expand_more, size: 15),
+            label: Text(
+                ar ? 'مشاهدة المزيد (${_items.length})'
+                   : 'See all (${_items.length})',
+                style: const TextStyle(fontSize: 11.5,
+                    fontWeight: FontWeight.w800)),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: const Color(0xFF1565C0),
+              side: const BorderSide(color: Color(0xFFCBD9F0)),
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 16, vertical: 7),
+              shape: const StadiumBorder(),
+            ),
+          )),
+        ),
       ]),
+    );
+  }
+
+  void _openAllVerdicts(BuildContext context, bool ar) {
+    final total = _items.length;
+    final rec = _items.where((i) => i['verdict'] == 'recommend').length;
+    final notRec =
+        _items.where((i) => i['verdict'] == 'not_recommend').length;
+    double avgOf(String k) {
+      final vals = _items
+          .map((i) => (i[k] as num?)?.toDouble() ?? 0)
+          .where((v) => v > 0).toList();
+      return vals.isEmpty
+          ? 0 : vals.reduce((a, b) => a + b) / vals.length;
+    }
+    final q = avgOf('quality');
+    final v = avgOf('value');
+    final recPct = total == 0 ? 0 : (rec * 100 / total).round();
+    showModalBottomSheet(
+      context: context, isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius:
+          BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (_) => DraggableScrollableSheet(
+        expand: false, initialChildSize: 0.8, maxChildSize: 0.94,
+        builder: (_, scroll) => ListView(
+          controller: scroll,
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 26),
+          children: [
+            Center(child: Container(width: 40, height: 4,
+                decoration: BoxDecoration(color: const Color(0xFFE3E3E3),
+                    borderRadius: BorderRadius.circular(2)))),
+            const SizedBox(height: 12),
+            Text(ar ? '🎓 كل آراء المتخصصين' : '🎓 All expert opinions',
+                style: const TextStyle(fontSize: 16,
+                    fontWeight: FontWeight.w900)),
+            const SizedBox(height: 10),
+            // stats header
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(colors: [
+                    Color(0xFF1565C0), Color(0xFF3B82C4)]),
+                borderRadius: BorderRadius.circular(13),
+              ),
+              child: Row(children: [
+                for (final st in [
+                  ('$total', ar ? 'رأي' : 'opinions'),
+                  ('$recPct%', ar ? 'ينصحون' : 'recommend'),
+                  (q > 0 ? q.toStringAsFixed(1) : '—',
+                      ar ? 'الجودة' : 'quality'),
+                  (v > 0 ? v.toStringAsFixed(1) : '—',
+                      ar ? 'القيمة' : 'value'),
+                ]) Expanded(child: Column(children: [
+                  Text(st.$1, style: const TextStyle(color: Colors.white,
+                      fontSize: 17, fontWeight: FontWeight.w900)),
+                  Text(st.$2, style: const TextStyle(
+                      color: Colors.white70, fontSize: 10)),
+                ])),
+              ]),
+            ),
+            if (notRec > 0) Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Text(
+                  ar ? '👎 $notRec لا ينصحون' : '👎 $notRec do not recommend',
+                  style: const TextStyle(fontSize: 10.5,
+                      color: UellowColors.muted)),
+            ),
+            const SizedBox(height: 10),
+            for (final it in _items) _verdictCard(it, ar),
+          ],
+        ),
+      ),
     );
   }
 
@@ -4461,8 +4632,8 @@ class _ScallopPainter extends CustomPainter {
 // AliExpress-style: نظرة عامة / التفاصيل / التقييمات / مقترحات. Pinned
 // under the status bar once the gallery scrolls away; taps jump to the
 // section anchors.
-class _SectionTabs extends SliverPersistentHeaderDelegate {
-  _SectionTabs({required this.tab, required this.onTap});
+class _SectionTabsBar extends StatelessWidget {
+  const _SectionTabsBar({required this.tab, required this.onTap});
   final int tab;
   final ValueChanged<int> onTap;
 
@@ -4471,7 +4642,8 @@ class _SectionTabs extends SliverPersistentHeaderDelegate {
       : const ['Overview', 'Details', 'Reviews', 'For you'];
 
   @override
-  Widget build(BuildContext c, double shrink, bool overlaps) {
+  Widget build(BuildContext c) {
+    const overlaps = true;
     final ar = UellowApi.instance.lang == 'ar';
     return Directionality(
       textDirection: ar ? TextDirection.rtl : TextDirection.ltr,
@@ -4485,7 +4657,7 @@ class _SectionTabs extends SliverPersistentHeaderDelegate {
                   blurRadius: 6, offset: Offset(0, 2))]
               : null,
         ),
-        child: Row(children: [
+        child: SizedBox(height: 42, child: Row(children: [
           for (var i = 0; i < _labels.length; i++) Expanded(
             child: InkWell(
               onTap: () => onTap(i),
@@ -4507,12 +4679,9 @@ class _SectionTabs extends SliverPersistentHeaderDelegate {
               ),
             ),
           ),
-        ]),
+        ])),
       ),
     );
   }
 
-  @override double get maxExtent => 42;
-  @override double get minExtent => 42;
-  @override bool shouldRebuild(_SectionTabs old) => old.tab != tab;
 }

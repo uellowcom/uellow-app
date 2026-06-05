@@ -1144,25 +1144,79 @@ class _QuickFilters extends StatelessWidget {
                         ?? (v['name'] as Map?)?['en']
                         ?? v['name'] ?? '').toString();
                     final on = temp.contains(id);
+                    // v2.1.59 — colors render as SWATCHES, brands show
+                    // their LOGO beside the name.
+                    final hex = (v['html_color'] ?? '').toString();
+                    final img = (v['image'] ?? '').toString();
+                    final isColor = hex.isNotEmpty;
+                    Color? swatch;
+                    if (isColor) {
+                      try {
+                        var h = hex.replaceAll('#', '');
+                        if (h.length == 6) h = 'FF$h';
+                        swatch = Color(int.parse(h, radix: 16));
+                      } catch (_) {}
+                    }
                     return GestureDetector(
                       onTap: () => setSheet(() =>
                           on ? temp.remove(id) : temp.add(id)),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 13, vertical: 8),
-                        decoration: BoxDecoration(
-                          color: on
-                              ? UellowColors.yellowSoft : Colors.white,
-                          borderRadius: BorderRadius.circular(999),
-                          border: Border.all(color: on
-                              ? UellowColors.yellow
-                              : UellowColors.border, width: on ? 1.4 : 1),
-                        ),
-                        child: Text(lbl, style: TextStyle(fontSize: 12,
-                            fontWeight:
-                                on ? FontWeight.w800 : FontWeight.w600,
-                            color: UellowColors.ink)),
-                      ),
+                      child: isColor && swatch != null
+                          ? Container(
+                              width: 38, height: 38,
+                              decoration: BoxDecoration(
+                                color: swatch, shape: BoxShape.circle,
+                                border: Border.all(
+                                    color: on
+                                        ? UellowColors.darkBrown
+                                        : const Color(0xFFD9D9D9),
+                                    width: on ? 2.6 : 1),
+                              ),
+                              child: on
+                                  ? Icon(Icons.check, size: 17,
+                                      color: swatch.computeLuminance() >
+                                              0.6
+                                          ? Colors.black
+                                          : Colors.white)
+                                  : null,
+                            )
+                          : Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 11, vertical: 7),
+                              decoration: BoxDecoration(
+                                color: on
+                                    ? UellowColors.yellowSoft
+                                    : Colors.white,
+                                borderRadius: BorderRadius.circular(999),
+                                border: Border.all(color: on
+                                    ? UellowColors.yellow
+                                    : UellowColors.border,
+                                    width: on ? 1.4 : 1),
+                              ),
+                              child: Row(mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                if (img.isNotEmpty) Padding(
+                                  padding: const EdgeInsetsDirectional
+                                      .only(end: 5),
+                                  child: ClipRRect(
+                                    borderRadius:
+                                        BorderRadius.circular(4),
+                                    child: CachedNetworkImage(
+                                        imageUrl: img.startsWith('http')
+                                            ? img
+                                            : '${UellowApi.instance.baseUrl}$img',
+                                        width: 20, height: 20,
+                                        fit: BoxFit.contain,
+                                        errorWidget: (_, __, ___) =>
+                                            const SizedBox(width: 20)),
+                                  ),
+                                ),
+                                Text(lbl, style: TextStyle(fontSize: 12,
+                                    fontWeight: on
+                                        ? FontWeight.w800
+                                        : FontWeight.w600,
+                                    color: UellowColors.ink)),
+                              ]),
+                            ),
                     );
                   }),
                 ]),

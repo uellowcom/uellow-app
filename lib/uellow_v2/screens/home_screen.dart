@@ -24,6 +24,7 @@ import '../services/ads_service.dart';
 import '../theme/uellow_theme.dart';
 import '../widgets/product_card.dart';
 import '../widgets/announcement_strip.dart';
+import '../widgets/review_requests_strip.dart';
 import '../widgets/review_prompt_dialog.dart';
 import '../widgets/update_gate.dart';
 import '../widgets/uellow_bottom_nav.dart';
@@ -182,6 +183,9 @@ class _HomeScreenState extends State<HomeScreen> {
           SliverToBoxAdapter(child: _TopBar()),
           // v2.1.57 — targeted announcement strip (admin-controlled).
           const SliverToBoxAdapter(child: AnnouncementStrip(screen: 'home')),
+          // v2.1.59 — personal strip for the customer's specialist
+          // requests (pending → replied).
+          const SliverToBoxAdapter(child: ReviewRequestsStrip()),
           SliverList.builder(
             itemCount: dyn.blocks.length,
             itemBuilder: (ctx, i) => RepaintBoundary(

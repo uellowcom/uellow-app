@@ -301,7 +301,8 @@ class _CartScreenState extends State<CartScreen> {
         SliverToBoxAdapter(child: _AppliedCoupon(
             code: code, onRemove: () => _removeCoupon(code))),
       SliverToBoxAdapter(child: _Totals(totals: cart.totals)),
-      const SliverToBoxAdapter(child: SizedBox(height: 110)),
+      // v2.1.59 — was 110: a big dead band under the totals.
+      const SliverToBoxAdapter(child: SizedBox(height: 24)),
     ]));
   }
 }
@@ -501,16 +502,16 @@ class _DeliveryBar extends StatelessWidget {
                     fontWeight: FontWeight.w800)),
             if (info.reason == 'product') TextSpan(
                 text: UellowApi.instance.lang == 'ar'
-                    ? ' (منتجاتك بشحن مجاني)' : ' (free-shipping items)',
-                style: const TextStyle(fontSize: 10.5,
+                    ? ' · منتجاتك بشحن مجاني' : ' · free-ship items',
+                style: const TextStyle(fontSize: 10,
                     color: UellowColors.muted)),
             if (info.reason == 'coupon') TextSpan(
                 text: UellowApi.instance.lang == 'ar'
-                    ? ' (كوبون شحن مجاني)' : ' (free-shipping coupon)',
-                style: const TextStyle(fontSize: 10.5,
+                    ? ' · كوبون شحن مجاني' : ' · free-ship coupon',
+                style: const TextStyle(fontSize: 10,
                     color: UellowColors.muted)),
           ],
-        )) else Text.rich(TextSpan(
+        ), maxLines: 1, overflow: TextOverflow.ellipsis) else Text.rich(TextSpan(
           style: const TextStyle(fontSize: 12, color: UellowColors.text), children: [
             TextSpan(text: UellowApi.instance.lang == 'ar' ? 'أضف ' : 'Add '),
             TextSpan(text: info.remaining.format(), style: const TextStyle(
@@ -610,7 +611,47 @@ class _CouponsBrowseLink extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         child: InkWell(
           borderRadius: BorderRadius.circular(12),
-          onTap: () => Navigator.pushNamed(context, '/coupons'),
+          onTap: () async {
+            // v2.1.59 — guests got a raw AUTH error inside the coupons
+            // screen; show a clean sign-in prompt instead.
+            final tok = await UellowApi.instance.tokenStore.readToken();
+            if (!context.mounted) return;
+            if (tok == null || tok.isEmpty) {
+              final ar2 = UellowApi.instance.lang == 'ar';
+              showDialog(context: context, builder: (ctx) => AlertDialog(
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16)),
+                title: Text(ar2 ? '🎟️ كوبوناتك بانتظارك'
+                                : '🎟️ Your coupons await',
+                    style: const TextStyle(fontWeight: FontWeight.w900,
+                        fontSize: 16)),
+                content: Text(ar2
+                    ? 'سجّل دخولك لعرض كوبوناتك المتاحة وتطبيقها على سلتك'
+                    : 'Sign in to see and apply your available coupons',
+                    style: const TextStyle(fontSize: 13)),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    child: Text(ar2 ? 'لاحقاً' : 'Later'),
+                  ),
+                  ElevatedButton(
+                    onPressed: () {
+                      Navigator.pop(ctx);
+                      Navigator.pushNamed(context, '/auth');
+                    },
+                    style: ElevatedButton.styleFrom(
+                        backgroundColor: UellowColors.yellow,
+                        foregroundColor: UellowColors.darkBrown),
+                    child: Text(ar2 ? 'تسجيل الدخول' : 'Sign in',
+                        style: const TextStyle(
+                            fontWeight: FontWeight.w900)),
+                  ),
+                ],
+              ));
+              return;
+            }
+            Navigator.pushNamed(context, '/coupons');
+          },
           child: Container(
             padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
             decoration: BoxDecoration(

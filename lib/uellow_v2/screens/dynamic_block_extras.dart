@@ -4636,7 +4636,7 @@ class _NewUserBlockState extends State<NewUserBlock> {
   }
 
   Widget _miniRow(Map<String, dynamic> m, Color accent) {
-    final img = pickLocalizedImage(m, widget.ar);
+    final img = ((m['image'] ?? m['image_url']) ?? '').toString();
     final price = ((m['price'] as Map?)?['amount'] as num?)?.toDouble()
         ?? (m['price'] as num?)?.toDouble() ?? 0;
     return GestureDetector(
@@ -4682,7 +4682,7 @@ class _NewUserBlockState extends State<NewUserBlock> {
   }
 
   Widget _bonusCard(Map<String, dynamic> m, String badge, Color accent) {
-    final img = pickLocalizedImage(m, widget.ar);
+    final img = ((m['image'] ?? m['image_url']) ?? '').toString();
     final price = ((m['price'] as Map?)?['amount'] as num?)?.toDouble()
         ?? (m['price'] as num?)?.toDouble() ?? 0;
     final cmp = ((m['compare_price'] as Map?)?['amount'] as num?)?.toDouble()

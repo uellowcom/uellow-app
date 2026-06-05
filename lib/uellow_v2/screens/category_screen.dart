@@ -82,7 +82,9 @@ class _CategoryScreenState extends State<CategoryScreen> {
               // v2.1.57 — "For You" pseudo-entry at the TOP of the
               // sidebar when enabled from the backend; real roots shift
               // down by one.
-              final foryou = _cfg?['foryou_enabled'] == true;
+              // v2.1.59 — For You is a FIXED first entry (default on;
+              // backend can still hide it explicitly).
+              final foryou = _cfg?['foryou_enabled'] != false;
               if (_initialCategoryId != null) {
                 final idx = roots.indexWhere((c) => c.id == _initialCategoryId);
                 if (idx >= 0) _selectedRoot = idx + (foryou ? 1 : 0);
@@ -376,20 +378,8 @@ class _ContentState extends State<_Content> {
         _LatestSlider(category: widget.category, products: _products),
       // v2.1.57 — brands row under "Recently arrived" (backend toggle).
       if (widget.cfg?['show_brands'] != false) const _BrandsRow(),
-      // All products grid — Sort/Filter removed per spec; tighter title.
-      if (widget.cfg?['show_products'] != false) ...[
-      Padding(
-        padding: const EdgeInsets.fromLTRB(14, 10, 14, 6),
-        child: Text(subs.isEmpty
-                ? (ar
-                    ? 'منتجات ${widget.category.name.current(lang)}'
-                    : 'Products in ${widget.category.name.current(lang)}')
-                : (ar ? 'كل المنتجات' : 'All products'),
-            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w900,
-                color: UellowColors.ink)),
-      ),
-      _ProductsGrid(future: _products),
-      ],
+      // v2.1.59 — "All products" block REMOVED per spec (recently
+      // arrived + brands tell the story; full lists live in collections).
       const SizedBox(height: 30),
     ]);
   }
@@ -403,14 +393,14 @@ class _SubCatsGrid extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       margin: const EdgeInsets.fromLTRB(10, 10, 10, 0),
-      padding: const EdgeInsets.fromLTRB(12, 14, 12, 14),
+      padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
       decoration: const BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.all(Radius.circular(14)),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Padding(
-          padding: const EdgeInsets.only(bottom: 12),
+          padding: const EdgeInsets.only(bottom: 10),
           child: Row(children: [
             Text(lang == 'ar' ? 'الأقسام الفرعية' : 'Sub-categories',
                 style: const TextStyle(fontSize: 13,
@@ -424,7 +414,9 @@ class _SubCatsGrid extends StatelessWidget {
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
           gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 3, crossAxisSpacing: 8, mainAxisSpacing: 12, childAspectRatio: 0.78,
+            // v2.1.59 — tighter rows (was 12 / 0.78).
+            crossAxisCount: 3, crossAxisSpacing: 8, mainAxisSpacing: 6,
+            childAspectRatio: 0.88,
           ),
           itemCount: subs.length,
           itemBuilder: (_, i) {
@@ -840,13 +832,91 @@ class _BrandsRowState extends State<_BrandsRow> {
                   fontWeight: FontWeight.w900, color: UellowColors.ink)),
         ]),
         const SizedBox(height: 10),
-        SizedBox(height: 84, child: ListView.separated(
+        // v2.1.59 — TWO rows of square rounded tiles + a "more" tile →
+        // the dedicated Brands screen.
+        SizedBox(height: 172, child: GridView.builder(
           scrollDirection: Axis.horizontal,
-          itemCount: brands.length,
-          separatorBuilder: (_, __) => const SizedBox(width: 10),
-          itemBuilder: (_, i) => _BrandBubble(brand: brands[i]),
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 2, mainAxisSpacing: 8, crossAxisSpacing: 8,
+            childAspectRatio: 82 / 64,
+          ),
+          itemCount: brands.length.clamp(0, 14) + 1,
+          itemBuilder: (_, i) {
+            if (i >= brands.length.clamp(0, 14)) {
+              return GestureDetector(
+                onTap: () => Navigator.pushNamed(context, '/brands'),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: UellowColors.yellowSoft,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: UellowColors.yellow),
+                  ),
+                  child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                    const Icon(Icons.grid_view_rounded, size: 20,
+                        color: UellowColors.darkBrown),
+                    const SizedBox(height: 4),
+                    Text(ar ? 'المزيد' : 'More',
+                        style: const TextStyle(fontSize: 10,
+                            fontWeight: FontWeight.w900,
+                            color: UellowColors.darkBrown)),
+                  ]),
+                ),
+              );
+            }
+            return _BrandTile(brand: brands[i]);
+          },
         )),
       ]),
+    );
+  }
+}
+
+// v2.1.59 — square rounded brand tile (logo + UNtranslated name).
+class _BrandTile extends StatelessWidget {
+  const _BrandTile({required this.brand});
+  final Map<String, dynamic> brand;
+  @override
+  Widget build(BuildContext context) {
+    final name = (brand['name'] ?? '').toString();
+    final img = (brand['image'] as String?) ?? '';
+    return GestureDetector(
+      onTap: () => Navigator.pushNamed(context, '/collection', arguments: {
+        'brand_value_id': (brand['value_id'] as num?)?.toInt(),
+        'brand_name': name,
+      }),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: UellowColors.border),
+        ),
+        padding: const EdgeInsets.all(6),
+        child: Column(mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+          Expanded(child: img.isNotEmpty
+              ? CachedNetworkImage(
+                  imageUrl: img.startsWith('http')
+                      ? img : '${UellowApi.instance.baseUrl}$img',
+                  fit: BoxFit.contain,
+                  errorWidget: (_, __, ___) => Center(child: Text(
+                      name.isEmpty ? '🏷️' : name[0].toUpperCase(),
+                      style: const TextStyle(fontSize: 18,
+                          fontWeight: FontWeight.w900,
+                          color: UellowColors.darkBrown))))
+              : Center(child: Text(
+                  name.isEmpty ? '🏷️' : name[0].toUpperCase(),
+                  style: const TextStyle(fontSize: 18,
+                      fontWeight: FontWeight.w900,
+                      color: UellowColors.darkBrown)))),
+          const SizedBox(height: 3),
+          Text(name, maxLines: 1, overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 8.5,
+                  fontWeight: FontWeight.w800, color: UellowColors.ink)),
+        ]),
+      ),
     );
   }
 }
