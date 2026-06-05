@@ -6,6 +6,7 @@ import 'package:uellow/api/uellow_api.dart';
 import 'package:uellow/uellow_v2/router/uellow_router.dart';
 import 'package:uellow/uellow_v2/theme/uellow_theme.dart';
 import 'package:uellow/uellow_v2/services/deep_link_service.dart';
+import 'package:uellow/uellow_v2/services/fcm_service.dart';
 import 'package:uellow/uellow_v2/services/push_service.dart';
 
 final GlobalKey<NavigatorState> rootNavigatorKey = GlobalKey<NavigatorState>();
@@ -22,6 +23,8 @@ Future<void> main() async {
   } catch (_) {}
   // Local notifications channels + ongoing-banner support.
   unawaited(PushService.instance.init());
+  // v2.1.64 — FCM: token registration + foreground display.
+  unawaited(FcmService.instance.init());
   runApp(UellowApp(navigatorKey: rootNavigatorKey));
 }
 

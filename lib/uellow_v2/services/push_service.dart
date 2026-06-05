@@ -54,6 +54,19 @@ class PushService {
     _ready = true;
   }
 
+  /// v2.1.64 — display a foreground FCM message as a normal tray
+  /// notification (background/killed messages are shown by the OS).
+  Future<void> showRemote({required String title, required String body}) async {
+    if (!_ready) await init();
+    await _plugin.show(
+      DateTime.now().millisecondsSinceEpoch & 0x7FFFFFFF,
+      title, body,
+      const NotificationDetails(android: AndroidNotificationDetails(
+          'order_update', 'Order updates',
+          importance: Importance.high, priority: Priority.high)),
+    );
+  }
+
   /// Show / update the pinned ongoing notification while an order is
   /// being delivered. Mirrors Temu / Uber-Eats style. On iOS the
   /// equivalent (Live Activity) is started via [_liveActivityChannel].

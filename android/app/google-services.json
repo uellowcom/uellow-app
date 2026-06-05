@@ -1,0 +1,142 @@
+{
+  "project_info": {
+    "project_number": "50540776966",
+    "project_id": "uellow-app",
+    "storage_bucket": "uellow-app.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:50540776966:android:7aa366c1fe713af27fbd87",
+        "android_client_info": {
+          "package_name": "com.uellow.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "50540776966-629igbph1k8f1ka130meoqerk28fguv8.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.uellow.app",
+            "certificate_hash": "9f7df5ac4265621bc38e326fa6ea2ad8a3df7b45"
+          }
+        },
+        {
+          "client_id": "50540776966-tmgq3a2u5156o1iau83bh86tadrbkilu.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDNK7_3PfdjF_KcPssb_fRo2YBLWmGZ5rU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "50540776966-tmgq3a2u5156o1iau83bh86tadrbkilu.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "50540776966-48kgig4ojqik90lmrc42uv0n7n9b06ar.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.uellow.app"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:50540776966:android:5e72fa6a2cf0afff7fbd87",
+        "android_client_info": {
+          "package_name": "com.uellow.uellow"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "50540776966-tmgq3a2u5156o1iau83bh86tadrbkilu.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDNK7_3PfdjF_KcPssb_fRo2YBLWmGZ5rU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "50540776966-tmgq3a2u5156o1iau83bh86tadrbkilu.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "50540776966-48kgig4ojqik90lmrc42uv0n7n9b06ar.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.uellow.app"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:50540776966:android:f5d95696945112eb7fbd87",
+        "android_client_info": {
+          "package_name": "yellow.storesarabia.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "50540776966-6cd1rtkqk4gk76f9itj9m36fff93pa5c.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "yellow.storesarabia.app",
+            "certificate_hash": "98d4fcb2a75901b37398d16688f51171839ccfb2"
+          }
+        },
+        {
+          "client_id": "50540776966-kecurmo6g3reknuvqrrs672ndnlnnvob.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "yellow.storesarabia.app",
+            "certificate_hash": "fbd9aeab817479b63b232471952473aec0453fc6"
+          }
+        },
+        {
+          "client_id": "50540776966-tmgq3a2u5156o1iau83bh86tadrbkilu.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDNK7_3PfdjF_KcPssb_fRo2YBLWmGZ5rU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "50540776966-tmgq3a2u5156o1iau83bh86tadrbkilu.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "50540776966-48kgig4ojqik90lmrc42uv0n7n9b06ar.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.uellow.app"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -2,7 +2,11 @@
 // AuthScreen — tabbed Sign in / Sign up + social providers + Phone OTP.
 // Wires to UellowApi.auth.login / register / google / apple / facebook.
 // =============================================================================
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+
+import '../services/fcm_service.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
 import '../../api/uellow_api.dart';
@@ -46,6 +50,8 @@ class _AuthScreenState extends State<AuthScreen> {
     try {
       if (_tab == 0) {
         await UellowApi.instance.auth.login(_email.text, _password.text);
+        // v2.1.64 — link the FCM token to the logged-in customer.
+        unawaited(FcmService.instance.register());
       } else {
         await UellowApi.instance.auth.register(
           name: _name.text, email: _email.text,
