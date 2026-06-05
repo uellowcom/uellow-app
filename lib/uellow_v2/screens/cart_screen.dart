@@ -11,6 +11,7 @@ import '../../api/uellow_api.dart';
 import '../../api/uellow_models.dart';
 import '../router/uellow_router.dart';
 import '../theme/uellow_theme.dart';
+import '../widgets/announcement_strip.dart';
 import '../widgets/product_card.dart';
 
 class CartScreen extends StatefulWidget {
@@ -276,6 +277,8 @@ class _CartScreenState extends State<CartScreen> {
 
   Widget _buildContent(UellowCart cart) {
     return SafeArea(bottom: false, child: CustomScrollView(slivers: [
+      // v2.1.57 — targeted announcement strip (admin-controlled).
+      const SliverToBoxAdapter(child: AnnouncementStrip(screen: 'cart')),
       SliverList.builder(
         itemCount: cart.lines.length,
         itemBuilder: (_, i) => _LineCard(
@@ -487,6 +490,7 @@ class _DeliveryBar extends StatelessWidget {
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         // v2.1.15 — bilingual (the progress label was English-only).
+        // v2.1.57 — flagged-product / coupon orders show WHY it's free.
         if (info.qualified) Text.rich(TextSpan(
           style: const TextStyle(fontSize: 12, color: UellowColors.text), children: [
             TextSpan(text: UellowApi.instance.lang == 'ar'
@@ -495,6 +499,16 @@ class _DeliveryBar extends StatelessWidget {
                 ? 'توصيل مجاني!' : 'FREE delivery!',
                 style: const TextStyle(color: UellowColors.successDk,
                     fontWeight: FontWeight.w800)),
+            if (info.reason == 'product') TextSpan(
+                text: UellowApi.instance.lang == 'ar'
+                    ? ' (منتجاتك بشحن مجاني)' : ' (free-shipping items)',
+                style: const TextStyle(fontSize: 10.5,
+                    color: UellowColors.muted)),
+            if (info.reason == 'coupon') TextSpan(
+                text: UellowApi.instance.lang == 'ar'
+                    ? ' (كوبون شحن مجاني)' : ' (free-shipping coupon)',
+                style: const TextStyle(fontSize: 10.5,
+                    color: UellowColors.muted)),
           ],
         )) else Text.rich(TextSpan(
           style: const TextStyle(fontSize: 12, color: UellowColors.text), children: [

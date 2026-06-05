@@ -61,6 +61,7 @@ class _CollectionScreenState extends State<CollectionScreen> {
   @override
   void initState() {
     super.initState();
+    _loadFilterSpec();
     _scroll.addListener(_onScroll);
     _bootstrap();
   }
@@ -144,6 +145,23 @@ class _CollectionScreenState extends State<CollectionScreen> {
       _hasMore = true;
     });
     _loadMore();
+  }
+
+  // v2.1.57 — quick-filters bar: the category's filter spec, fetched
+  // once and rendered as horizontal dropdown chips (AliExpress-style).
+  Map<String, dynamic>? _filterSpec;
+
+  Future<void> _loadFilterSpec() async {
+    if (widget.categoryId == null || _filterSpec != null) return;
+    try {
+      final url = Uri.parse(
+        '${UellowApi.instance.baseUrl}/api/mobile/v2/categories/${widget.categoryId}/filters');
+      final r = await http.get(url);
+      final body = jsonDecode(utf8.decode(r.bodyBytes)) as Map<String, dynamic>;
+      if (body['success'] == true && mounted) {
+        setState(() => _filterSpec = body['data'] as Map<String, dynamic>);
+      }
+    } catch (_) {}
   }
 
   void _resetAndReload() {
@@ -263,6 +281,18 @@ class _CollectionScreenState extends State<CollectionScreen> {
             hideSort: widget.searchQuery != null,
             onFilter: widget.categoryId != null ? _openFilterSheet : null,
             activeFilterCount: _selectedValueIds.length,
+          )),
+          // v2.1.57 — horizontal quick-filters chips (top attributes +
+          // price), AliExpress-style.
+          if (_filterSpec != null) SliverToBoxAdapter(child: _QuickFilters(
+            spec: _filterSpec!,
+            selected: _selectedValueIds,
+            minPrice: _minPrice, maxPrice: _maxPrice,
+            onChanged: (vals, lo, hi) {
+              _selectedValueIds..clear()..addAll(vals);
+              _minPrice = lo; _maxPrice = hi;
+              _resetAndReload();
+            },
           )),
           SliverPadding(
             padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
@@ -983,4 +1013,241 @@ extension on UellowSearchResult {
         items: products, page: 1, perPage: products.length,
         total: products.length, pages: 1, hasNext: false,
       );
+}
+
+// ─── Quick filters bar (v2.1.57) ──────────────────────────────────────
+// Horizontal dropdown chips for the category's TOP attributes + a price
+// chip — AliExpress-style. Tapping a chip opens a compact value sheet;
+// applied chips fill dark with a count badge.
+
+class _QuickFilters extends StatelessWidget {
+  const _QuickFilters({
+    required this.spec, required this.selected,
+    required this.minPrice, required this.maxPrice,
+    required this.onChanged,
+  });
+  final Map<String, dynamic> spec;
+  final Set<int> selected;
+  final double? minPrice;
+  final double? maxPrice;
+  final void Function(Set<int> values, double? lo, double? hi) onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final ar = UellowApi.instance.lang == 'ar';
+    final attrs = (spec['attributes'] as List? ?? const [])
+        .cast<Map<String, dynamic>>();
+    final price = spec['price'] as Map<String, dynamic>?;
+    if (attrs.isEmpty && price == null) return const SizedBox.shrink();
+    final hasPrice = minPrice != null || maxPrice != null;
+    return Container(
+      color: Colors.white,
+      padding: const EdgeInsets.fromLTRB(0, 0, 0, 8),
+      child: SizedBox(height: 32, child: ListView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        children: [
+          if (price != null)
+            _chip(context,
+                label: ar ? 'السعر' : 'Price',
+                active: hasPrice,
+                count: hasPrice ? 1 : 0,
+                onTap: () => _openPriceSheet(context, price, ar)),
+          for (final a in attrs.take(6)) _attrChip(context, a, ar),
+        ],
+      )),
+    );
+  }
+
+  Widget _attrChip(BuildContext context, Map<String, dynamic> a, bool ar) {
+    final name = (((a['name'] as Map?)?[ar ? 'ar' : 'en'])
+        ?? (a['name'] as Map?)?['en'] ?? a['name'] ?? '').toString();
+    final values = (a['values'] as List? ?? const [])
+        .cast<Map<String, dynamic>>();
+    if (name.isEmpty || values.isEmpty) return const SizedBox.shrink();
+    final ids = values
+        .map((v) => (v['id'] as num?)?.toInt() ?? 0)
+        .where((id) => id > 0)
+        .toSet();
+    final n = selected.intersection(ids).length;
+    return _chip(context, label: name, active: n > 0, count: n,
+        onTap: () => _openAttrSheet(context, name, values, ar));
+  }
+
+  Widget _chip(BuildContext context,
+      {required String label, required bool active, required int count,
+       required VoidCallback onTap}) {
+    return Padding(
+      padding: const EdgeInsetsDirectional.only(end: 6),
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 11),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: active ? UellowColors.darkBrown : const Color(0xFFF4F4F4),
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(color: active
+                ? UellowColors.darkBrown : const Color(0xFFE3E3E3)),
+          ),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            Text(count > 1 ? '$label ($count)' : label,
+                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700,
+                    color: active
+                        ? UellowColors.yellowLight : UellowColors.ink)),
+            const SizedBox(width: 3),
+            Icon(Icons.keyboard_arrow_down, size: 14,
+                color: active
+                    ? UellowColors.yellowLight : UellowColors.muted),
+          ]),
+        ),
+      ),
+    );
+  }
+
+  void _openAttrSheet(BuildContext context, String title,
+      List<Map<String, dynamic>> values, bool ar) {
+    final temp = Set<int>.from(selected);
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (_) => StatefulBuilder(builder: (ctx, setSheet) {
+        return Directionality(
+          textDirection: ar ? TextDirection.rtl : TextDirection.ltr,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(18, 14, 18, 24),
+            child: Column(mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: [
+                Text(title, style: UT.h2),
+                const Spacer(),
+                TextButton(
+                  onPressed: () {
+                    final ids = values
+                        .map((v) => (v['id'] as num?)?.toInt() ?? 0)
+                        .toSet();
+                    setSheet(() => temp.removeAll(ids));
+                  },
+                  child: Text(ar ? 'مسح' : 'Clear',
+                      style: const TextStyle(color: UellowColors.danger,
+                          fontWeight: FontWeight.w800, fontSize: 12)),
+                ),
+              ]),
+              const SizedBox(height: 8),
+              Flexible(child: SingleChildScrollView(
+                child: Wrap(spacing: 8, runSpacing: 8, children: [
+                  for (final v in values) Builder(builder: (_) {
+                    final id = (v['id'] as num?)?.toInt() ?? 0;
+                    final lbl = (((v['name'] as Map?)?[ar ? 'ar' : 'en'])
+                        ?? (v['name'] as Map?)?['en']
+                        ?? v['name'] ?? '').toString();
+                    final on = temp.contains(id);
+                    return GestureDetector(
+                      onTap: () => setSheet(() =>
+                          on ? temp.remove(id) : temp.add(id)),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 13, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: on
+                              ? UellowColors.yellowSoft : Colors.white,
+                          borderRadius: BorderRadius.circular(999),
+                          border: Border.all(color: on
+                              ? UellowColors.yellow
+                              : UellowColors.border, width: on ? 1.4 : 1),
+                        ),
+                        child: Text(lbl, style: TextStyle(fontSize: 12,
+                            fontWeight:
+                                on ? FontWeight.w800 : FontWeight.w600,
+                            color: UellowColors.ink)),
+                      ),
+                    );
+                  }),
+                ]),
+              )),
+              const SizedBox(height: 14),
+              SizedBox(width: double.infinity, child: ElevatedButton(
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  onChanged(temp, minPrice, maxPrice);
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: UellowColors.yellow,
+                  foregroundColor: UellowColors.darkBrown,
+                  padding: const EdgeInsets.symmetric(vertical: 13),
+                ),
+                child: Text(ar ? 'تطبيق' : 'Apply',
+                    style: const TextStyle(fontWeight: FontWeight.w900)),
+              )),
+            ]),
+          ),
+        );
+      }),
+    );
+  }
+
+  void _openPriceSheet(BuildContext context,
+      Map<String, dynamic> price, bool ar) {
+    var lo = ((price['min'] as num?)?.toDouble()) ?? 0;
+    var hi = ((price['max'] as num?)?.toDouble()) ?? 1000;
+    if (hi <= lo) hi = lo + 100;
+    var range = RangeValues(
+      (minPrice ?? lo).clamp(lo, hi),
+      (maxPrice ?? hi).clamp(lo, hi),
+    );
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (_) => StatefulBuilder(builder: (ctx, setSheet) {
+        return Directionality(
+          textDirection: ar ? TextDirection.rtl : TextDirection.ltr,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(18, 14, 18, 24),
+            child: Column(mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(ar ? 'نطاق السعر' : 'Price range', style: UT.h2),
+              const SizedBox(height: 6),
+              Text('${range.start.toStringAsFixed(1)} — '
+                   '${range.end.toStringAsFixed(1)}',
+                  style: const TextStyle(fontWeight: FontWeight.w900,
+                      color: UellowColors.darkBrown)),
+              RangeSlider(
+                values: range, min: lo, max: hi,
+                activeColor: UellowColors.yellow,
+                onChanged: (v) => setSheet(() => range = v),
+              ),
+              Row(children: [
+                Expanded(child: OutlinedButton(
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    onChanged(Set<int>.from(selected), null, null);
+                  },
+                  child: Text(ar ? 'إزالة' : 'Remove',
+                      style: const TextStyle(fontWeight: FontWeight.w800)),
+                )),
+                const SizedBox(width: 10),
+                Expanded(child: ElevatedButton(
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    onChanged(Set<int>.from(selected),
+                        range.start, range.end);
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: UellowColors.yellow,
+                    foregroundColor: UellowColors.darkBrown,
+                  ),
+                  child: Text(ar ? 'تطبيق' : 'Apply',
+                      style: const TextStyle(fontWeight: FontWeight.w900)),
+                )),
+              ]),
+            ]),
+          ),
+        );
+      }),
+    );
+  }
 }

@@ -14,6 +14,7 @@ import '../../api/uellow_api.dart';
 import '../../api/uellow_models.dart';
 import '../router/uellow_router.dart';
 import '../theme/uellow_theme.dart';
+import '../widgets/announcement_strip.dart';
 import '../widgets/product_card.dart';
 import '../widgets/uellow_bottom_nav.dart';
 
@@ -29,11 +30,16 @@ class _CategoryScreenState extends State<CategoryScreen> {
   int? _initialCategoryId;
   String? _searchQuery;
   bool _initialised = false;
+  // v2.1.57 — backend shop-page config: section toggles + For You picks.
+  Map<String, dynamic>? _cfg;
 
   @override
   void initState() {
     super.initState();
     _tree = UellowApi.instance.categories.tree();
+    UellowApi.instance.categories.shopConfig().then((c) {
+      if (mounted) setState(() => _cfg = c);
+    }).catchError((_) {});
   }
 
   void _ensureInit(BuildContext context) {
@@ -54,6 +60,8 @@ class _CategoryScreenState extends State<CategoryScreen> {
       bottomNavigationBar: const UellowBottomNav(active: UNavTab.shop),
       body: SafeArea(child: Column(children: [
         const _CatTopBar(),
+        // v2.1.57 — targeted announcement strip (admin-controlled).
+        const AnnouncementStrip(screen: 'shop'),
         if (_searchQuery != null && _searchQuery!.isNotEmpty)
           _SearchResultsHeader(query: _searchQuery!),
         Expanded(
@@ -71,17 +79,30 @@ class _CategoryScreenState extends State<CategoryScreen> {
                     style: UT.body));
               }
               final roots = snap.data!;
+              // v2.1.57 — "For You" pseudo-entry at the TOP of the
+              // sidebar when enabled from the backend; real roots shift
+              // down by one.
+              final foryou = _cfg?['foryou_enabled'] == true;
               if (_initialCategoryId != null) {
                 final idx = roots.indexWhere((c) => c.id == _initialCategoryId);
-                if (idx >= 0) _selectedRoot = idx;
+                if (idx >= 0) _selectedRoot = idx + (foryou ? 1 : 0);
                 _initialCategoryId = null;
               }
-              final current = roots[_selectedRoot.clamp(0, roots.length - 1)];
+              final maxIdx = roots.length - 1 + (foryou ? 1 : 0);
+              final sel = _selectedRoot.clamp(0, maxIdx);
+              final showForYou = foryou && sel == 0;
+              final current = showForYou
+                  ? null
+                  : roots[(sel - (foryou ? 1 : 0)).clamp(0, roots.length - 1)];
               return Row(children: [
-                _Sidebar(roots: roots, selected: _selectedRoot,
+                _Sidebar(roots: roots, selected: sel,
+                    foryouEnabled: foryou,
                     onSelect: (i) => setState(() => _selectedRoot = i)),
-                Expanded(child: _Content(
-                  category: current, searchQuery: _searchQuery)),
+                Expanded(child: showForYou
+                    ? _ForYouContent(cfg: _cfg ?? const {})
+                    : _Content(
+                        category: current!, searchQuery: _searchQuery,
+                        cfg: _cfg)),
               ]);
             },
           ),
@@ -179,13 +200,17 @@ class _CatTopBar extends StatelessWidget {
 // ─── Left sidebar ──────────────────────────────────────────────────
 
 class _Sidebar extends StatelessWidget {
-  const _Sidebar({required this.roots, required this.selected, required this.onSelect});
+  const _Sidebar({required this.roots, required this.selected,
+      required this.onSelect, this.foryouEnabled = false});
   final List<UellowCategory> roots;
   final int selected;
   final ValueChanged<int> onSelect;
+  // v2.1.57 — renders a "For You" star entry at index 0.
+  final bool foryouEnabled;
   @override
   Widget build(BuildContext context) {
     final lang = UellowApi.instance.lang;
+    final ar = lang == 'ar';
     return Container(
       width: 90, color: Colors.white,
       decoration: const BoxDecoration(
@@ -193,9 +218,46 @@ class _Sidebar extends StatelessWidget {
       ),
       child: ListView.builder(
         padding: const EdgeInsets.symmetric(vertical: 4),
-        itemCount: roots.length,
+        itemCount: roots.length + (foryouEnabled ? 1 : 0),
         itemBuilder: (_, i) {
-          final c = roots[i];
+          if (foryouEnabled && i == 0) {
+            final on = selected == 0;
+            return GestureDetector(
+              onTap: () => onSelect(0),
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                    vertical: 12, horizontal: 4),
+                decoration: BoxDecoration(
+                  color: on ? UellowColors.yellowFaint : null,
+                  border: Border(left: BorderSide(
+                    color: on ? UellowColors.yellow : Colors.transparent,
+                    width: 3,
+                  )),
+                ),
+                child: Column(children: [
+                  Container(
+                    width: 42, height: 42, alignment: Alignment.center,
+                    decoration: const BoxDecoration(
+                      gradient: LinearGradient(colors: [
+                          Color(0xFFFFE066), UellowColors.yellow]),
+                      borderRadius: BorderRadius.all(Radius.circular(12)),
+                    ),
+                    child: const Text('⭐', style: TextStyle(fontSize: 20)),
+                  ),
+                  const SizedBox(height: 5),
+                  Text(ar ? 'مختارة لك' : 'For You',
+                      maxLines: 2, textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 9.5, height: 1.2,
+                        color: on
+                            ? UellowColors.darkBrown : UellowColors.text,
+                        fontWeight: on ? FontWeight.w800 : FontWeight.w600,
+                      )),
+                ]),
+              ),
+            );
+          }
+          final c = roots[i - (foryouEnabled ? 1 : 0)];
           final on = i == selected;
           return GestureDetector(
             onTap: () => onSelect(i),
@@ -258,9 +320,11 @@ class _Sidebar extends StatelessWidget {
 // ─── Right content ─────────────────────────────────────────────────
 
 class _Content extends StatefulWidget {
-  const _Content({required this.category, this.searchQuery});
+  const _Content({required this.category, this.searchQuery, this.cfg});
   final UellowCategory category;
   final String? searchQuery;
+  // v2.1.57 — backend section toggles (show_recent / products / brands).
+  final Map<String, dynamic>? cfg;
   @override
   State<_Content> createState() => _ContentState();
 }
@@ -307,9 +371,13 @@ class _ContentState extends State<_Content> {
           category: widget.category),
       // Sub-categories (only if any)
       if (subs.isNotEmpty) _SubCatsGrid(subs: subs, lang: lang),
-      // Latest products slider
-      _LatestSlider(category: widget.category, products: _products),
+      // Latest products slider — backend-toggleable (v2.1.57)
+      if (widget.cfg?['show_recent'] != false)
+        _LatestSlider(category: widget.category, products: _products),
+      // v2.1.57 — brands row under "Recently arrived" (backend toggle).
+      if (widget.cfg?['show_brands'] != false) const _BrandsRow(),
       // All products grid — Sort/Filter removed per spec; tighter title.
+      if (widget.cfg?['show_products'] != false) ...[
       Padding(
         padding: const EdgeInsets.fromLTRB(14, 10, 14, 6),
         child: Text(subs.isEmpty
@@ -321,6 +389,7 @@ class _ContentState extends State<_Content> {
                 color: UellowColors.ink)),
       ),
       _ProductsGrid(future: _products),
+      ],
       const SizedBox(height: 30),
     ]);
   }
@@ -722,5 +791,244 @@ class _CategoryHeaderSliderState extends State<_CategoryHeaderSlider> {
             color: p.$5.withValues(alpha: 0.8)),
       ]),
     );
+  }
+}
+
+// ─── Brands row (v2.1.57) — under "Recently arrived", backend toggle ──
+
+class _BrandsRow extends StatefulWidget {
+  const _BrandsRow();
+  @override
+  State<_BrandsRow> createState() => _BrandsRowState();
+}
+
+class _BrandsRowState extends State<_BrandsRow> {
+  static List<Map<String, dynamic>>? _cache;   // session cache
+  List<Map<String, dynamic>>? _brands = _cache;
+
+  @override
+  void initState() {
+    super.initState();
+    if (_cache == null) {
+      UellowApi.instance.categories.brands().then((v) {
+        _cache = v;
+        if (mounted) setState(() => _brands = v);
+      }).catchError((_) {
+        if (mounted) setState(() => _brands = const []);
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ar = UellowApi.instance.lang == 'ar';
+    final brands = _brands;
+    if (brands == null || brands.isEmpty) return const SizedBox.shrink();
+    return Container(
+      margin: const EdgeInsets.fromLTRB(10, 10, 10, 0),
+      padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.all(Radius.circular(14)),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          const Text('🏷️', style: TextStyle(fontSize: 13)),
+          const SizedBox(width: 4),
+          Text(ar ? 'الماركات' : 'Brands',
+              style: const TextStyle(fontSize: 13,
+                  fontWeight: FontWeight.w900, color: UellowColors.ink)),
+        ]),
+        const SizedBox(height: 10),
+        SizedBox(height: 84, child: ListView.separated(
+          scrollDirection: Axis.horizontal,
+          itemCount: brands.length,
+          separatorBuilder: (_, __) => const SizedBox(width: 10),
+          itemBuilder: (_, i) => _BrandBubble(brand: brands[i]),
+        )),
+      ]),
+    );
+  }
+}
+
+class _BrandBubble extends StatelessWidget {
+  const _BrandBubble({required this.brand});
+  final Map<String, dynamic> brand;
+  @override
+  Widget build(BuildContext context) {
+    final name = (brand['name'] ?? '').toString();
+    final img = (brand['image'] as String?) ?? '';
+    final count = (brand['product_count'] as num?)?.toInt() ?? 0;
+    return GestureDetector(
+      onTap: () => Navigator.pushNamed(context, '/collection', arguments: {
+        'brand_value_id': (brand['value_id'] as num?)?.toInt(),
+        'brand_name': name,
+      }),
+      child: SizedBox(width: 62, child: Column(children: [
+        Container(
+          width: 50, height: 50,
+          clipBehavior: Clip.antiAlias,
+          decoration: BoxDecoration(
+            color: const Color(0xFFEFEFEF), shape: BoxShape.circle,
+            border: Border.all(color: UellowColors.border),
+          ),
+          child: img.isNotEmpty
+              ? CachedNetworkImage(
+                  imageUrl: img.startsWith('http')
+                      ? img : '${UellowApi.instance.baseUrl}$img',
+                  fit: BoxFit.contain,
+                  errorWidget: (_, __, ___) => Center(child: Text(
+                      name.isEmpty ? '🏷️' : name[0].toUpperCase(),
+                      style: const TextStyle(fontSize: 17,
+                          fontWeight: FontWeight.w900,
+                          color: UellowColors.darkBrown))))
+              : Center(child: Text(
+                  name.isEmpty ? '🏷️' : name[0].toUpperCase(),
+                  style: const TextStyle(fontSize: 17,
+                      fontWeight: FontWeight.w900,
+                      color: UellowColors.darkBrown))),
+        ),
+        const SizedBox(height: 4),
+        Text(name, maxLines: 1, overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 9,
+                fontWeight: FontWeight.w700, color: UellowColors.ink)),
+        Text('$count', style: const TextStyle(fontSize: 8,
+            color: UellowColors.muted, fontWeight: FontWeight.w700)),
+      ])),
+    );
+  }
+}
+
+// ─── "For You" content (v2.1.57) — hand-picked categories + brands ───
+// Fed from Mobile App ▸ Settings (For You: Categories / Brands).
+
+class _ForYouContent extends StatelessWidget {
+  const _ForYouContent({required this.cfg});
+  final Map<String, dynamic> cfg;
+
+  @override
+  Widget build(BuildContext context) {
+    final ar = UellowApi.instance.lang == 'ar';
+    final foryou = (cfg['foryou'] as Map?)?.cast<String, dynamic>()
+        ?? const {};
+    final cats = List<Map<String, dynamic>>.from(
+        (foryou['categories'] as List?) ?? const []);
+    final brands = List<Map<String, dynamic>>.from(
+        (foryou['brands'] as List?) ?? const []);
+    return ListView(padding: EdgeInsets.zero, children: [
+      // hero ribbon
+      Container(
+        margin: const EdgeInsets.fromLTRB(10, 10, 10, 0),
+        padding: const EdgeInsets.all(14),
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(colors: [
+              Color(0xFFFFE066), UellowColors.yellow]),
+          borderRadius: BorderRadius.all(Radius.circular(12)),
+        ),
+        child: Row(children: [
+          const Text('⭐', style: TextStyle(fontSize: 26)),
+          const SizedBox(width: 10),
+          Expanded(child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(ar ? 'مختارة لك' : 'For You',
+                style: const TextStyle(fontWeight: FontWeight.w900,
+                    fontSize: 14, color: UellowColors.darkBrown)),
+            Text(ar ? 'أقسام وماركات اخترناها خصيصاً لك'
+                    : 'Categories & brands picked just for you',
+                style: const TextStyle(color: Color(0xCC412402),
+                    fontSize: 11)),
+          ])),
+        ]),
+      ),
+      if (cats.isNotEmpty) Container(
+        margin: const EdgeInsets.fromLTRB(10, 10, 10, 0),
+        padding: const EdgeInsets.all(12),
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.all(Radius.circular(14)),
+        ),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(ar ? 'أقسام مختارة' : 'Picked categories',
+              style: const TextStyle(fontSize: 13,
+                  fontWeight: FontWeight.w900, color: UellowColors.ink)),
+          const SizedBox(height: 10),
+          GridView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 3, crossAxisSpacing: 8, mainAxisSpacing: 12,
+              childAspectRatio: 0.8,
+            ),
+            itemCount: cats.length,
+            itemBuilder: (_, i) {
+              final c = cats[i];
+              final nm = (c['name'] as Map?)?.cast<String, dynamic>();
+              final label = ((ar ? (nm?['ar']) : (nm?['en']))
+                  ?? nm?['en'] ?? '').toString();
+              final img = (c['image'] as String?) ?? '';
+              return GestureDetector(
+                onTap: () => Navigator.pushNamed(context, '/collection',
+                    arguments: {'category_id': (c['id'] as num?)?.toInt()}),
+                behavior: HitTestBehavior.opaque,
+                child: Column(children: [
+                  Expanded(child: Container(
+                    width: double.infinity,
+                    clipBehavior: Clip.antiAlias,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEFEFEF),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: img.isNotEmpty
+                        ? CachedNetworkImage(
+                            imageUrl: img.startsWith('http')
+                                ? img
+                                : '${UellowApi.instance.baseUrl}$img',
+                            fit: BoxFit.cover,
+                            errorWidget: (_, __, ___) => const Center(
+                                child: Text('📦',
+                                    style: TextStyle(fontSize: 26))))
+                        : const Center(child: Text('📦',
+                            style: TextStyle(fontSize: 26))),
+                  )),
+                  const SizedBox(height: 5),
+                  Text(label, maxLines: 1, overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontSize: 9.5,
+                          fontWeight: FontWeight.w700,
+                          color: UellowColors.ink)),
+                ]),
+              );
+            },
+          ),
+        ]),
+      ),
+      if (brands.isNotEmpty) Container(
+        margin: const EdgeInsets.fromLTRB(10, 10, 10, 0),
+        padding: const EdgeInsets.all(12),
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.all(Radius.circular(14)),
+        ),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(ar ? 'ماركات مختارة' : 'Picked brands',
+              style: const TextStyle(fontSize: 13,
+                  fontWeight: FontWeight.w900, color: UellowColors.ink)),
+          const SizedBox(height: 10),
+          Wrap(spacing: 10, runSpacing: 10, children: [
+            for (final b in brands) SizedBox(
+                width: 62, child: _BrandBubble(brand: b)),
+          ]),
+        ]),
+      ),
+      if (cats.isEmpty && brands.isEmpty) Padding(
+        padding: const EdgeInsets.all(40),
+        child: Center(child: Text(
+            ar ? 'لم تُحدد أقسام أو ماركات بعد من الإعدادات'
+               : 'No categories or brands picked in Settings yet',
+            textAlign: TextAlign.center, style: UT.body)),
+      ),
+      const SizedBox(height: 30),
+    ]);
   }
 }

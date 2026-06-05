@@ -15,6 +15,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../api/uellow_api.dart';
 import '../router/uellow_router.dart';
 import '../theme/uellow_theme.dart';
+import '../widgets/announcement_strip.dart';
 import '../widgets/uellow_bottom_nav.dart';
 
 class AccountScreen extends StatefulWidget {
@@ -79,6 +80,8 @@ class _AccountScreenState extends State<AccountScreen> {
       onRefresh: () async => setState(() => _future = _fetch()),
       child: ListView(padding: EdgeInsets.zero, children: [
         _ProfileHeader(user: user, isGuest: isGuest),
+        // v2.1.57 — targeted announcement strip (admin-controlled).
+        const AnnouncementStrip(screen: 'account'),
         if (isGuest) _GuestSigninBanner(),
         if (!isGuest) _BannersRow(banners: banners),
         if (!isGuest && recent != null) _RecentOrderCard(order: recent),

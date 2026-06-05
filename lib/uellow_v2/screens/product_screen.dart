@@ -20,6 +20,7 @@ import '../router/uellow_router.dart';
 import '../services/first_launch_service.dart';
 import '../theme/uellow_l10n.dart';
 import '../theme/uellow_theme.dart';
+import '../widgets/announcement_strip.dart';
 import 'auth_screen.dart';
 import '../widgets/flash_banner.dart';
 import '../widgets/product_card.dart';
@@ -208,6 +209,8 @@ class _ProductScreenState extends State<ProductScreen> {
       // scrolls away and jump to their section on tap.
       SliverPersistentHeader(pinned: true, delegate: _SectionTabs(
           tab: _sectionTab, onTap: _goSection)),
+      // v2.1.57 — targeted announcement strip (admin-controlled).
+      const SliverToBoxAdapter(child: AnnouncementStrip(screen: 'product')),
       SliverToBoxAdapter(child: KeyedSubtree(
           key: _kOverview, child: _Title(p: p))),
       SliverToBoxAdapter(child: _PriceRow(p: p)),

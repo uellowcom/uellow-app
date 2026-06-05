@@ -256,6 +256,9 @@ Widget _renderBlock(BuildContext c, Map<String, dynamic> b, DynTheme t) {
     case 'story-bubbles':  inner = StoryBubblesBlock(p: p, t: t, ar: ar); break;
     case 'lookbook':       inner = LookbookBlock(p: p, t: t, ar: ar); break;
     case 'sticky-cta':     inner = StickyCtaBlock(p: p, t: t, ar: ar); break;
+    // v2.1.57 — conversion blocks
+    case 'new-user':       inner = NewUserBlock(p: p, data: data, t: t, ar: ar); break;
+    case 'trust-strip':    inner = TrustStripBlock(p: p, t: t, ar: ar); break;
     default:               return const SizedBox.shrink();
   }
   return BlockEnvelope(props: p, theme: t, child: inner);

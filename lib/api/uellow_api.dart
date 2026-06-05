@@ -92,6 +92,7 @@ class UellowApi {
     products      = _ProductsApi(this);
     categories    = _CategoriesApi(this);
     vendors       = _VendorsApi(this);
+    announcements = _AnnouncementsApi(this);
     cart          = _CartApi(this);
     orders        = _OrdersApi(this);
     addresses     = _AddressesApi(this);
@@ -184,6 +185,7 @@ class UellowApi {
   late final _ProductsApi products;
   late final _CategoriesApi categories;
   late final _VendorsApi vendors;
+  late final _AnnouncementsApi announcements;
   late final _CartApi cart;
   late final _OrdersApi orders;
   late final _AddressesApi addresses;
@@ -674,6 +676,19 @@ class _ProductsApi {
   }
 }
 
+// v2.1.57 — targeted announcement strips (Mobile App ▸ Marketing).
+class _AnnouncementsApi {
+  _AnnouncementsApi(this._c);
+  final UellowApi _c;
+
+  Future<List<Map<String, dynamic>>> forScreen(String screen) async {
+    final res = await _c._get('/api/mobile/v2/announcements',
+        query: {'screen': screen});
+    return List<Map<String, dynamic>>.from(
+        (res['data']?['strips'] as List?) ?? const []);
+  }
+}
+
 // v2.1.56 — real vendor-store data (was missing; the vendor screen ran
 // on hardcoded mock content).
 class _VendorsApi {
@@ -730,6 +745,20 @@ class _CategoriesApi {
     final res = await _c._get('/api/mobile/v2/category/$id/slides');
     return List<Map<String, dynamic>>.from(
         (res['data']?['slides'] as List?) ?? const []);
+  }
+
+  /// v2.1.57 — shop page section toggles + the "For You" hand-picked
+  /// categories/brands (Mobile App ▸ Settings).
+  Future<Map<String, dynamic>> shopConfig() async {
+    final res = await _c._get('/api/mobile/v2/shop/config');
+    return (res['data'] as Map).cast<String, dynamic>();
+  }
+
+  /// v2.1.57 — top brands: [{value_id, name, image, product_count}].
+  Future<List<Map<String, dynamic>>> brands() async {
+    final res = await _c._get('/api/mobile/v2/brands');
+    return List<Map<String, dynamic>>.from(
+        (res['data']?['brands'] as List?) ?? const []);
   }
 }
 

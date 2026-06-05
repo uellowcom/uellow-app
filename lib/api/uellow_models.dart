@@ -780,15 +780,26 @@ class UellowFreeShipping {
   final UellowMoney remaining;
   final double progress;
   final bool qualified;
+  // v2.1.57 — why it's free: 'product' | 'coupon' | 'threshold'.
+  final String reason;
+  final Map<String, String>? label; // {en, ar} from the engine
   const UellowFreeShipping({
     required this.threshold, required this.remaining,
     required this.progress, required this.qualified,
+    this.reason = 'threshold', this.label,
   });
   factory UellowFreeShipping.fromJson(Map<String, dynamic> j) => UellowFreeShipping(
         threshold: UellowMoney.fromJson(j['threshold'] as Map<String, dynamic>),
         remaining: UellowMoney.fromJson(j['remaining'] as Map<String, dynamic>),
         progress: (j['progress'] as num?)?.toDouble() ?? 0,
         qualified: (j['qualified'] ?? false) as bool,
+        reason: (j['reason'] ?? 'threshold').toString(),
+        label: (j['label'] is Map)
+            ? {
+                'en': ((j['label'] as Map)['en'] ?? '').toString(),
+                'ar': ((j['label'] as Map)['ar'] ?? '').toString(),
+              }
+            : null,
       );
 }
 

@@ -14,6 +14,7 @@ import 'dart:convert';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../api/uellow_api.dart';
 import '../../api/uellow_endpoints.dart';
@@ -22,6 +23,7 @@ import '../router/uellow_router.dart';
 import '../services/ads_service.dart';
 import '../theme/uellow_theme.dart';
 import '../widgets/product_card.dart';
+import '../widgets/announcement_strip.dart';
 import '../widgets/review_prompt_dialog.dart';
 import '../widgets/update_gate.dart';
 import '../widgets/uellow_bottom_nav.dart';
@@ -67,11 +69,18 @@ class _HomeScreenState extends State<HomeScreen> {
     }, onError: (_) {});
   }
 
-  /// Fetch the builder-designed `home` page. Returns null on any failure so
-  /// the legacy layout always wins when nothing has been designed yet.
+  /// Fetch the builder-designed `home` page.
+  ///
+  /// v2.1.57 — the LEGACY hand-built home is gone: on slow networks its
+  /// flash (old navbar/design) confused users. Strategy now:
+  ///   1. network fetch (12s) → render + SAVE as the local snapshot
+  ///   2. fetch failed → render the LAST GOOD snapshot (same current
+  ///      design, refreshed on every successful load)
+  ///   3. no snapshot either → null → error + retry state (never legacy)
   Future<_DynHome?> _fetchDynamicHome() async {
+    final api = UellowApi.instance;
+    final cacheKey = 'home_page_cache_v1_${api.lang}';
     try {
-      final api = UellowApi.instance;
       // `_t` cache-buster forces every reload to bypass any HTTP cache so
       // edits made in the builder show up immediately after a refresh.
       final res = await http.get(
@@ -81,20 +90,46 @@ class _HomeScreenState extends State<HomeScreen> {
           'X-Lang': api.lang,
           'Cache-Control': 'no-cache',
         },
-      ).timeout(const Duration(seconds: 5));
-      if (res.statusCode != 200) return null;
-      final j = jsonDecode(res.body) as Map<String, dynamic>;
-      if (j['success'] != true) return null;
-      final d = (j['data'] as Map).cast<String, dynamic>();
-      final blocks = (d['blocks'] as List? ?? const []).cast<dynamic>();
-      if (blocks.isEmpty) return null;
-      return _DynHome(
-        theme: DynTheme.fromJson((d['theme'] as Map? ?? const {})),
-        blocks: blocks.map((e) => (e as Map).cast<String, dynamic>()).toList(),
-      );
-    } catch (_) {
-      return null;
-    }
+      ).timeout(const Duration(seconds: 12));
+      if (res.statusCode == 200) {
+        final j = jsonDecode(res.body) as Map<String, dynamic>;
+        if (j['success'] == true) {
+          final d = (j['data'] as Map).cast<String, dynamic>();
+          final blocks = (d['blocks'] as List? ?? const []).cast<dynamic>();
+          if (blocks.isNotEmpty) {
+            // snapshot replaced on EVERY successful load — offline /
+            // slow starts always show the current design.
+            try {
+              final prefs = await SharedPreferences.getInstance();
+              await prefs.setString(cacheKey, jsonEncode(d));
+            } catch (_) {}
+            return _DynHome(
+              theme: DynTheme.fromJson((d['theme'] as Map? ?? const {})),
+              blocks: blocks
+                  .map((e) => (e as Map).cast<String, dynamic>())
+                  .toList(),
+            );
+          }
+        }
+      }
+    } catch (_) {/* fall through to snapshot */}
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(cacheKey);
+      if (raw != null && raw.isNotEmpty) {
+        final d = (jsonDecode(raw) as Map).cast<String, dynamic>();
+        final blocks = (d['blocks'] as List? ?? const []).cast<dynamic>();
+        if (blocks.isNotEmpty) {
+          return _DynHome(
+            theme: DynTheme.fromJson((d['theme'] as Map? ?? const {})),
+            blocks: blocks
+                .map((e) => (e as Map).cast<String, dynamic>())
+                .toList(),
+          );
+        }
+      }
+    } catch (_) {}
+    return null;
   }
 
   Future<void> _refresh() async {
@@ -122,7 +157,14 @@ class _HomeScreenState extends State<HomeScreen> {
             }
             final dyn = dynSnap.data;
             if (dyn != null) return _buildDynamic(context, dyn);
-            return _buildLegacy(context);
+            // v2.1.57 — legacy hand-built home REMOVED per spec: no
+            // builder page AND no snapshot → clean error + retry (the
+            // old design can never flash again).
+            return _ErrorState(
+                message: UellowApi.instance.lang == 'ar'
+                    ? 'تعذّر تحميل الصفحة الرئيسية — تحقق من الاتصال'
+                    : 'Could not load the home page — check your connection',
+                onRetry: _refresh);
           },
         ),
       )),
@@ -138,6 +180,8 @@ class _HomeScreenState extends State<HomeScreen> {
         physics: const AlwaysScrollableScrollPhysics(),
         slivers: [
           SliverToBoxAdapter(child: _TopBar()),
+          // v2.1.57 — targeted announcement strip (admin-controlled).
+          const SliverToBoxAdapter(child: AnnouncementStrip(screen: 'home')),
           SliverList.builder(
             itemCount: dyn.blocks.length,
             itemBuilder: (ctx, i) => RepaintBoundary(

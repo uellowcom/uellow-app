@@ -4474,3 +4474,340 @@ Color _hexColor(dynamic v, Color fb) {
   if (h.length == 3) h = h.split('').map((c) => '$c$c').join();
   return Color(int.parse('FF$h', radix: 16));
 }
+
+// ═══ New User Discount block (v2.1.57 — Banggood-style) ═══════════════
+// Gradient exclusive panel: coupon-pack card + mini deal rows on the
+// start side, "New User Bonus" product cards scrolling after it.
+// Audience prop: all | guests | new (guests OR signed-in with 0 orders).
+
+class NewUserBlock extends StatefulWidget {
+  const NewUserBlock({super.key, required this.p, required this.data,
+      required this.t, required this.ar});
+  final Map<String, dynamic> p;
+  final Map<String, dynamic> data;
+  final DynTheme t;
+  final bool ar;
+
+  @override
+  State<NewUserBlock> createState() => _NewUserBlockState();
+}
+
+class _NewUserBlockState extends State<NewUserBlock> {
+  bool _visible = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkAudience();
+  }
+
+  Future<void> _checkAudience() async {
+    final aud = (widget.p['audience'] ?? 'all').toString();
+    if (aud == 'all') return;
+    try {
+      final token = await UellowApi.instance.tokenStore.readToken();
+      final signedIn = token != null && token.isNotEmpty;
+      if (aud == 'guests') {
+        if (signedIn && mounted) setState(() => _visible = false);
+        return;
+      }
+      // aud == 'new' → guests count as new; signed-in must have 0 orders.
+      if (!signedIn) return;
+      final page = await UellowApi.instance.orders.list(page: 1, perPage: 1);
+      if (page.total > 0 && mounted) setState(() => _visible = false);
+    } catch (_) {/* default to visible */}
+  }
+
+  void _collect() {
+    UellowApi.instance.tokenStore.readToken().then((tok) {
+      if (!mounted) return;
+      Navigator.pushNamed(context,
+          (tok == null || tok.isEmpty) ? '/auth' : '/coupons');
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_visible) return const SizedBox.shrink();
+    final p = widget.p;
+    final ar = widget.ar;
+    final items = ((widget.data['items'] as List?) ?? const [])
+        .map((e) => (e as Map).cast<String, dynamic>()).toList();
+    if (items.isEmpty) return const SizedBox.shrink();
+    final c1 = _parseColor(p['c1']) ?? const Color(0xFFFF7A00);
+    final c2 = _parseColor(p['c2']) ?? const Color(0xFFFFB347);
+    final title = ((ar ? p['titleAr'] : p['titleEn'])
+        ?? p['titleEn'] ?? '').toString();
+    final sub = ((ar ? p['subAr'] : p['subEn'])
+        ?? p['subEn'] ?? '').toString();
+    final cta = ((ar ? p['ctaAr'] : p['ctaEn'])
+        ?? p['ctaEn'] ?? (ar ? 'اجمعها' : 'Collect')).toString();
+    final badge = ((ar ? p['badgeAr'] : p['badgeEn'])
+        ?? p['badgeEn'] ?? (ar ? 'مكافأة العميل الجديد' : 'New User Bonus'))
+        .toString();
+    final packValue = (p['pack_value'] ?? '9.5').toString();
+    final packCur = (p['pack_currency'] ?? 'KD').toString();
+    final miniRows = items.take(2).toList();
+    final cards = items.skip(2).toList();
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 10),
+      padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+            begin: Alignment.topLeft, end: Alignment.bottomRight,
+            colors: [c1, c2]),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [BoxShadow(color: c1.withValues(alpha: 0.35),
+            blurRadius: 12, offset: const Offset(0, 5))],
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        // header
+        Row(children: [
+          Expanded(child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(title, maxLines: 1, overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: Colors.white, fontSize: 15.5,
+                    fontWeight: FontWeight.w900)),
+            if (sub.isNotEmpty) Text(sub,
+                maxLines: 1, overflow: TextOverflow.ellipsis,
+                style: TextStyle(color: Colors.white.withValues(alpha: 0.92),
+                    fontSize: 11)),
+          ])),
+          GestureDetector(
+            onTap: _collect,
+            child: Container(
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 16, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(999),
+                boxShadow: const [BoxShadow(color: Color(0x33000000),
+                    blurRadius: 6, offset: Offset(0, 2))],
+              ),
+              child: Text(cta, style: TextStyle(color: c1,
+                  fontSize: 12, fontWeight: FontWeight.w900)),
+            ),
+          ),
+        ]),
+        const SizedBox(height: 10),
+        SizedBox(height: 168, child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          // coupon-pack card + 2 mini deal rows
+          SizedBox(width: 132, child: Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Column(children: [
+              Row(mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.end, children: [
+                Flexible(child: Text(packValue,
+                    maxLines: 1, overflow: TextOverflow.ellipsis,
+                    style: TextStyle(color: c1, fontSize: 22,
+                        fontWeight: FontWeight.w900, height: 1.0))),
+                const SizedBox(width: 3),
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 2),
+                  child: Text(packCur, style: TextStyle(color: c1,
+                      fontSize: 10, fontWeight: FontWeight.w800)),
+                ),
+              ]),
+              Text(ar ? 'باقة كوبونات' : 'Coupon pack',
+                  style: const TextStyle(fontSize: 9,
+                      color: Color(0xFF8A8A8A),
+                      fontWeight: FontWeight.w700)),
+              const SizedBox(height: 6),
+              for (final m in miniRows) Expanded(child: _miniRow(m, c1)),
+            ]),
+          )),
+          const SizedBox(width: 8),
+          // product cards rail
+          Expanded(child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            itemCount: cards.length,
+            separatorBuilder: (_, __) => const SizedBox(width: 8),
+            itemBuilder: (_, i) => _bonusCard(cards[i], badge, c1),
+          )),
+        ])),
+      ]),
+    );
+  }
+
+  Widget _miniRow(Map<String, dynamic> m, Color accent) {
+    final img = pickLocalizedImage(m, widget.ar);
+    final price = ((m['price'] as Map?)?['amount'] as num?)?.toDouble()
+        ?? (m['price'] as num?)?.toDouble() ?? 0;
+    return GestureDetector(
+      onTap: () {
+        final id = (m['id'] as num?)?.toInt() ?? 0;
+        if (id > 0) UellowRouter.goProduct(context, id);
+      },
+      child: Padding(
+        padding: const EdgeInsets.only(top: 6),
+        child: Row(children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(7),
+            child: CachedNetworkImage(
+                imageUrl: img.startsWith('http')
+                    ? img : '${UellowApi.instance.baseUrl}$img',
+                width: 38, height: 38, fit: BoxFit.cover,
+                errorWidget: (_, __, ___) =>
+                    const ColoredBox(color: Color(0xFFEFEFEF))),
+          ),
+          const SizedBox(width: 6),
+          Expanded(child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('${price.toStringAsFixed(2)} ${widget.ar ? "د.ك" : "KD"}',
+                maxLines: 1, overflow: TextOverflow.ellipsis,
+                style: TextStyle(color: accent, fontSize: 11,
+                    fontWeight: FontWeight.w900)),
+            Container(
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 4, vertical: 1),
+              decoration: BoxDecoration(
+                color: accent.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Text(widget.ar ? '⚡ بكوبون' : '⚡ w/ coupon',
+                  style: TextStyle(color: accent, fontSize: 7.5,
+                      fontWeight: FontWeight.w800)),
+            ),
+          ])),
+        ]),
+      ),
+    );
+  }
+
+  Widget _bonusCard(Map<String, dynamic> m, String badge, Color accent) {
+    final img = pickLocalizedImage(m, widget.ar);
+    final price = ((m['price'] as Map?)?['amount'] as num?)?.toDouble()
+        ?? (m['price'] as num?)?.toDouble() ?? 0;
+    final cmp = ((m['compare_price'] as Map?)?['amount'] as num?)?.toDouble()
+        ?? (m['compare_price'] as num?)?.toDouble() ?? 0;
+    return GestureDetector(
+      onTap: () {
+        final id = (m['id'] as num?)?.toInt() ?? 0;
+        if (id > 0) UellowRouter.goProduct(context, id);
+      },
+      child: Container(
+        width: 110,
+        decoration: BoxDecoration(
+          color: Colors.white, borderRadius: BorderRadius.circular(12)),
+        clipBehavior: Clip.antiAlias,
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Expanded(child: Stack(fit: StackFit.expand, children: [
+            CachedNetworkImage(
+                imageUrl: img.startsWith('http')
+                    ? img : '${UellowApi.instance.baseUrl}$img',
+                fit: BoxFit.cover,
+                errorWidget: (_, __, ___) =>
+                    const ColoredBox(color: Color(0xFFEFEFEF))),
+            PositionedDirectional(bottom: 0, start: 0, end: 0,
+              child: Container(
+                color: const Color(0xFFFFE9A8),
+                padding: const EdgeInsets.symmetric(vertical: 2),
+                alignment: Alignment.center,
+                child: Text(badge, maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 7.5,
+                        fontWeight: FontWeight.w900,
+                        color: Color(0xFF7A4A00))),
+              ),
+            ),
+          ])),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(6, 4, 6, 6),
+            child: Row(crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+              Text('${price.toStringAsFixed(2)}',
+                  style: TextStyle(color: accent, fontSize: 12,
+                      fontWeight: FontWeight.w900, height: 1.0)),
+              const SizedBox(width: 3),
+              if (cmp > price) Flexible(child: Text(cmp.toStringAsFixed(2),
+                  maxLines: 1, overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 8.5,
+                      color: Color(0xFF9A9A9A),
+                      decoration: TextDecoration.lineThrough))),
+            ]),
+          ),
+        ]),
+      ),
+    );
+  }
+}
+
+// ═══ Trust / Services strip (v2.1.57) ═════════════════════════════════
+// "After-sales assurance | Secure payment | Logistics support" — items
+// fully editable from the builder (icon + bilingual text + optional link).
+
+class TrustStripBlock extends StatelessWidget {
+  const TrustStripBlock({super.key, required this.p, required this.t,
+      required this.ar});
+  final Map<String, dynamic> p;
+  final DynTheme t;
+  final bool ar;
+
+  @override
+  Widget build(BuildContext context) {
+    final items = ((p['items'] as List?) ?? const [])
+        .map((e) => (e as Map).cast<String, dynamic>()).toList();
+    if (items.isEmpty) return const SizedBox.shrink();
+    final style = (p['style'] ?? 'plain').toString();
+
+    Widget cell(Map<String, dynamic> it, {bool card = false}) {
+      final label = ((ar ? it['labelAr'] : it['labelEn'])
+          ?? it['labelEn'] ?? '').toString();
+      final w = Row(mainAxisSize: MainAxisSize.min, children: [
+        Text((it['icon'] ?? '🛡️').toString(),
+            style: const TextStyle(fontSize: 13)),
+        const SizedBox(width: 4),
+        Flexible(child: Text(label, maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700,
+                color: t.dark.withValues(alpha: 0.85)))),
+      ]);
+      final inner = card
+          ? Container(
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 9, vertical: 6),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF7F7F7),
+                borderRadius: BorderRadius.circular(999),
+                border: Border.all(color: const Color(0xFFEAEAEA)),
+              ),
+              child: w)
+          : w;
+      final link = (it['link'] as Map?)?.cast<String, dynamic>();
+      if (link == null || (link['type'] ?? 'none') == 'none') return inner;
+      return GestureDetector(
+          onTap: () => openBlockLink(context, link), child: inner);
+    }
+
+    if (style == 'cards') {
+      return SizedBox(height: 34, child: ListView.separated(
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        scrollDirection: Axis.horizontal,
+        itemCount: items.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 6),
+        itemBuilder: (_, i) => Center(child: cell(items[i], card: true)),
+      ));
+    }
+    // plain / divided — evenly spread single row
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.white, borderRadius: BorderRadius.circular(10)),
+      child: Row(children: [
+        for (var i = 0; i < items.length; i++) ...[
+          Expanded(child: Center(child: cell(items[i]))),
+          if (style == 'divided' && i != items.length - 1)
+            Container(width: 1, height: 14, color: const Color(0xFFE5E5E5)),
+        ],
+      ]),
+    );
+  }
+}
