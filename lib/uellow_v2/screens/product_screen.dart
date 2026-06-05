@@ -21,6 +21,7 @@ import '../services/first_launch_service.dart';
 import '../theme/uellow_l10n.dart';
 import '../theme/uellow_theme.dart';
 import '../widgets/announcement_strip.dart';
+import 'compare_screen.dart' show CompareService;
 import 'auth_screen.dart';
 import '../widgets/flash_banner.dart';
 import '../widgets/product_card.dart';
@@ -150,6 +151,26 @@ class _ProductScreenState extends State<ProductScreen> {
           subject: p.name.current(UellowApi.instance.lang),
         ),
         inWishlist: _inWishlist,
+        onCompare: () async {
+          final r = await CompareService.add(p.id);
+          if (!context.mounted) return;
+          final ar2 = UellowApi.instance.lang == 'ar';
+          final msg = switch (r) {
+            'added' => ar2 ? 'أُضيف للمقارنة ⚖️' : 'Added to compare ⚖️',
+            'exists' => ar2 ? 'موجود في المقارنة بالفعل' : 'Already in compare',
+            _ => ar2 ? 'حد المقارنة 4 منتجات — احذف أحدها أولاً'
+                     : 'Compare is full (4) — remove one first',
+          };
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(msg),
+            duration: const Duration(seconds: 2),
+            action: SnackBarAction(
+              label: ar2 ? 'قارن الآن' : 'Compare now',
+              textColor: UellowColors.yellow,
+              onPressed: () => Navigator.pushNamed(context, '/compare'),
+            ),
+          ));
+        },
         onWishlist: () async {
           try {
             if (_inWishlist) {
@@ -296,6 +317,7 @@ class _Gallery extends StatelessWidget {
     required this.page, required this.onChanged,
     required this.onShare, required this.onWishlist, required this.inWishlist,
     this.promo,
+    this.onCompare,
   });
   final Map<String, dynamic>? promo;
   final List<String> images;
@@ -304,6 +326,8 @@ class _Gallery extends StatelessWidget {
   final ValueChanged<int> onChanged;
   final VoidCallback onShare, onWishlist;   // onShare currently unused
   final bool inWishlist;
+  // v2.1.58 — compare entry (page-only per spec).
+  final VoidCallback? onCompare;
   // Unified gallery: videos first, then images. Each entry is
   // {type: 'video'|'image', video: UellowProductVideo?, url: String?}
   List<Map<String, dynamic>> get _items {
@@ -369,6 +393,12 @@ class _Gallery extends StatelessWidget {
             color: UellowColors.darkBrown,
             onTap: () => Navigator.maybePop(context))),
         Positioned(top: 14, right: 14, child: Row(children: [
+          // v2.1.58 — compare (product PAGE only, never on cards per spec)
+          if (onCompare != null) ...[
+            _btn(icon: Icons.balance, color: UellowColors.darkBrown,
+                onTap: onCompare!),
+            const SizedBox(width: 8),
+          ],
           _btn(icon: inWishlist ? Icons.favorite : Icons.favorite_border,
               color: inWishlist ? UellowColors.danger : UellowColors.darkBrown,
               onTap: onWishlist),

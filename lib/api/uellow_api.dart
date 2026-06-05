@@ -93,6 +93,7 @@ class UellowApi {
     categories    = _CategoriesApi(this);
     vendors       = _VendorsApi(this);
     announcements = _AnnouncementsApi(this);
+    affiliate     = _AffiliateApi(this);
     cart          = _CartApi(this);
     orders        = _OrdersApi(this);
     addresses     = _AddressesApi(this);
@@ -186,6 +187,7 @@ class UellowApi {
   late final _CategoriesApi categories;
   late final _VendorsApi vendors;
   late final _AnnouncementsApi announcements;
+  late final _AffiliateApi affiliate;
   late final _CartApi cart;
   late final _OrdersApi orders;
   late final _AddressesApi addresses;
@@ -673,6 +675,91 @@ class _ProductsApi {
       'seed': seed, 'page': page, 'per_page': perPage,
     });
     return UellowPage.fromJson(res, (item) => UellowProductCard.fromJson(item));
+  }
+}
+
+// v2.1.58 — Affiliate program (uellow_affiliate module).
+class _AffiliateApi {
+  _AffiliateApi(this._c);
+  final UellowApi _c;
+
+  /// Dashboard. status: none|pending|active|suspended (+ code, tier,
+  /// balances, next_tier, links, min_payout when an account exists).
+  Future<Map<String, dynamic>> me() async {
+    final res = await _c._get('/api/mobile/v2/affiliate/me', auth: true);
+    return (res['data'] as Map).cast<String, dynamic>();
+  }
+
+  Future<Map<String, dynamic>> apply({String? name, String? phone}) async {
+    final res = await _c._post('/api/mobile/v2/affiliate/apply', auth: true,
+        body: {
+          if (name != null) 'name': name,
+          if (phone != null) 'phone': phone,
+        });
+    return (res['data'] as Map).cast<String, dynamic>();
+  }
+
+  Future<List<Map<String, dynamic>>> products(
+      {String q = '', int page = 1}) async {
+    final res = await _c._get('/api/mobile/v2/affiliate/products',
+        auth: true, query: {'page': page, if (q.isNotEmpty) 'q': q});
+    return List<Map<String, dynamic>>.from(
+        (res['data']?['products'] as List?) ?? const []);
+  }
+
+  Future<List<Map<String, dynamic>>> orders() async {
+    final res =
+        await _c._get('/api/mobile/v2/affiliate/orders', auth: true);
+    return List<Map<String, dynamic>>.from(
+        (res['data']?['orders'] as List?) ?? const []);
+  }
+
+  Future<Map<String, dynamic>> submitOrder({
+    required String customerName,
+    required String customerPhone,
+    String area = '', String address = '', String note = '',
+    required List<Map<String, dynamic>> lines,
+  }) async {
+    final res = await _c._post('/api/mobile/v2/affiliate/orders',
+        auth: true,
+        body: {
+          'customer_name': customerName,
+          'customer_phone': customerPhone,
+          'customer_area': area,
+          'customer_address': address,
+          'customer_note': note,
+          'lines': lines,
+        });
+    return (res['data'] as Map).cast<String, dynamic>();
+  }
+
+  Future<List<Map<String, dynamic>>> commissions() async {
+    final res =
+        await _c._get('/api/mobile/v2/affiliate/commissions', auth: true);
+    return List<Map<String, dynamic>>.from(
+        (res['data']?['commissions'] as List?) ?? const []);
+  }
+
+  Future<List<Map<String, dynamic>>> payouts() async {
+    final res =
+        await _c._get('/api/mobile/v2/affiliate/payouts', auth: true);
+    return List<Map<String, dynamic>>.from(
+        (res['data']?['payouts'] as List?) ?? const []);
+  }
+
+  Future<Map<String, dynamic>> requestPayout(
+      {required double amount, required String method,
+       String details = ''}) async {
+    final res = await _c._post('/api/mobile/v2/affiliate/payouts',
+        auth: true,
+        body: {'amount': amount, 'method': method, 'details': details});
+    return (res['data'] as Map).cast<String, dynamic>();
+  }
+
+  Future<Map<String, dynamic>> leaderboard() async {
+    final res =
+        await _c._get('/api/mobile/v2/affiliate/leaderboard', auth: true);
+    return (res['data'] as Map).cast<String, dynamic>();
   }
 }
 

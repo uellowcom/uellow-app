@@ -1054,6 +1054,9 @@ class _MenuListState extends State<_MenuList> {
   Widget build(BuildContext context) {
     final ar = UellowApi.instance.lang == 'ar';
     final items = <(IconData, String, VoidCallback)>[
+      // v2.1.58 — Affiliate / partner center
+      (Icons.handshake_outlined, ar ? '🤝 شركاء يلو — اربح معنا' : '🤝 Uellow Partners — earn with us',
+        () => Navigator.pushNamed(context, '/affiliate')),
       (Icons.chat_bubble_outline, ar ? 'الدعم الفني' : 'Customer support',
         () {
           final hd = (_urls?['helpdesk'] as String?) ?? '';
