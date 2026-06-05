@@ -94,6 +94,7 @@ class _AccountScreenState extends State<AccountScreen> {
         const _RecentlyViewed(),
         _SectionCard(title: '', tightHorizontal: true,
             child: _ActionTiles(isGuest: isGuest)),
+        if (!isGuest) const _BecomeReviewerCard(),
         const _MenuList(),
         const _SocialMediaSection(),
         if (!isGuest) const _SignOutBtn(),
@@ -928,9 +929,11 @@ class _ActionTiles extends StatelessWidget {
   const _ActionTiles({this.isGuest = false});
   final bool isGuest;
   static const _en = ['Wishlist','Alerts','Coupons','Loyalty',
-                      'Wallet','Smart Fit','Tracking','Settings'];
+                      'Wallet','Smart Fit','Tracking','My Reviews',
+                      'Settings'];
   static const _ar = ['المفضلة','التنبيهات','الكوبونات','الولاء',
-                      'المحفظة','مقاسي','التتبع','الإعدادات'];
+                      'المحفظة','مقاسي','التتبع','آراء المختصين',
+                      'الإعدادات'];
   // Public tiles (Smart Fit, Settings) work for guests too — the rest
   // need a session, so guests get bounced to /auth.
   static const _public = {Routes.tryOn, Routes.settings};
@@ -942,6 +945,8 @@ class _ActionTiles extends StatelessWidget {
     (Icons.account_balance_wallet_outlined, Routes.wallet),
     (Icons.straighten, Routes.tryOn),
     (Icons.local_shipping_outlined, Routes.order),
+    // v2.1.62 — specialist-review history (product + the review itself).
+    (Icons.rate_review_outlined, Routes.myReviews),
     (Icons.settings_outlined, Routes.settings),
   ];
   @override
@@ -1243,6 +1248,196 @@ class _RecentlyViewedState extends State<_RecentlyViewed> {
           ]),
         );
       },
+    );
+  }
+}
+
+
+// ─── Become a reviewer (v2.1.62) ────────────────────────────────────────────
+// «انضم كمراجع معتمد» — apply to the reviewers program right from the
+// account page. Status-aware: no profile → apply sheet; pending → quiet
+// "under review" chip; approved → green confirmation.
+class _BecomeReviewerCard extends StatefulWidget {
+  const _BecomeReviewerCard();
+  @override
+  State<_BecomeReviewerCard> createState() => _BecomeReviewerCardState();
+}
+
+class _BecomeReviewerCardState extends State<_BecomeReviewerCard> {
+  String? _status; // null=loading, 'none', 'pending', 'approved', ...
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final res = await UellowApi.instance
+          .getRaw('/api/mobile/v2/reviewer/me', auth: true);
+      if (mounted) {
+        setState(() =>
+            _status = (res['data']?['status'] ?? 'none').toString());
+      }
+    } catch (_) {
+      if (mounted) setState(() => _status = 'none');
+    }
+  }
+
+  void _applySheet() {
+    final ar = UellowApi.instance.lang == 'ar';
+    final nameC = TextEditingController();
+    final bioC = TextEditingController();
+    final specC = TextEditingController();
+    bool sending = false;
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(borderRadius:
+          BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => StatefulBuilder(builder: (ctx, setS) => Padding(
+        padding: EdgeInsets.fromLTRB(
+            18, 14, 18, 18 + MediaQuery.of(ctx).viewInsets.bottom),
+        child: Directionality(
+          textDirection: ar ? TextDirection.rtl : TextDirection.ltr,
+          child: Column(mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Center(child: Container(width: 40, height: 4,
+                decoration: BoxDecoration(color: const Color(0xFFE3E3E3),
+                    borderRadius: BorderRadius.circular(2)))),
+            const SizedBox(height: 12),
+            Text(ar ? '🎓 التقديم كمراجع معتمد'
+                    : '🎓 Apply as a certified reviewer',
+                style: const TextStyle(fontSize: 16,
+                    fontWeight: FontWeight.w900)),
+            const SizedBox(height: 4),
+            Text(ar
+                    ? 'راجع المنتجات، اكسب نقاطاً تتحول لرصيد، ونسبة أرباح من مبيعات مراجعاتك.'
+                    : 'Review products, earn redeemable points and a profit share on sales from your reviews.',
+                style: const TextStyle(fontSize: 11.5,
+                    color: UellowColors.muted, height: 1.5)),
+            const SizedBox(height: 14),
+            TextField(controller: nameC, decoration: InputDecoration(
+                labelText: ar ? 'الاسم المعروض' : 'Display name',
+                border: const OutlineInputBorder())),
+            const SizedBox(height: 10),
+            TextField(controller: specC, decoration: InputDecoration(
+                labelText: ar ? 'تخصصاتك (إلكترونيات، أزياء…)'
+                              : 'Specialties (electronics, fashion…)',
+                border: const OutlineInputBorder())),
+            const SizedBox(height: 10),
+            TextField(controller: bioC, maxLines: 3,
+                decoration: InputDecoration(
+                    labelText: ar ? 'نبذة عنك وخبرتك'
+                                  : 'About you & your experience',
+                    border: const OutlineInputBorder())),
+            const SizedBox(height: 14),
+            SizedBox(width: double.infinity, child: ElevatedButton(
+              onPressed: sending ? null : () async {
+                setS(() => sending = true);
+                try {
+                  await UellowApi.instance.postRaw(
+                      '/api/mobile/v2/reviewer/apply',
+                      auth: true,
+                      body: {
+                        'name': nameC.text.trim(),
+                        'bio': bioC.text.trim(),
+                        'specialties': specC.text.trim(),
+                      });
+                  if (ctx.mounted) Navigator.pop(ctx);
+                  _load();
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                        content: Text(ar
+                            ? '✅ تم إرسال طلبك — سنراجعه قريباً'
+                            : '✅ Application sent — we will review it soon')));
+                  }
+                } catch (_) {
+                  setS(() => sending = false);
+                  if (ctx.mounted) {
+                    ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(
+                        content: Text(ar ? 'تعذّر الإرسال — حاول مجدداً'
+                                         : 'Could not send — try again')));
+                  }
+                }
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: UellowColors.yellow,
+                foregroundColor: UellowColors.darkBrown,
+                padding: const EdgeInsets.symmetric(vertical: 13),
+              ),
+              child: Text(
+                  sending
+                      ? (ar ? 'جارٍ الإرسال…' : 'Sending…')
+                      : (ar ? 'إرسال الطلب' : 'Submit application'),
+                  style: const TextStyle(fontWeight: FontWeight.w900)),
+            )),
+          ]),
+        ),
+      )),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final st = _status;
+    if (st == null) return const SizedBox.shrink();
+    final ar = UellowApi.instance.lang == 'ar';
+    final approved = st == 'approved' || st == 'active';
+    final pending = st == 'pending';
+    return Container(
+      margin: const EdgeInsets.fromLTRB(14, 6, 14, 6),
+      padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
+      decoration: BoxDecoration(
+        gradient: approved
+            ? const LinearGradient(
+                colors: [Color(0xFF146C36), Color(0xFF27AE60)])
+            : const LinearGradient(
+                colors: [Color(0xFF2B1D66), Color(0xFF5B3FA8)]),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Row(children: [
+        const Text('🎓', style: TextStyle(fontSize: 26)),
+        const SizedBox(width: 11),
+        Expanded(child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(
+              approved
+                  ? (ar ? 'أنت مراجع معتمد ✓' : 'Certified reviewer ✓')
+                  : pending
+                      ? (ar ? 'طلبك قيد المراجعة' : 'Application under review')
+                      : (ar ? 'انضم كمراجع معتمد' : 'Become a reviewer'),
+              style: const TextStyle(color: Colors.white, fontSize: 13.5,
+                  fontWeight: FontWeight.w900)),
+          const SizedBox(height: 2),
+          Text(
+              approved
+                  ? (ar ? 'حمّل تطبيق المراجعين وابدأ الكسب'
+                        : 'Get the reviewers app and start earning')
+                  : pending
+                      ? (ar ? 'سنخطرك فور الموافقة على طلبك'
+                            : 'We will notify you once approved')
+                      : (ar ? 'اكسب نقاطاً ورصيداً ونسبة أرباح من مراجعاتك'
+                            : 'Earn points, cash and profit share from reviews'),
+              style: TextStyle(color: Colors.white.withValues(alpha: .85),
+                  fontSize: 10.5, height: 1.35)),
+        ])),
+        if (!approved && !pending)
+          GestureDetector(
+            onTap: _applySheet,
+            child: Container(
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 12, vertical: 7),
+              decoration: BoxDecoration(color: Colors.white,
+                  borderRadius: BorderRadius.circular(20)),
+              child: Text(ar ? 'قدّم الآن' : 'Apply now',
+                  style: const TextStyle(color: Color(0xFF2B1D66),
+                      fontSize: 11, fontWeight: FontWeight.w900)),
+            ),
+          ),
+      ]),
     );
   }
 }

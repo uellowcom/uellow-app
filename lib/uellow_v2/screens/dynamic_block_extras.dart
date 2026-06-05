@@ -274,12 +274,12 @@ class DynSectionHeader extends StatelessWidget {
           },
           child: Padding(
             padding:
-                const EdgeInsets.symmetric(horizontal: 11, vertical: 5),
+                const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
             child: Text(ar ? 'عرض المزيد ←' : 'View more →',
                 style: const TextStyle(
                     fontFamily: 'Tajawal',
                     color: UellowColors.darkBrown,
-                    fontSize: 10.5,
+                    fontSize: 9,
                     fontWeight: FontWeight.w900)),
           ),
         ),

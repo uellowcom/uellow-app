@@ -862,10 +862,12 @@ class _ProductsBlock extends StatelessWidget {
     // v2.1.56 — 300→278: the rail was taller than the rich card's
     // natural height (160 image + ~115 content), leaving an empty white
     // band at the bottom of every card (مقترحاتنا لك + carousels).
-    return SizedBox(height: 278,
+    // v2.1.62 — small breathing space UNDER the cards so they don't sit
+    // flush against the block edge (free-delivery block on home etc.).
+    return SizedBox(height: 286,
       child: ListView.separated(
         physics: const ClampingScrollPhysics(),
-        padding: const EdgeInsets.symmetric(horizontal: 14),
+        padding: const EdgeInsets.fromLTRB(14, 0, 14, 8),
         scrollDirection: Axis.horizontal,
         itemCount: items.length,
         separatorBuilder: (_, __) => const SizedBox(width: 8),

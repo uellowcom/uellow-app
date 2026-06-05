@@ -73,9 +73,27 @@ class UellowSpace {
   static const xxl = 24.0;
 }
 
+// v2.1.62 — Material 3's default Android push animation is a ZOOM-IN
+// (ZoomPageTransitionsBuilder). User wants pages/tabs to open plainly —
+// no effect at all, on every platform.
+class _NoTransitionsBuilder extends PageTransitionsBuilder {
+  const _NoTransitionsBuilder();
+  @override
+  Widget buildTransitions<T>(route, context, animation, secondary, child) =>
+      child;
+}
+
 ThemeData uellowThemeData() {
   return ThemeData(
     useMaterial3: true,
+    pageTransitionsTheme: const PageTransitionsTheme(builders: {
+      TargetPlatform.android: _NoTransitionsBuilder(),
+      TargetPlatform.iOS: _NoTransitionsBuilder(),
+      TargetPlatform.fuchsia: _NoTransitionsBuilder(),
+      TargetPlatform.linux: _NoTransitionsBuilder(),
+      TargetPlatform.macOS: _NoTransitionsBuilder(),
+      TargetPlatform.windows: _NoTransitionsBuilder(),
+    }),
     colorScheme: ColorScheme.fromSeed(
       seedColor: UellowColors.yellow,
       primary: UellowColors.darkBrown,

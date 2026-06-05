@@ -135,10 +135,15 @@ class _ProductScreenState extends State<ProductScreen> {
         future: _future,
         builder: (_, snap) {
           if (!snap.hasData) return const SizedBox.shrink();
-          return _CtaBar(
-            product: snap.data!, qty: _qty,
-            onQty: (q) => setState(() => _qty = q),
-          );
+          // v2.1.62 — the specialist banner follows the customer here too,
+          // floating above the buy bar.
+          return Column(mainAxisSize: MainAxisSize.min, children: [
+            const ReviewReplyBanner(),
+            _CtaBar(
+              product: snap.data!, qty: _qty,
+              onQty: (q) => setState(() => _qty = q),
+            ),
+          ]);
         },
       ),
     );

@@ -20,6 +20,7 @@ import 'package:http/http.dart' as http;
 
 import '../../api/uellow_api.dart';
 import '../router/uellow_router.dart';
+import 'review_requests_strip.dart';
 import '../screens/dynamic_page_screen.dart';
 import '../theme/uellow_l10n.dart';
 import '../theme/uellow_theme.dart';
@@ -252,13 +253,18 @@ class _UellowBottomNavState extends State<UellowBottomNav> {
 
   @override
   Widget build(BuildContext context) {
-    return ValueListenableBuilder<List<DynNavItem>>(
-      valueListenable: NavBarCache.instance.items,
-      builder: (_, items, __) {
-        if (items.isNotEmpty) return _buildDynamic(context, items);
-        return _buildStatic(context);
-      },
-    );
+    // v2.1.62 — the specialist-review banner floats ABOVE the nav bar on
+    // every page that carries it, until the customer closes it.
+    return Column(mainAxisSize: MainAxisSize.min, children: [
+      const ReviewReplyBanner(),
+      ValueListenableBuilder<List<DynNavItem>>(
+        valueListenable: NavBarCache.instance.items,
+        builder: (_, items, __) {
+          if (items.isNotEmpty) return _buildDynamic(context, items);
+          return _buildStatic(context);
+        },
+      ),
+    ]);
   }
 
   Widget _buildStatic(BuildContext context) {

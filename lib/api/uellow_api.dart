@@ -144,6 +144,11 @@ class UellowApi {
           {Map<String, dynamic>? query, bool auth = false}) =>
       _get(path, query: query, auth: auth);
 
+  /// Raw POST escape hatch (v2.1.62) — same contract as [getRaw].
+  Future<Map<String, dynamic>> postRaw(String path,
+          {Object? body, bool auth = false}) =>
+      _post(path, body: body, auth: auth);
+
   /// Switch which Odoo website the app talks to. Used when the user
   /// changes country in the picker — every subsequent request goes
   /// against the new domain. Persisted via tokenStore so the choice

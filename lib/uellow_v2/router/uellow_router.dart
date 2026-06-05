@@ -32,6 +32,7 @@ import '../screens/wallet_screen.dart';
 import '../screens/coupons_screen.dart';
 import '../screens/bestsellers_screen.dart';
 import '../screens/brands_screen.dart';
+import '../screens/my_reviews_screen.dart';
 import '../screens/vendor_screen.dart';
 import '../screens/flash_screen.dart';
 import '../screens/tryon_screen.dart';
@@ -57,6 +58,7 @@ class Routes {
   static const collection    = '/collection';  // single-category browse
   static const brands        = '/brands';
   static const bestsellers   = '/bestsellers';
+  static const myReviews     = '/my-reviews';
   static const flash         = '/flash';
   static const product       = '/product';        // arg: productId (int)
   static const vendor        = '/vendor';         // arg: vendorId (int)
@@ -111,6 +113,7 @@ class UellowRouter {
     Routes.coupons:       (ctx) => const CouponsScreen(),
     Routes.brands:        (ctx) => const BrandsScreen(),
     Routes.bestsellers:   (ctx) => const BestsellersScreen(),
+    Routes.myReviews:     (ctx) => const MyReviewsScreen(),
     Routes.flash:         (ctx) => const FlashScreen(),
     Routes.beena:         (ctx) => const BeenaScreen(),
     Routes.settings:      (ctx) => const SettingsScreen(),
