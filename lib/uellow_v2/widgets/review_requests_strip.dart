@@ -8,6 +8,8 @@
 // "waiting" banner re-appears on reply: dismissal is keyed per status).
 // Tapping opens the detailed reply sheet.
 // =============================================================================
+import 'dart:async';
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -32,7 +34,7 @@ class ReviewBannerCache {
 
   Future<void> load({bool force = false}) async {
     if (!force && _lastFetch != null &&
-        DateTime.now().difference(_lastFetch!).inSeconds < 45) {
+        DateTime.now().difference(_lastFetch!).inSeconds < 25) {
       return;
     }
     _lastFetch = DateTime.now();
@@ -93,11 +95,36 @@ class ReviewReplyBanner extends StatefulWidget {
   State<ReviewReplyBanner> createState() => _ReviewReplyBannerState();
 }
 
-class _ReviewReplyBannerState extends State<ReviewReplyBanner> {
+class _ReviewReplyBannerState extends State<ReviewReplyBanner>
+    with WidgetsBindingObserver {
+  Timer? _poll;
+
   @override
   void initState() {
     super.initState();
-    ReviewBannerCache.instance.load();
+    WidgetsBinding.instance.addObserver(this);
+    // v2.1.71 — LIVE updates: fetch on mount, poll every 30s while the
+    // screen is visible, and refresh the instant the app returns to the
+    // foreground. Previously the banner only loaded once → a reviewer's
+    // reply never appeared until the app was restarted.
+    ReviewBannerCache.instance.load(force: true);
+    _poll = Timer.periodic(const Duration(seconds: 30), (_) {
+      ReviewBannerCache.instance.load();   // respects the 25s throttle
+    });
+  }
+
+  @override
+  void dispose() {
+    _poll?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      ReviewBannerCache.instance.load(force: true);
+    }
   }
 
   void _open(Map<String, dynamic> it) {

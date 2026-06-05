@@ -161,8 +161,6 @@ class _ReelsScreenState extends State<ReelsScreen> {
     final ar = _ar;
     return Scaffold(
       backgroundColor: Colors.black,
-      // v2.1.69 — body extends behind the floating banner area
-      extendBody: true,
       bottomNavigationBar: const UellowBottomNav(active: UNavTab.reels),
       body: SafeArea(child: Stack(children: [
         if (_items.isEmpty && _loading)

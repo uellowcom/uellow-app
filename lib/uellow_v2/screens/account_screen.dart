@@ -51,8 +51,6 @@ class _AccountScreenState extends State<AccountScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: UellowColors.bg,
-      // v2.1.69 — body extends behind the floating banner area
-      extendBody: true,
       bottomNavigationBar: const UellowBottomNav(active: UNavTab.account),
       body: SafeArea(bottom: false, child: FutureBuilder<Map<String, dynamic>?>(
         future: _future,

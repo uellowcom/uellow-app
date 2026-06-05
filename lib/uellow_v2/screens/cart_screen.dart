@@ -666,19 +666,20 @@ class _LineCard extends StatelessWidget {
           Text(line.name.current(lang), maxLines: 2, overflow: TextOverflow.ellipsis,
               style: const TextStyle(fontSize: 13, height: 1.4, color: UellowColors.ink)),
           const SizedBox(height: 8),
-          // Per-unit price — stays constant when qty changes
-          Row(children: [
-            // v2.1.69 — smaller in select mode: the checkbox narrows the
-            // row and the 15px price collided with the image.
-            Flexible(child: Text(line.unitPrice.format(),
-                maxLines: 1, overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                    fontSize: selectMode ? 12 : 15,
-                    fontWeight: FontWeight.w900, color: UellowColors.ink))),
-            const SizedBox(width: 6),
-            // v2.1.34 — "pc" was English-only; bilingual now.
-            Text(lang == 'ar' ? '/ قطعة' : '/ pc', style: const TextStyle(
-                fontSize: 10, color: UellowColors.muted)),
+          // Per-unit price — stays constant when qty changes.
+          // v2.1.71 — price gets its NATURAL width (no Flexible/ellipsis
+          // that was hiding it); the "/قطعة" unit label is tiny and
+          // muted so the price reads clearly even in select mode.
+          Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
+            Text(line.unitPrice.format(),
+                maxLines: 1, overflow: TextOverflow.visible,
+                softWrap: false,
+                style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w900, color: UellowColors.ink)),
+            const SizedBox(width: 4),
+            Text(lang == 'ar' ? '/قطعة' : '/pc', style: const TextStyle(
+                fontSize: 9, color: UellowColors.muted)),
             const Spacer(),
             _QtyBox(qty: line.qty.toInt(), onChange: (n) => onUpdate(line.id, n)),
           ]),

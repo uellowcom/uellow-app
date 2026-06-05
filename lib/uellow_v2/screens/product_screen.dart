@@ -266,6 +266,14 @@ class _ProductScreenState extends State<ProductScreen> {
       SliverToBoxAdapter(child: KeyedSubtree(
           key: _kOverview, child: _Title(p: p))),
       SliverToBoxAdapter(child: _PriceRow(p: p)),
+      // v2.1.71 — order per latest spec: Brand → Seller → Variation.
+      // Brand block now sits ABOVE the variation/attributes block.
+      if (p.brand != null) SliverToBoxAdapter(child: _BrandBlock(brand: p.brand!)),
+      // SOLD-BY vendor card directly under the brand block.
+      if (p.vendor != null)
+        SliverToBoxAdapter(child: _VendorCard(vendor: p.vendor!))
+      else
+        const SliverToBoxAdapter(child: _FulfilledByUellowCard()),
       SliverToBoxAdapter(child: _Attributes(
         productId: p.id,
         attributes: p.attributes,
@@ -281,14 +289,6 @@ class _ProductScreenState extends State<ProductScreen> {
           freeShipping: p.badges.contains('free_shipping'),
           onTap: () => _showDeliverySheet(context,
               freeShipping: p.badges.contains('free_shipping')))),
-      // Brand block sits below shipping info per latest spec
-      if (p.brand != null) SliverToBoxAdapter(child: _BrandBlock(brand: p.brand!)),
-      // v2.1.69 — the SOLD-BY vendor card moved BELOW the brand block
-      // (was right under the price). "Fulfilled by Uellow" when no vendor.
-      if (p.vendor != null)
-        SliverToBoxAdapter(child: _VendorCard(vendor: p.vendor!))
-      else
-        const SliverToBoxAdapter(child: _FulfilledByUellowCard()),
       // v2.1.24 — Best Seller rank strip (tappable → that category).
       if (p.ranks.isNotEmpty)
         SliverToBoxAdapter(child: _RankStrip(ranks: p.ranks)),
@@ -3702,20 +3702,23 @@ class _RelatedInfiniteState extends State<_RelatedInfinite> {
             child: Center(child: CircularProgressIndicator(
                 strokeWidth: 2, color: UellowColors.darkBrown)),
           ),
+          // v2.1.71 — small centered pill (was a full-width chunky button).
           if (_hasMore && !_loading) Padding(
-            padding: const EdgeInsets.fromLTRB(40, 16, 40, 8),
-            child: SizedBox(width: double.infinity, child: ElevatedButton.icon(
+            padding: const EdgeInsets.only(top: 14, bottom: 6),
+            child: Center(child: OutlinedButton.icon(
               onPressed: _loadMore,
-              icon: const Icon(Icons.expand_more, size: 18,
+              icon: const Icon(Icons.expand_more, size: 15,
                   color: UellowColors.darkBrown),
               label: Text(ar ? 'تحميل المزيد' : 'Load more',
-                  style: const TextStyle(fontWeight: FontWeight.w900,
-                      color: UellowColors.darkBrown)),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: UellowColors.yellowSoft,
-                foregroundColor: UellowColors.darkBrown, elevation: 0,
-                side: const BorderSide(color: UellowColors.yellow, width: 1.5),
-                padding: const EdgeInsets.symmetric(vertical: 14),
+                  style: const TextStyle(fontWeight: FontWeight.w800,
+                      fontSize: 12, color: UellowColors.darkBrown)),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: UellowColors.darkBrown,
+                side: const BorderSide(color: UellowColors.yellow, width: 1.3),
+                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 7),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20)),
+                visualDensity: VisualDensity.compact,
               ),
             )),
           ),
