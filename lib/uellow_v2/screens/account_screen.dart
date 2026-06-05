@@ -925,9 +925,34 @@ class _OrdersGrid extends StatelessWidget {
   }
 }
 
-class _ActionTiles extends StatelessWidget {
+class _ActionTiles extends StatefulWidget {
   const _ActionTiles({this.isGuest = false});
   final bool isGuest;
+  @override
+  State<_ActionTiles> createState() => _ActionTilesState();
+}
+
+class _ActionTilesState extends State<_ActionTiles> {
+  bool get isGuest => widget.isGuest;
+  // v2.1.63 — unread badge on the Alerts tile (personal event
+  // notifications: orders, wallet, loyalty, review replies…).
+  int _unread = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    if (!isGuest) _loadUnread();
+  }
+
+  Future<void> _loadUnread() async {
+    try {
+      final res = await UellowApi.instance.getRaw(
+          '/api/mobile/v2/notifications/unread-count', auth: true);
+      final n = (res['data']?['unread'] as num?)?.toInt() ?? 0;
+      if (mounted && n != _unread) setState(() => _unread = n);
+    } catch (_) {}
+  }
+
   static const _en = ['Wishlist','Alerts','Coupons','Loyalty',
                       'Wallet','Smart Fit','Tracking','My Reviews',
                       'Settings'];
@@ -977,19 +1002,45 @@ class _ActionTiles extends StatelessWidget {
               _openTracking(context);
               return;
             }
+            if (route == Routes.notifications) {
+              Navigator.pushNamed(context, route)
+                  .then((_) => _loadUnread());
+              return;
+            }
             Navigator.pushNamed(context, route);
           },
           borderRadius: BorderRadius.circular(12),
           child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-            Container(
-              width: 54, height: 54,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                border: Border.all(color: UellowColors.border, width: 1),
-                borderRadius: BorderRadius.circular(14),
+            Stack(clipBehavior: Clip.none, children: [
+              Container(
+                width: 54, height: 54,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  border: Border.all(color: UellowColors.border, width: 1),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Icon(icon, size: 26, color: UellowColors.darkBrown),
               ),
-              child: Icon(icon, size: 26, color: UellowColors.darkBrown),
-            ),
+              if (route == Routes.notifications && _unread > 0)
+                PositionedDirectional(
+                  top: -5, end: -5,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 5, vertical: 2),
+                    constraints: const BoxConstraints(minWidth: 18),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFE63946),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: Colors.white, width: 1.5),
+                    ),
+                    alignment: Alignment.center,
+                    child: Text(_unread > 99 ? '99+' : '$_unread',
+                        style: const TextStyle(color: Colors.white,
+                            fontSize: 9.5, fontWeight: FontWeight.w900,
+                            height: 1.0)),
+                  ),
+                ),
+            ]),
             const SizedBox(height: 6),
             Text(label, textAlign: TextAlign.center,
                 maxLines: 1, overflow: TextOverflow.ellipsis,

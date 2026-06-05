@@ -40,6 +40,14 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     return const [];
   }
 
+  Future<void> _markAllRead() async {
+    try {
+      await UellowApi.instance.postRaw(
+          '/api/mobile/v2/notifications/read-all', auth: true);
+      if (mounted) setState(() => _future = _fetch());
+    } catch (_) {}
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -49,10 +57,13 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         title: Text(UellowApi.instance.lang == 'ar' ? 'الإشعارات' : 'Notifications',
             style: UT.h1),
         actions: [Padding(padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Center(child: Text(
-                UellowApi.instance.lang == 'ar' ? 'تعليم الكل كمقروء' : 'Mark all read',
-                style: const TextStyle(
-                color: UellowColors.text, fontWeight: FontWeight.w700, fontSize: 12))))],
+            child: Center(child: GestureDetector(
+              // v2.1.63 — actually marks everything read (was decorative).
+              onTap: _markAllRead,
+              child: Text(
+                  UellowApi.instance.lang == 'ar' ? 'تعليم الكل كمقروء' : 'Mark all read',
+                  style: const TextStyle(
+                  color: UellowColors.text, fontWeight: FontWeight.w700, fontSize: 12)))))],
       ),
       body: SafeArea(bottom: false, child: FutureBuilder<List<Map<String, dynamic>>>(
         future: _future,
@@ -61,6 +72,12 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
             return const Center(child: CircularProgressIndicator(color: UellowColors.darkBrown));
           }
           final items = snap.data ?? [];
+          // v2.1.63 — seeing the list clears the unread badge.
+          if (items.any((n) => n['is_read'] != true)) {
+            Future.microtask(() => UellowApi.instance.postRaw(
+                '/api/mobile/v2/notifications/read-all', auth: true)
+                .catchError((_) => <String, dynamic>{}));
+          }
           if (items.isEmpty) return _empty();
           return ListView(children: [
             for (final n in items) _row(n),
