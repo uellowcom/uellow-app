@@ -801,8 +801,12 @@ class _DeliveryBar extends StatelessWidget {
         // v2.1.56 — the light-green "remaining" track is now unmistakable:
         // taller bar, stronger light-green + hairline border, and the fill
         // starts from the reading direction (right in Arabic).
+        // v2.1.67 — the bar was ZERO-width: the Column doesn't stretch its
+        // children and FractionallySizedBox has no intrinsic width, so the
+        // light-green track never rendered. width:infinity fixes it.
         Container(
           height: 10,
+          width: double.infinity,
           decoration: BoxDecoration(
             color: const Color(0xFFBFE8CC),
             borderRadius: BorderRadius.circular(999),
