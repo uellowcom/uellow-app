@@ -158,6 +158,22 @@ class _CartScreenState extends State<CartScreen> {
     }
   }
 
+  /// Selective checkout (v2.1.65) — pay for ONLY the checked lines; the
+  /// rest stays in the cart (the backend splits the order at confirm).
+  Future<void> _checkoutSelected() async {
+    if (_selected.isEmpty) return;
+    await Navigator.of(context).pushNamed('/checkout',
+        arguments: {'line_ids': _selected.toList()});
+    if (!mounted) return;
+    // Back from checkout: the ordered lines are gone from the cart —
+    // refetch and drop the selection.
+    setState(() {
+      _future = UellowApi.instance.cart.get();
+      _selected.clear();
+      _selectMode = false;
+    });
+  }
+
   void _snack(String msg) => ScaffoldMessenger.of(context)
       .showSnackBar(SnackBar(content: Text(msg)));
 
@@ -267,6 +283,7 @@ class _CartScreenState extends State<CartScreen> {
                   symbol: ref.symbol, digits: ref.digits).format(),
               onDelete: _selected.isEmpty ? null : _bulkDelete,
               onWishlist: _selected.isEmpty ? null : _bulkWishlist,
+              onCheckout: _selected.isEmpty ? null : _checkoutSelected,
             );
           }
           return _CheckoutCta(total: c.totals.total);
@@ -792,11 +809,13 @@ class _BulkActionsBar extends StatelessWidget {
     this.selectedTotal,
     this.onDelete,
     this.onWishlist,
+    this.onCheckout,
   });
   final int count;
   final String? selectedTotal;
   final VoidCallback? onDelete;
   final VoidCallback? onWishlist;
+  final VoidCallback? onCheckout;
 
   @override
   Widget build(BuildContext context) {
@@ -824,6 +843,52 @@ class _BulkActionsBar extends StatelessWidget {
             Text(selectedTotal!, style: const TextStyle(fontSize: 16,
                 fontWeight: FontWeight.w900, color: UellowColors.darkBrown)),
           ]),
+        ),
+        // v2.1.65 — selective checkout: pay for the checked items only;
+        // everything else stays safely in the cart.
+        if (onCheckout != null || enabled) Padding(
+          padding: const EdgeInsets.only(bottom: 10),
+          child: SizedBox(
+            width: double.infinity,
+            child: Container(
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  begin: Alignment.topLeft, end: Alignment.bottomRight,
+                  colors: [UellowColors.yellowLight, UellowColors.yellow,
+                           Color(0xFFE5A900)],
+                ),
+                borderRadius: BorderRadius.circular(14),
+                boxShadow: enabled ? [BoxShadow(
+                  color: UellowColors.yellow.withValues(alpha: 0.45),
+                  blurRadius: 12, offset: const Offset(0, 4),
+                )] : null,
+              ),
+              child: Material(
+                color: Colors.transparent,
+                borderRadius: BorderRadius.circular(14),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(14),
+                  onTap: enabled ? onCheckout : null,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    child: Row(mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                      const Icon(Icons.shopping_cart_checkout,
+                          size: 17, color: UellowColors.darkBrown),
+                      const SizedBox(width: 8),
+                      Text(
+                        ar ? 'الدفع للمحدّد فقط ($count)'
+                           : 'Checkout selected only ($count)',
+                        style: const TextStyle(
+                            color: UellowColors.darkBrown, fontSize: 13.5,
+                            fontWeight: FontWeight.w900),
+                      ),
+                    ]),
+                  ),
+                ),
+              ),
+            ),
+          ),
         ),
         Row(children: [
           Expanded(

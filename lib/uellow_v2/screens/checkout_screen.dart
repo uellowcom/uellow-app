@@ -29,7 +29,12 @@ import 'order_confirmation_screen.dart';
 import 'webview_screen.dart';
 
 class CheckoutScreen extends StatefulWidget {
-  const CheckoutScreen({super.key});
+  const CheckoutScreen({super.key, this.lineIds});
+
+  /// Selective checkout (v2.1.65): when set, the customer pays for ONLY
+  /// these cart lines — the summary, shipping rates and the placed order
+  /// all reflect just this subset; the rest stays in the cart.
+  final List<int>? lineIds;
   @override
   State<CheckoutScreen> createState() => _CheckoutScreenState();
 }
@@ -101,10 +106,17 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       }
     }
 
+    // Selective checkout: scope summary + shipping rates to the chosen lines.
+    final selIds = (widget.lineIds ?? const <int>[]);
+    final selCsv = selIds.isEmpty ? '' : selIds.join(',');
     final guestQ = _guestMode ? '?guest=1' : '';
+    final sumSel = selCsv.isEmpty
+        ? ''
+        : '${guestQ.isEmpty ? '?' : '&'}line_ids=$selCsv';
+    final shipSel = selCsv.isEmpty ? '' : '?line_ids=$selCsv';
     final results = await Future.wait([
-      safeGet('$base/api/mobile/v2/orders/checkout/summary$guestQ', needAuth: true),
-      safeGet('$base/api/mobile/v2/orders/shipping-methods', needAuth: false),
+      safeGet('$base/api/mobile/v2/orders/checkout/summary$guestQ$sumSel', needAuth: true),
+      safeGet('$base/api/mobile/v2/orders/shipping-methods$shipSel', needAuth: false),
       safeGet(pmUrl, needAuth: false),
       safeGet('$base/api/mobile/v2/orders/checkout/geoip', needAuth: true),
     ]);
@@ -300,6 +312,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         carrierId: _selectedCarrierId ?? 0,
         paymentMethod: _paymentCodeOf(d, _selectedPaymentId),
         guest: _guestMode,
+        lineIds: widget.lineIds,
       );
       if (!mounted) return;
       // v2.0.85 — honor paymentRequired + paymentUrl. For non-COD

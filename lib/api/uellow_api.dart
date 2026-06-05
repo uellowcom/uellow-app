@@ -1031,6 +1031,7 @@ class _OrdersApi {
     int? carrierId,
     String? paymentMethod,
     bool guest = false,
+    List<int>? lineIds, // selective checkout: pay for ONLY these lines
   }) async {
     final res = await _c._post(EP.checkoutConfirm, auth: !guest, body: {
       if (deliveryAddressId != null) 'delivery_address_id': deliveryAddressId,
@@ -1038,6 +1039,8 @@ class _OrdersApi {
       if (carrierId         != null) 'carrier_id': carrierId,
       if (paymentMethod     != null) 'payment_method': paymentMethod,
       if (guest) 'guest': 1,
+      if (lineIds != null && lineIds.isNotEmpty)
+        'line_ids': lineIds.join(','),
     });
     return UellowCheckoutConfirm.fromJson(res['data'] as Map<String, dynamic>);
   }
@@ -1266,6 +1269,8 @@ class _NotificationsApi {
     await _c._post(EP.notificationsRegister, body: {
       'device_id': deviceId,
       'push_token': pushToken,
+      // Live app language → server localizes push notifications to it.
+      'lang': _c.lang,
       if (platform    != null) 'platform': platform,
       if (deviceName  != null) 'device_name': deviceName,
       if (osVersion   != null) 'os_version': osVersion,

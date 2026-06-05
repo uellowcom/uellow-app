@@ -4,6 +4,7 @@
 // (promotion / order_update / general / master switch) wired to
 // /api/mobile/v2/notifications/preferences.
 // =============================================================================
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -12,6 +13,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../api/uellow_api.dart';
 import '../../api/uellow_endpoints.dart';
+import '../services/fcm_service.dart';
 import '../theme/uellow_theme.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -193,6 +195,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     // to — the entire app re-keys and rebuilds with the new Directionality
     // + Locale immediately. No need to pop everything or warm-restart.
     UellowApi.instance.setLang(_lang);
+    // Re-register the FCM token so the server's push_lang follows the
+    // new language instantly (push notifications arrive in this language).
+    unawaited(FcmService.instance.register());
     if (!mounted) return;
     setState(() => _dirty = false);
     // If a baseUrl swap happened, push back to home so all FutureBuilders

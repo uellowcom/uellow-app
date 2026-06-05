@@ -100,7 +100,20 @@ class UellowRouter {
     Routes.auth:          (ctx) => const AuthScreen(),
     Routes.home:          (ctx) => const HomeScreen(),
     Routes.cart:          (ctx) => const CartScreen(),
-    Routes.checkout:      (ctx) => const CheckoutScreen(),
+    Routes.checkout:      (ctx) {
+      // Selective checkout: cart passes {'line_ids': [..]} to pay for
+      // only the selected lines.
+      final args = ModalRoute.of(ctx)?.settings.arguments;
+      List<int>? lineIds;
+      if (args is Map && args['line_ids'] is List) {
+        lineIds = (args['line_ids'] as List)
+            .map((e) => e is int ? e : int.tryParse('$e') ?? 0)
+            .where((e) => e > 0)
+            .toList();
+        if (lineIds.isEmpty) lineIds = null;
+      }
+      return CheckoutScreen(lineIds: lineIds);
+    },
     Routes.account:       (ctx) => const AccountScreen(),
     Routes.category:      (ctx) => const CategoryScreen(),
     Routes.search:        (ctx) => const SearchScreen(),
