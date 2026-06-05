@@ -149,6 +149,11 @@ class _ReviewReplyBannerState extends State<ReviewReplyBanner>
           const Color(0xFFB8860B)),
       _ => ('⏳', ar ? 'بانتظار الرد' : 'Waiting', UellowColors.muted),
     };
+    // v2.1.74 — read rule: an ANSWERED (green) banner counts as read the
+    // moment its details are opened (it won't return). A WAITING banner
+    // is NOT marked read on open — it keeps showing until the customer
+    // taps its ✕ close button.
+    final answered = (it['state'] ?? '') == 'completed';
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.white,
@@ -251,7 +256,11 @@ class _ReviewReplyBannerState extends State<ReviewReplyBanner>
           ]),
         ]),
       ),
-    );
+    ).whenComplete(() {
+      // v2.1.74 — green (answered) banner is read once viewed; a waiting
+      // banner stays until the customer taps its ✕.
+      if (answered) ReviewBannerCache.instance.dismiss([it]);
+    });
   }
 
   /// Up to 3 overlapping product thumbs for the combined banner.
@@ -328,7 +337,10 @@ class _ReviewReplyBannerState extends State<ReviewReplyBanner>
           )),
         ]),
       ),
-    );
+    ).whenComplete(() {
+      // the combined sheet only ever holds ANSWERED replies → mark read.
+      ReviewBannerCache.instance.dismiss(all);
+    });
   }
 
   Widget _replyCard(BuildContext ctx, Map<String, dynamic> it, bool ar) {

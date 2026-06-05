@@ -342,35 +342,40 @@ class _MapBoxState extends State<_MapBox> {
     final u = _pt('customer');
     final markers = <String>[];
     final coords = <String>[];
-    if (w != null) {
-      final name = _esc(((w['name'] is Map ? (w['name'][ar?'ar':'en']) : '').toString()).isNotEmpty
-          ? (w['name'][ar?'ar':'en']).toString()
-          : (ar ? 'مخزن يلو' : 'Uellow Warehouse'));
-      markers.add(_pin(w['lat'], w['lng'], '#412402', '#F5C320', '📦', name));
-      coords.add('[${w['lat']},${w['lng']}]');
-    }
-    if (c != null) {
-      final name = _esc((c['name'] ?? '').toString().isNotEmpty
-          ? c['name'].toString() : (ar ? 'مركز التوصيل' : 'Delivery Hub'));
-      markers.add(_pin(c['lat'], c['lng'], '#0EA5E9', '#FFFFFF', '🏬', name));
-      coords.add('[${c['lat']},${c['lng']}]');
+    // v2.1.74 — once the courier is on the road (live broadcast), the map
+    // shows ONLY the moving courier car tracking towards the customer —
+    // everything else (warehouse/hub) is hidden for a clean live view.
+    final liveTracking = d != null && d['is_live'] == true &&
+        stage != 'delivered';
+    if (!liveTracking) {
+      if (w != null) {
+        markers.add(_mapPin(w['lat'], w['lng'], '#2F6E62', 'inventory_2',
+            ar ? 'طلبك' : 'Your order'));
+        coords.add('[${w['lat']},${w['lng']}]');
+      }
+      if (c != null) {
+        markers.add(_mapPin(c['lat'], c['lng'], '#4C7DAE', 'warehouse',
+            ar ? 'شركة الشحن' : 'Carrier'));
+        coords.add('[${c['lat']},${c['lng']}]');
+      }
     }
     if (d != null && d['is_live'] == true) {
-      final name = _esc(ar ? 'السائق' : 'Driver');
-      markers.add(_pin(d['lat'], d['lng'], '#F59E0B', '#412402', '🚚', name));
+      // the courier car — animated pulse, always shown when live
+      markers.add(_carPin(d['lat'], d['lng'], ar ? 'المندوب' : 'Courier'));
       coords.add('[${d['lat']},${d['lng']}]');
     }
     if (u != null) {
-      final name = _esc(ar ? 'عنوانك' : 'You');
       final isDelivered = stage == 'delivered';
-      markers.add(_pin(u['lat'], u['lng'],
-          isDelivered ? '#10B981' : '#EF4444', '#FFFFFF',
-          isDelivered ? '✓' : '🏠', name));   // v2.1.23 — house icon
+      markers.add(_mapPin(u['lat'], u['lng'],
+          isDelivered ? '#2E9E6B' : '#D2604E',
+          isDelivered ? 'check_circle' : 'person_pin_circle',
+          ar ? 'أنت' : 'You'));
       coords.add('[${u['lat']},${u['lng']}]');
     }
     final markersJs = markers.join('\n');
-    final polyJs = coords.length >= 2
-        ? "L.polyline([${coords.join(',')}],{color:'#412402',weight:3,opacity:0.6,dashArray:'8,6'}).addTo(map);"
+    // route line only when NOT in clean live-tracking mode
+    final polyJs = (!liveTracking && coords.length >= 2)
+        ? "L.polyline([${coords.join(',')}],{color:'#2F6E62',weight:3,opacity:0.55,dashArray:'2,8',lineCap:'round'}).addTo(map);"
         : "";
     return '''
 <!doctype html><html><head><meta charset="utf-8"/>
@@ -380,6 +385,20 @@ class _MapBoxState extends State<_MapBox> {
 .leaflet-control-attribution{font-size:9px}</style>
 </head><body><div id="m"></div>
 <script src="https://unpkg.com/leaflet\@1.9.4/dist/leaflet.js"></script>
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet"/>
+<style>
+.uic{display:flex;flex-direction:column;align-items:center;filter:drop-shadow(0 2px 3px rgba(0,0,0,.25))}
+.uic .mi{font-family:'Material Icons Round';font-size:34px;line-height:1}
+.uic .lbl{margin-top:2px;background:#fff;border-radius:10px;padding:1px 7px;font-size:10px;
+  font-weight:800;color:#233330;white-space:nowrap;box-shadow:0 1px 3px rgba(0,0,0,.2);
+  font-family:-apple-system,Segoe UI,Tahoma,Arial,sans-serif}
+.carwrap{position:relative;width:44px;height:44px;display:flex;align-items:center;justify-content:center}
+.carwrap .pulse{position:absolute;width:44px;height:44px;border-radius:50%;
+  background:rgba(232,168,23,.45);animation:pz 1.4s ease-out infinite}
+@keyframes pz{0%{transform:scale(.4);opacity:.8}100%{transform:scale(1.4);opacity:0}}
+.carwrap .mi{font-family:'Material Icons Round';font-size:30px;color:#C68C0C;
+  position:relative;z-index:2;filter:drop-shadow(0 2px 3px rgba(0,0,0,.3))}
+</style>
 <script>
 var map=L.map('m',{zoomControl:true,attributionControl:true,scrollWheelZoom:false});
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
@@ -388,15 +407,25 @@ $markersJs
 $polyJs
 var pts=[${coords.join(',')}];
 if(pts.length>=2){map.fitBounds(L.latLngBounds(pts).pad(0.25));}
-else if(pts.length==1){map.setView(pts[0],14);}
+else if(pts.length==1){map.setView(pts[0],15);}
 </script></body></html>''';
   }
 
-  String _pin(dynamic lat, dynamic lng, String bg, String fg, String emoji, String label) {
-    return "L.marker([$lat,$lng],{icon:L.divIcon({className:'',iconSize:[38,38],iconAnchor:[19,19],"
-        "html:'<div style=\"width:38px;height:38px;border-radius:50%;background:$bg;border:3px solid $fg;"
-        "display:flex;align-items:center;justify-content:center;color:$fg;font-size:18px;"
-        "box-shadow:0 2px 6px rgba(0,0,0,.4)\">$emoji</div>'})}).addTo(map).bindPopup('$label');";
+  // v2.1.74 — clean marker: a coloured Material icon (NO background
+  // circle) with a small white label pill underneath.
+  String _mapPin(dynamic lat, dynamic lng, String color, String icon,
+      String label) {
+    return "L.marker([$lat,$lng],{icon:L.divIcon({className:'',iconSize:[80,52],iconAnchor:[40,44],"
+        "html:'<div class=\"uic\"><span class=\"mi\" style=\"color:$color\">$icon</span>"
+        "<span class=\"lbl\">${_esc(label)}</span></div>'})}).addTo(map);";
+  }
+
+  // the live courier car — animated pulse ring + car icon.
+  String _carPin(dynamic lat, dynamic lng, String label) {
+    return "L.marker([$lat,$lng],{zIndexOffset:1000,icon:L.divIcon({className:'',iconSize:[80,60],iconAnchor:[40,30],"
+        "html:'<div class=\"uic\"><div class=\"carwrap\"><div class=\"pulse\"></div>"
+        "<span class=\"mi\">directions_car</span></div>"
+        "<span class=\"lbl\">${_esc(label)}</span></div>'})}).addTo(map);";
   }
 
   @override

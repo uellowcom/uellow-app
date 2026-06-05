@@ -269,11 +269,8 @@ class _ProductScreenState extends State<ProductScreen> {
       // v2.1.71 — order per latest spec: Brand → Seller → Variation.
       // Brand block now sits ABOVE the variation/attributes block.
       if (p.brand != null) SliverToBoxAdapter(child: _BrandBlock(brand: p.brand!)),
-      // SOLD-BY vendor card directly under the brand block.
-      if (p.vendor != null)
-        SliverToBoxAdapter(child: _VendorCard(vendor: p.vendor!))
-      else
-        const SliverToBoxAdapter(child: _FulfilledByUellowCard()),
+      // v2.1.74 — the SOLD-BY / Fulfilled-by-Uellow card moved DOWN to sit
+      // directly above the specialist-reviews block (see below).
       SliverToBoxAdapter(child: _Attributes(
         productId: p.id,
         attributes: p.attributes,
@@ -299,6 +296,12 @@ class _ProductScreenState extends State<ProductScreen> {
             history: p.priceHistory!, trend: p.priceTrend)),
       // v2.1.35 — the "verified reviews" highlight strip was removed per
       // request; the full reviews block lower on the page remains.
+      // v2.1.74 — Seller / Fulfilled-by-Uellow card sits directly ABOVE
+      // the specialist reviews block (per latest spec).
+      if (p.vendor != null)
+        SliverToBoxAdapter(child: _VendorCard(vendor: p.vendor!))
+      else
+        const SliverToBoxAdapter(child: _FulfilledByUellowCard()),
       // v2.1.31 — specialist reviewers (uellow_reviewers): latest expert
       // verdicts + "ask a specialist" CTA.
       SliverToBoxAdapter(child: _ExpertReviewsBlock(productId: p.id)),
@@ -958,16 +961,18 @@ class _BrandBlock extends StatelessWidget {
                 const _VerifiedBadge(),
               ]),
             ])),
+            // v2.1.74 — small "More ›" chip (was the wide "Browse store").
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
               decoration: BoxDecoration(
                 color: UellowColors.yellowSoft,
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(20),
                 border: Border.all(color: UellowColors.yellow),
               ),
-              child: Text(T.t('brand.visit_store'), style: const TextStyle(
-                  fontSize: 11, fontWeight: FontWeight.w800,
-                  color: UellowColors.darkBrown)),
+              child: Text(lang.startsWith('ar') ? 'المزيد ›' : 'More ›',
+                  style: const TextStyle(fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                      color: UellowColors.darkBrown)),
             ),
           ]),
         ),

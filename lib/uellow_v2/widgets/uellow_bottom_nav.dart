@@ -303,20 +303,26 @@ class _UellowBottomNavState extends State<UellowBottomNav> {
     // v2.1.69 — NO backdrop at all behind the floating banner/strip:
     // the screens set extendBody so page content shows through, making
     // the banner truly float on its own.
-    return Column(mainAxisSize: MainAxisSize.min, children: [
-      const ReviewReplyBanner(),
-      AnnouncementStrip(screen: _stripScreen()),
-      ValueListenableBuilder<List<DynNavItem>>(
-        valueListenable: NavBarCache.instance.items,
-        builder: (_, items, __) {
-          if (items.isNotEmpty) return _buildDynamic(context, items);
-          // v2.1.69 — the OLD hardcoded tabs are gone for good: until
-          // the designed nav loads (first-ever launch only, thanks to
-          // the snapshot), a neutral placeholder bar holds the space.
-          return _buildPlaceholder();
-        },
-      ),
-    ]);
+    // v2.1.74 — the banner + nav sit on a WHITE base so the page's grey
+    // scaffold background never shows as a frame around the floating
+    // banner (the banner appears "alone", merged with the nav).
+    return Material(
+      color: Colors.white,
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        const ReviewReplyBanner(),
+        AnnouncementStrip(screen: _stripScreen()),
+        ValueListenableBuilder<List<DynNavItem>>(
+          valueListenable: NavBarCache.instance.items,
+          builder: (_, items, __) {
+            if (items.isNotEmpty) return _buildDynamic(context, items);
+            // v2.1.69 — the OLD hardcoded tabs are gone for good: until
+            // the designed nav loads (first-ever launch only, thanks to
+            // the snapshot), a neutral placeholder bar holds the space.
+            return _buildPlaceholder();
+          },
+        ),
+      ]),
+    );
   }
 
   Widget _buildPlaceholder() {
