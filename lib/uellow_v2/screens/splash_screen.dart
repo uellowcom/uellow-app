@@ -204,7 +204,7 @@ class _SplashScreenState extends State<SplashScreen> {
                         fontWeight: FontWeight.w900)),
                 const SizedBox(height: 24),
                 _pickerCard(),
-                if (_detected != null) ...[
+                if (_picked != null || _detected != null) ...[
                   const SizedBox(height: 14),
                   _detectedHint(),
                 ],
@@ -277,7 +277,9 @@ class _SplashScreenState extends State<SplashScreen> {
   Widget _countryDropdown() {
     final country = _picked?['country'] as Map<String, dynamic>?;
     final flag = country?['flag'] as String? ?? '🌐';
-    final name = country?['name']?['en'] as String? ?? 'Kuwait';
+    // v2.1.60 — localized country name (was English-only).
+    final name = (country?['name']?[_lang == 'ar' ? 'ar' : 'en']
+        ?? country?['name']?['en'] ?? 'Kuwait').toString();
     final cur  = (_picked?['currency'] as String?) ?? 'KWD';
     return InkWell(
       onTap: _showCountrySheet,
@@ -350,13 +352,17 @@ class _SplashScreenState extends State<SplashScreen> {
                   final c = _countries[i];
                   final cn = c['country'] as Map<String, dynamic>?;
                   final flag = cn?['flag'] as String? ?? '🌐';
-                  final name = cn?['name']?['en'] as String? ?? '—';
+                  // v2.1.60 — primary name in the picked language.
+                  final name = (cn?['name']?[_lang == 'ar' ? 'ar' : 'en']
+                      ?? cn?['name']?['en'] ?? '—').toString();
+                  final other = (cn?['name']?[_lang == 'ar' ? 'en' : 'ar']
+                      ?? '').toString();
                   final cur = c['currency'] as String? ?? '';
                   return ListTile(
                     leading: Text(flag, style: const TextStyle(fontSize: 22)),
                     title: Text(name,
                         style: const TextStyle(fontWeight: FontWeight.w700)),
-                    subtitle: Text(cn?['name']?['ar'] as String? ?? '',
+                    subtitle: Text(other,
                         style: const TextStyle(fontSize: 11)),
                     trailing: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
@@ -458,7 +464,14 @@ class _SplashScreenState extends State<SplashScreen> {
                     ? const Icon(Icons.check_circle,
                         color: UellowColors.success, size: 22)
                     : null,
-                onTap: () { setState(() => _lang = shortCode); Navigator.pop(context); },
+                onTap: () {
+                  // v2.1.60 — flipping the language re-renders the whole
+                  // picker in that language instantly (T.t + labels).
+                  setState(() => _lang = shortCode);
+                  UellowApi.instance.setLang(
+                      shortCode == 'ar' ? 'ar_001' : 'en_US');
+                  Navigator.pop(context);
+                },
               );
             },
           )),
@@ -469,9 +482,17 @@ class _SplashScreenState extends State<SplashScreen> {
   }
 
   Widget _detectedHint() {
-    final country = _detected?['recommended']?['country'] as Map<String, dynamic>?;
-    final domain  = _detected?['recommended']?['website']?['domain'] as String? ?? 'The App';
-    final name    = country?['name']?['en'] as String? ?? 'your region';
+    // v2.1.60 — the label now follows the PICKED country (updates the
+    // moment you choose one), localized, and reads «تطبيق الكويت» /
+    // "Kuwait App" instead of the technical "Connecting to <domain>".
+    final src = _picked ?? _detected?['recommended'] as Map<String, dynamic>?;
+    final country = src?['country'] as Map<String, dynamic>?;
+    final domain = (src?['website']?['domain'] as String? ?? '')
+        .replaceAll(RegExp(r'^https?://'), '');
+    final name = (country?['name']?[_lang == 'ar' ? 'ar' : 'en']
+        ?? country?['name']?['en'] ?? '').toString();
+    final flag = country?['flag'] as String? ?? '📍';
+    final label = _lang == 'ar' ? 'تطبيق $name' : '$name App';
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
@@ -481,23 +502,19 @@ class _SplashScreenState extends State<SplashScreen> {
       ),
       child: Row(
         children: [
-          const Text('📍', style: TextStyle(fontSize: 18)),
+          Text(flag, style: const TextStyle(fontSize: 18)),
           const SizedBox(width: 10),
-          Expanded(
-            child: RichText(
-              text: TextSpan(
-                style: const TextStyle(fontSize: 12, color: UellowColors.darkBrown),
-                children: [
-                  const TextSpan(text: 'Detected: '),
-                  TextSpan(text: name,
-                      style: const TextStyle(fontWeight: FontWeight.w800)),
-                  const TextSpan(text: ' · Connecting to '),
-                  TextSpan(text: domain,
-                      style: const TextStyle(fontWeight: FontWeight.w800)),
-                ],
-              ),
-            ),
-          ),
+          Expanded(child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(label, style: const TextStyle(fontSize: 13.5,
+                fontWeight: FontWeight.w900,
+                color: UellowColors.darkBrown)),
+            if (domain.isNotEmpty)
+              Text(domain, style: const TextStyle(fontSize: 10.5,
+                  color: UellowColors.muted)),
+          ])),
+          const Icon(Icons.check_circle, size: 18,
+              color: UellowColors.success),
         ],
       ),
     );

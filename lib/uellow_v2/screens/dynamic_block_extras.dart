@@ -87,8 +87,10 @@ class BlockEnvelope extends StatelessWidget {
     // v2.1.56 — optional asymmetric bottom padding (`pad_bottom`); the
     // Explore More block uses 0 so nothing trails the Load-more button.
     final padBottom = (props['pad_bottom'] as num?)?.toDouble() ?? padY;
+    // v2.1.61 — independent gap BEFORE the block too.
+    final padTop = (props['pad_top'] as num?)?.toDouble() ?? padY;
     return Padding(
-      padding: EdgeInsets.only(top: padY, bottom: padBottom),
+      padding: EdgeInsets.only(top: padTop, bottom: padBottom),
       child: content,
     );
   }
@@ -256,23 +258,31 @@ class DynSectionHeader extends StatelessWidget {
   // beside the title (opens props.link, falls back to the shop).
   final bool showMore;
 
-  Widget _moreBtn(BuildContext context) => TextButton(
-        onPressed: () {
-          final link = (props['link'] as Map?)?.cast<String, dynamic>();
-          if (link != null && (link['type'] ?? 'none') != 'none') {
-            openBlockLink(context, link);
-          } else {
-            Navigator.pushNamed(context, '/category');
-          }
-        },
-        style: TextButton.styleFrom(
-          foregroundColor: theme.primary,
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-          minimumSize: const Size(40, 26),
-          textStyle: const TextStyle(
-              fontSize: 11.5, fontWeight: FontWeight.w800),
+  // v2.1.61 — yellow pill button (Tajawal) per request.
+  Widget _moreBtn(BuildContext context) => Material(
+        color: UellowColors.yellow,
+        shape: const StadiumBorder(),
+        child: InkWell(
+          customBorder: const StadiumBorder(),
+          onTap: () {
+            final link = (props['link'] as Map?)?.cast<String, dynamic>();
+            if (link != null && (link['type'] ?? 'none') != 'none') {
+              openBlockLink(context, link);
+            } else {
+              Navigator.pushNamed(context, '/category');
+            }
+          },
+          child: Padding(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 11, vertical: 5),
+            child: Text(ar ? 'عرض المزيد ←' : 'View more →',
+                style: const TextStyle(
+                    fontFamily: 'Tajawal',
+                    color: UellowColors.darkBrown,
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w900)),
+          ),
         ),
-        child: Text(ar ? 'عرض المزيد ←' : 'View more →'),
       );
 
   @override
@@ -317,8 +327,9 @@ class DynSectionHeader extends StatelessWidget {
     // ── BANNER MODE — full-width header image as the section title ───────
     if (headerMode == 'banner' && headerImg.isNotEmpty) {
       final gap = (props['title_gap'] as num?)?.toDouble() ?? 6;
+      final gapTop = (props['title_gap_top'] as num?)?.toDouble() ?? 4;
       return Padding(
-        padding: EdgeInsets.fromLTRB(12, 4, 12, gap),
+        padding: EdgeInsets.fromLTRB(12, gapTop, 12, gap),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(bannerRadius),
           child: Container(
@@ -393,7 +404,11 @@ class DynSectionHeader extends StatelessWidget {
 
     return Padding(
       padding: EdgeInsets.fromLTRB(
-        14, 6, 14, (props['title_gap'] as num?)?.toDouble() ?? 6,
+        14,
+        // v2.1.61 — admin-tunable gap before the title.
+        (props['title_gap_top'] as num?)?.toDouble() ?? 6,
+        14,
+        (props['title_gap'] as num?)?.toDouble() ?? 6,
       ),
       child: Row(children: [
         if (leading != null && headerMode == 'replace' && headerImg.isNotEmpty)
@@ -3859,7 +3874,8 @@ class BestsellersBlock extends StatelessWidget {
               if (link != null && (link['type'] ?? 'none') != 'none') {
                 openBlockLink(context, link);
               } else {
-                Navigator.pushNamed(context, '/category');
+                // v2.1.61 — opens the full RANKED bestsellers ladder.
+                Navigator.pushNamed(context, '/bestsellers');
               }
             },
             child: Text(ar ? 'عرض المزيد ←' : 'View more →',

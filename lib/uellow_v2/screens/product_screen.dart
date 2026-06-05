@@ -2599,8 +2599,8 @@ class _ExpertReviewsBlockState extends State<_ExpertReviewsBlock> {
                   padding: const EdgeInsets.symmetric(
                       horizontal: 10, vertical: 5),
                   child: Text(
-                      ar ? 'مشاهدة المزيد (${_items.length})'
-                         : 'See all (${_items.length})',
+                      // v2.1.61 — short label per request.
+                      ar ? 'المزيد' : 'More',
                       style: const TextStyle(
                           color: UellowColors.darkBrown,
                           fontSize: 9.5, fontWeight: FontWeight.w900)),

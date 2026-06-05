@@ -37,14 +37,16 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  late Future<UellowHome> _future;
-  late Future<_DynHome?> _dynFuture;
+  // v2.1.61 — SNAPSHOT-FIRST: the last good page renders instantly from
+  // disk (zero flash, zero spinner on slow networks); the network fetch
+  // then refreshes it in place. The legacy `/home` API call is gone.
+  _DynHome? _dyn;
+  bool _settled = false;
 
   @override
   void initState() {
     super.initState();
-    _future = UellowApi.instance.home.get();
-    _dynFuture = _fetchDynamicHome();
+    _loadHome();
     // v2.1.27 — open-sequence ads: splash flash first, then popup
     // (frequency-capped). Runs once per app session.
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -78,7 +80,44 @@ class _HomeScreenState extends State<HomeScreen> {
   ///   2. fetch failed → render the LAST GOOD snapshot (same current
   ///      design, refreshed on every successful load)
   ///   3. no snapshot either → null → error + retry state (never legacy)
-  Future<_DynHome?> _fetchDynamicHome() async {
+  Future<void> _loadHome() async {
+    // 1) snapshot instantly — current design, refreshed on every
+    //    successful load, so slow starts show it with NO flash.
+    final snap = await _readSnapshot();
+    if (snap != null && mounted && _dyn == null) {
+      setState(() => _dyn = snap);
+    }
+    // 2) network refresh in the background; swaps in when it lands.
+    final fresh = await _fetchNetworkHome();
+    if (!mounted) return;
+    setState(() {
+      if (fresh != null) _dyn = fresh;
+      _settled = true;
+    });
+  }
+
+  Future<_DynHome?> _readSnapshot() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw =
+          prefs.getString('home_page_cache_v1_${UellowApi.instance.lang}');
+      if (raw != null && raw.isNotEmpty) {
+        final d = (jsonDecode(raw) as Map).cast<String, dynamic>();
+        final blocks = (d['blocks'] as List? ?? const []).cast<dynamic>();
+        if (blocks.isNotEmpty) {
+          return _DynHome(
+            theme: DynTheme.fromJson((d['theme'] as Map? ?? const {})),
+            blocks: blocks
+                .map((e) => (e as Map).cast<String, dynamic>())
+                .toList(),
+          );
+        }
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  Future<_DynHome?> _fetchNetworkHome() async {
     final api = UellowApi.instance;
     final cacheKey = 'home_page_cache_v1_${api.lang}';
     try {
@@ -113,32 +152,17 @@ class _HomeScreenState extends State<HomeScreen> {
           }
         }
       }
-    } catch (_) {/* fall through to snapshot */}
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final raw = prefs.getString(cacheKey);
-      if (raw != null && raw.isNotEmpty) {
-        final d = (jsonDecode(raw) as Map).cast<String, dynamic>();
-        final blocks = (d['blocks'] as List? ?? const []).cast<dynamic>();
-        if (blocks.isNotEmpty) {
-          return _DynHome(
-            theme: DynTheme.fromJson((d['theme'] as Map? ?? const {})),
-            blocks: blocks
-                .map((e) => (e as Map).cast<String, dynamic>())
-                .toList(),
-          );
-        }
-      }
-    } catch (_) {}
+    } catch (_) {/* snapshot (already rendered) stays */}
     return null;
   }
 
   Future<void> _refresh() async {
+    final fresh = await _fetchNetworkHome();
+    if (!mounted) return;
     setState(() {
-      _future = UellowApi.instance.home.get();
-      _dynFuture = _fetchDynamicHome();
+      if (fresh != null) _dyn = fresh;
+      _settled = true;
     });
-    await Future.wait([_future, _dynFuture]);
   }
 
   @override
@@ -149,25 +173,17 @@ class _HomeScreenState extends State<HomeScreen> {
         color: UellowColors.darkBrown,
         backgroundColor: UellowColors.yellowLight,
         onRefresh: _refresh,
-        child: FutureBuilder<_DynHome?>(
-          future: _dynFuture,
-          builder: (context, dynSnap) {
-            // Once the dynamic fetch is settled, branch on the result.
-            if (dynSnap.connectionState != ConnectionState.done) {
-              return const _LoadingState();
-            }
-            final dyn = dynSnap.data;
-            if (dyn != null) return _buildDynamic(context, dyn);
-            // v2.1.57 — legacy hand-built home REMOVED per spec: no
-            // builder page AND no snapshot → clean error + retry (the
-            // old design can never flash again).
-            return _ErrorState(
-                message: UellowApi.instance.lang == 'ar'
-                    ? 'تعذّر تحميل الصفحة الرئيسية — تحقق من الاتصال'
-                    : 'Could not load the home page — check your connection',
-                onRetry: _refresh);
-          },
-        ),
+        child: Builder(builder: (context) {
+          // v2.1.61 — snapshot renders the instant it's read; network
+          // result swaps in silently. Spinner only on a TRUE first install.
+          if (_dyn != null) return _buildDynamic(context, _dyn!);
+          if (!_settled) return const _LoadingState();
+          return _ErrorState(
+              message: UellowApi.instance.lang == 'ar'
+                  ? 'تعذّر تحميل الصفحة الرئيسية — تحقق من الاتصال'
+                  : 'Could not load the home page — check your connection',
+              onRetry: _refresh);
+        }),
       )),
       bottomNavigationBar: const UellowBottomNav(active: UNavTab.home),
     );
@@ -200,49 +216,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // ── Legacy body — keeps the hand-built home as fallback so nothing is
-  // lost if the builder page is misconfigured or the API is unreachable.
-  Widget _buildLegacy(BuildContext context) {
-    return FutureBuilder<UellowHome>(
-      future: _future,
-      builder: (context, snap) {
-        if (snap.connectionState != ConnectionState.done) {
-          return const _LoadingState();
-        }
-        if (snap.hasError) {
-          final e = snap.error;
-          final msg = e is UellowApiException ? e.message : e.toString();
-          return _ErrorState(message: msg, onRetry: _refresh);
-        }
-        final home = snap.data!;
-        return CustomScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          slivers: [
-            SliverToBoxAdapter(child: _TopBar()),
-            SliverPadding(
-              padding: const EdgeInsets.only(top: 2, bottom: 0),
-              sliver: SliverToBoxAdapter(child: _CategoryStrip()),
-            ),
-            SliverToBoxAdapter(child: _HeroSlider(sliders: home.sliders)),
-            SliverPadding(
-              padding: const EdgeInsets.only(top: 2, bottom: 8),
-              sliver: SliverToBoxAdapter(child: const _FeaturesChips()),
-            ),
-            SliverToBoxAdapter(child: _CategoryIcons(icons: home.categoryIcons)),
-            if (home.featureBanners.isNotEmpty)
-              SliverToBoxAdapter(child: _FeatureBannersRail(banners: home.featureBanners)),
-            const SliverToBoxAdapter(child: _FlashSaleBlock()),
-            if (home.sections.isNotEmpty)
-              ...home.sections.map(
-                (s) => SliverToBoxAdapter(child: _ProductRail(section: s)),
-              ),
-            const _ExploreMoreSliver(),
-            const SliverToBoxAdapter(child: SizedBox(height: 80)),
-          ],
-        );
-      },
-    );
-  }
 }
 
 class _DynHome {

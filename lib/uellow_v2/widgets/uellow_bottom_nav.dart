@@ -57,38 +57,44 @@ enum UNavTab { home, shop, reels, beena, cart, account }
 
 class DynNavItem {
   DynNavItem({
-    required this.id, required this.icon, required this.label,
+    required this.id, required this.icon,
+    required this.labelEn, required this.labelAr,
     required this.targetType, required this.targetValue, required this.badge,
   });
   final String id;
   final String icon;       // emoji or material name; emojis stay raw
-  final String label;
+  // v2.1.61 — labels were resolved at FETCH time, so switching the app
+  // language left the nav bar in the old language until restart. Keep
+  // BOTH and resolve at render time instead.
+  final String labelEn;
+  final String labelAr;
+  String get label {
+    final ar = UellowApi.instance.lang.toLowerCase().startsWith('ar');
+    final preferred = ar ? labelAr : labelEn;
+    return preferred.isNotEmpty
+        ? preferred
+        : (labelEn.isNotEmpty ? labelEn : labelAr);
+  }
   final String targetType; // 'page' | 'screen' | 'url' | 'product' | 'category'
   final String targetValue;
   final String? badge;     // 'cart_count' | 'wishlist_count' | 'notifications' | null
 
   factory DynNavItem.fromJson(Map j) {
-    // v2.0.73 — pick the localized label for the current app language.
-    // Was hard-coded to `en`, so Arabic users saw English tab labels.
     final lbl = j['label'];
-    final ar = UellowApi.instance.lang.toLowerCase().startsWith('ar');
-    String lblStr;
+    String en = '', arL = '';
     if (lbl is String) {
-      lblStr = lbl;
+      en = lbl; arL = lbl;
     } else if (lbl is Map) {
       final m = lbl.cast<String, dynamic>();
-      final preferred = ar ? m['ar'] : m['en'];
-      lblStr = (preferred?.toString().isNotEmpty == true
-          ? preferred.toString()
-          : (m['en'] ?? m['ar'] ?? '').toString());
-    } else {
-      lblStr = '';
+      en = (m['en'] ?? '').toString();
+      arL = (m['ar'] ?? '').toString();
     }
     final tgt = (j['target'] as Map?) ?? const {};
     return DynNavItem(
       id:           j['id']?.toString() ?? '',
       icon:         j['icon']?.toString() ?? '🔘',
-      label:        lblStr,
+      labelEn:      en,
+      labelAr:      arL,
       targetType:   tgt['type']?.toString() ?? 'screen',
       targetValue:  tgt['value']?.toString() ?? 'home',
       badge:        j['badge']?.toString(),
@@ -97,7 +103,16 @@ class DynNavItem {
 }
 
 class NavBarCache {
-  NavBarCache._();
+  NavBarCache._() {
+    // v2.1.61 — language switch refreshes the nav design + forces every
+    // listening nav bar to rebuild (labels resolve per current lang).
+    UellowApi.instance.langNotifier.addListener(() {
+      final old = List<DynNavItem>.from(items.value);
+      refresh();
+      // immediate rebuild with the labels we already have
+      items.value = old.isEmpty ? items.value : List.of(old);
+    });
+  }
   static final NavBarCache instance = NavBarCache._();
   final ValueNotifier<List<DynNavItem>> items =
       ValueNotifier<List<DynNavItem>>(const []);

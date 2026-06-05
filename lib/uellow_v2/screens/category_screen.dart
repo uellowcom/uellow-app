@@ -377,7 +377,9 @@ class _ContentState extends State<_Content> {
       if (widget.cfg?['show_recent'] != false)
         _LatestSlider(category: widget.category, products: _products),
       // v2.1.57 — brands row under "Recently arrived" (backend toggle).
-      if (widget.cfg?['show_brands'] != false) const _BrandsRow(),
+      // v2.1.60 — scoped to the SELECTED main category.
+      if (widget.cfg?['show_brands'] != false)
+        _BrandsRow(categoryId: widget.category.id),
       // v2.1.59 — "All products" block REMOVED per spec (recently
       // arrived + brands tell the story; full lists live in collections).
       const SizedBox(height: 30),
@@ -789,25 +791,47 @@ class _CategoryHeaderSliderState extends State<_CategoryHeaderSlider> {
 // ─── Brands row (v2.1.57) — under "Recently arrived", backend toggle ──
 
 class _BrandsRow extends StatefulWidget {
-  const _BrandsRow();
+  const _BrandsRow({required this.categoryId});
+  // v2.1.60 — brands are scoped to the selected main category.
+  final int categoryId;
   @override
   State<_BrandsRow> createState() => _BrandsRowState();
 }
 
 class _BrandsRowState extends State<_BrandsRow> {
-  static List<Map<String, dynamic>>? _cache;   // session cache
-  List<Map<String, dynamic>>? _brands = _cache;
+  static final Map<int, List<Map<String, dynamic>>> _cache = {};
+  List<Map<String, dynamic>>? _brands;
 
   @override
   void initState() {
     super.initState();
-    if (_cache == null) {
-      UellowApi.instance.categories.brands().then((v) {
-        _cache = v;
-        if (mounted) setState(() => _brands = v);
-      }).catchError((_) {
-        if (mounted) setState(() => _brands = const []);
-      });
+    _load();
+  }
+
+  @override
+  void didUpdateWidget(covariant _BrandsRow old) {
+    super.didUpdateWidget(old);
+    if (old.categoryId != widget.categoryId) _load();
+  }
+
+  Future<void> _load() async {
+    final cid = widget.categoryId;
+    if (_cache.containsKey(cid)) {
+      setState(() => _brands = _cache[cid]);
+      return;
+    }
+    setState(() => _brands = null);
+    try {
+      final res = await UellowApi.instance.getRaw(
+          '/api/mobile/v2/brands', query: {'category_id': cid});
+      final v = List<Map<String, dynamic>>.from(
+          (res['data']?['brands'] as List?) ?? const []);
+      _cache[cid] = v;
+      if (mounted && widget.categoryId == cid) {
+        setState(() => _brands = v);
+      }
+    } catch (_) {
+      if (mounted) setState(() => _brands = const []);
     }
   }
 
