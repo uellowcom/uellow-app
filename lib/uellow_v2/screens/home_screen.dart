@@ -185,6 +185,8 @@ class _HomeScreenState extends State<HomeScreen> {
               onRetry: _refresh);
         }),
       )),
+      // v2.1.69 — body extends behind the floating banner area
+      extendBody: true,
       bottomNavigationBar: const UellowBottomNav(active: UNavTab.home),
     );
   }

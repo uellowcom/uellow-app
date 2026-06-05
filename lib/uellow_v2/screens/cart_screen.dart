@@ -640,7 +640,9 @@ class _LineCard extends StatelessWidget {
       ),
       child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
         if (selectMode) Padding(
-          padding: const EdgeInsets.only(right: 10, top: 28),
+          // v2.1.69 — directional (was right:) so RTL doesn't squeeze the
+          // row into the image.
+          padding: const EdgeInsetsDirectional.only(end: 10, top: 28),
           child: Icon(
             selected ? Icons.check_circle : Icons.radio_button_unchecked,
             size: 22,
@@ -661,8 +663,13 @@ class _LineCard extends StatelessWidget {
           const SizedBox(height: 8),
           // Per-unit price — stays constant when qty changes
           Row(children: [
-            Text(line.unitPrice.format(), style: const TextStyle(
-                fontSize: 15, fontWeight: FontWeight.w900, color: UellowColors.ink)),
+            // v2.1.69 — smaller in select mode: the checkbox narrows the
+            // row and the 15px price collided with the image.
+            Flexible(child: Text(line.unitPrice.format(),
+                maxLines: 1, overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                    fontSize: selectMode ? 12 : 15,
+                    fontWeight: FontWeight.w900, color: UellowColors.ink))),
             const SizedBox(width: 6),
             // v2.1.34 — "pc" was English-only; bilingual now.
             Text(lang == 'ar' ? '/ قطعة' : '/ pc', style: const TextStyle(

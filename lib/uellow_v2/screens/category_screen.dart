@@ -56,6 +56,8 @@ class _CategoryScreenState extends State<CategoryScreen> {
     _ensureInit(context);
     return Scaffold(
       backgroundColor: UellowColors.bg,
+      // v2.1.69 — body extends behind the floating banner area
+      extendBody: true,
       bottomNavigationBar: const UellowBottomNav(active: UNavTab.shop),
       body: SafeArea(child: Column(children: [
         const _CatTopBar(),

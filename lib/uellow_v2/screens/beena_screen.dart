@@ -238,6 +238,8 @@ class _BeenaScreenState extends State<BeenaScreen> {
       textDirection: ar ? TextDirection.rtl : TextDirection.ltr,
       child: Scaffold(
         backgroundColor: const Color(0xFFFAFAFA),
+        // v2.1.69 — body extends behind the floating banner area
+        extendBody: true,
         bottomNavigationBar: const UellowBottomNav(active: UNavTab.beena),
         body: SafeArea(child: Column(children: [
           _Header(ar: ar),

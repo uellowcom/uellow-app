@@ -266,13 +266,6 @@ class _ProductScreenState extends State<ProductScreen> {
       SliverToBoxAdapter(child: KeyedSubtree(
           key: _kOverview, child: _Title(p: p))),
       SliverToBoxAdapter(child: _PriceRow(p: p)),
-      // v2.0.78 — when a product has no vendor, show a "Fulfilled by
-      // Uellow" badge so the user knows who's responsible (instead of an
-      // empty / missing seller card).
-      if (p.vendor != null)
-        SliverToBoxAdapter(child: _VendorCard(vendor: p.vendor!))
-      else
-        const SliverToBoxAdapter(child: _FulfilledByUellowCard()),
       SliverToBoxAdapter(child: _Attributes(
         productId: p.id,
         attributes: p.attributes,
@@ -290,6 +283,12 @@ class _ProductScreenState extends State<ProductScreen> {
               freeShipping: p.badges.contains('free_shipping')))),
       // Brand block sits below shipping info per latest spec
       if (p.brand != null) SliverToBoxAdapter(child: _BrandBlock(brand: p.brand!)),
+      // v2.1.69 — the SOLD-BY vendor card moved BELOW the brand block
+      // (was right under the price). "Fulfilled by Uellow" when no vendor.
+      if (p.vendor != null)
+        SliverToBoxAdapter(child: _VendorCard(vendor: p.vendor!))
+      else
+        const SliverToBoxAdapter(child: _FulfilledByUellowCard()),
       // v2.1.24 — Best Seller rank strip (tappable → that category).
       if (p.ranks.isNotEmpty)
         SliverToBoxAdapter(child: _RankStrip(ranks: p.ranks)),

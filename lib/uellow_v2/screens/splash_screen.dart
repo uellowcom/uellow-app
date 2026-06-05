@@ -107,7 +107,33 @@ class _SplashScreenState extends State<SplashScreen> {
     return body;
   }
 
+  // v2.1.69 — professional full-screen progress from the moment Continue
+  // is tapped until the app is truly ready (home page prefetched into the
+  // snapshot cache, so HomeScreen renders instantly with zero flash).
+  bool _going = false;
+
+  Future<void> _prefetchHome() async {
+    try {
+      final api = UellowApi.instance;
+      final r = await http.get(
+        Uri.parse('${api.baseUrl}/api/mobile/v2/pages/home'),
+        headers: {'Accept': 'application/json', 'X-Lang': api.lang},
+      ).timeout(const Duration(seconds: 10));
+      final j = jsonDecode(utf8.decode(r.bodyBytes)) as Map<String, dynamic>;
+      if (j['success'] == true) {
+        final d = (j['data'] as Map).cast<String, dynamic>();
+        if ((d['blocks'] as List? ?? const []).isNotEmpty) {
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString(
+              'home_page_cache_v1_${api.lang}', jsonEncode(d));
+        }
+      }
+    } catch (_) {/* home falls back to its own loading */}
+  }
+
   Future<void> _persistAndGoHome() async {
+    if (_going) return;
+    setState(() => _going = true);
     final code = _picked?['country']?['code'] as String?;
     // Switch the API base URL to the website of the picked country so
     // every subsequent request hits the right backend. We do this BEFORE
@@ -146,20 +172,61 @@ class _SplashScreenState extends State<SplashScreen> {
     // GPS pre-warm. Runs in the background so the home transition stays
     // snappy; idempotent across cold starts.
     unawaited(FirstLaunchService.kickOff());
+    // Pre-warm the home page while the progress screen shows — the app
+    // then opens straight onto a fully-rendered home.
+    await _prefetchHome();
     if (!mounted) return;
-    // Visible confirmation — country name only (v2.1.68: no technical
-    // domain shown to customers).
-    final cname = (_picked?['country']?['name']?['en'] as String?) ?? code ?? '';
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        duration: const Duration(seconds: 2),
-        content: Text(_lang == 'ar'
-            ? 'تم التحويل إلى $cname'
-            : 'Switched to $cname')));
     Navigator.of(context).pushReplacementNamed(Routes.home);
+  }
+
+  /// Branded full-screen progress shown between Continue and home.
+  Widget _goingGate() {
+    final ar = _lang == 'ar';
+    final cname = ((_picked?['country']?['name']
+            as Map?)?[ar ? 'ar' : 'en'] ?? '').toString();
+    return Container(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter, end: Alignment.bottomCenter,
+          colors: [Color(0xFFFFF8E1), Colors.white],
+        ),
+      ),
+      alignment: Alignment.center,
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        const UellowLogo(height: 52),
+        const SizedBox(height: 34),
+        SizedBox(
+          width: 58, height: 58,
+          child: Stack(alignment: Alignment.center, children: const [
+            SizedBox(width: 58, height: 58,
+                child: CircularProgressIndicator(
+                    strokeWidth: 3.5, color: UellowColors.yellow)),
+            Text('🛍', style: TextStyle(fontSize: 24)),
+          ]),
+        ),
+        const SizedBox(height: 26),
+        Text(ar ? 'جارٍ تجهيز تجربتك…' : 'Preparing your experience…',
+            style: const TextStyle(fontSize: 16.5,
+                fontWeight: FontWeight.w900, color: UellowColors.darkBrown)),
+        const SizedBox(height: 6),
+        Text(
+            cname.isNotEmpty
+                ? (ar ? 'متجر $cname · أحدث العروض والمنتجات'
+                      : '$cname store · latest deals and products')
+                : (ar ? 'أحدث العروض والمنتجات' : 'Latest deals and products'),
+            style: const TextStyle(fontSize: 12.5,
+                color: UellowColors.muted)),
+      ]),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
+    // v2.1.69 — once Continue is tapped the whole screen becomes the
+    // branded progress gate until home is prefetched and opened.
+    if (_going) {
+      return Scaffold(body: SizedBox.expand(child: _goingGate()));
+    }
     return Scaffold(
       // Use SizedBox.expand + a gradient that paints the full viewport
       // (including under the status bar) so the picker truly fills the

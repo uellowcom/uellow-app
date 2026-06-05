@@ -300,24 +300,26 @@ class _UellowBottomNavState extends State<UellowBottomNav> {
     // v2.1.68 — white backdrop: the area around the floating banner used
     // to show the page's GRAY scaffold background; now the banner sits
     // alone on clean white that merges with the nav bar.
-    return ColoredBox(
-      color: Colors.white,
-      child: Column(mainAxisSize: MainAxisSize.min, children: [
-        const ReviewReplyBanner(),
-        AnnouncementStrip(screen: _stripScreen()),
-        ValueListenableBuilder<List<DynNavItem>>(
-          valueListenable: NavBarCache.instance.items,
-          builder: (_, items, __) {
-            if (items.isNotEmpty) return _buildDynamic(context, items);
-            return _buildStatic(context);
-          },
-        ),
-      ]),
-    );
+    // v2.1.69 — NO backdrop at all behind the floating banner/strip:
+    // the screens set extendBody so page content shows through, making
+    // the banner truly float on its own.
+    return Column(mainAxisSize: MainAxisSize.min, children: [
+      const ReviewReplyBanner(),
+      AnnouncementStrip(screen: _stripScreen()),
+      ValueListenableBuilder<List<DynNavItem>>(
+        valueListenable: NavBarCache.instance.items,
+        builder: (_, items, __) {
+          if (items.isNotEmpty) return _buildDynamic(context, items);
+          // v2.1.69 — the OLD hardcoded tabs are gone for good: until
+          // the designed nav loads (first-ever launch only, thanks to
+          // the snapshot), a neutral placeholder bar holds the space.
+          return _buildPlaceholder();
+        },
+      ),
+    ]);
   }
 
-  Widget _buildStatic(BuildContext context) {
-    final badge = widget.cartBadge ?? _count;
+  Widget _buildPlaceholder() {
     return Container(
       decoration: const BoxDecoration(
         color: Colors.white,
@@ -328,16 +330,15 @@ class _UellowBottomNavState extends State<UellowBottomNav> {
         top: false,
         child: SizedBox(
           height: 56,
-          child: Row(children: [
-            _tab(context, UNavTab.home,    Icons.home_filled,             T.t('nav.home')),
-            _tab(context, UNavTab.shop,    Icons.grid_view,               T.t('nav.shop')),
-            // v2.0.85 — Reels tab between Shop and Beena
-            _tab(context, UNavTab.reels,   Icons.play_circle_filled,
-                UellowApi.instance.lang.toLowerCase().startsWith('ar') ? 'فيديو' : 'Reels'),
-            _beenaTab(context),
-            _tab(context, UNavTab.cart,    Icons.shopping_cart_outlined,  T.t('nav.cart'), badge: badge),
-            _tab(context, UNavTab.account, Icons.person_outline,          T.t('nav.account')),
-          ]),
+          child: Row(children: List.generate(5, (_) => Expanded(
+            child: Center(child: Container(
+              width: 34, height: 34,
+              decoration: BoxDecoration(
+                color: const Color(0xFFF2F2F2),
+                borderRadius: BorderRadius.circular(12),
+              ),
+            )),
+          ))),
         ),
       ),
     );
@@ -407,47 +408,6 @@ class _UellowBottomNavState extends State<UellowBottomNav> {
         ),
       ),
     );
-  }
-
-  Widget _tab(BuildContext context, UNavTab tab, IconData icon, String label, {int badge = 0}) {
-    final on = tab == widget.active;
-    // Active = brand dark brown; inactive = very dark gray for legibility
-    final col = on ? UellowColors.darkBrown : const Color(0xFF3F3F3F);
-    return Expanded(child: InkWell(
-      onTap: () => _goto(context, tab),
-      child: Stack(alignment: Alignment.center, children: [
-        Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-          // v2.1.66 — yellow pill behind the active tab's icon.
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 3),
-            decoration: on
-                ? BoxDecoration(
-                    color: UellowColors.yellow,
-                    borderRadius: BorderRadius.circular(14),
-                  )
-                : null,
-            child: Icon(icon, size: 22, color: col),
-          ),
-          const SizedBox(height: 3),
-          Text(label, style: TextStyle(
-              fontSize: 10.5, color: col,
-              fontWeight: on ? FontWeight.w900 : FontWeight.w600)),
-        ]),
-        if (badge > 0) Positioned(
-          top: 6, right: 28,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-            decoration: BoxDecoration(
-              color: UellowColors.danger, borderRadius: BorderRadius.circular(9),
-            ),
-            constraints: const BoxConstraints(minWidth: 18),
-            child: Text('$badge', textAlign: TextAlign.center,
-                style: const TextStyle(color: Colors.white,
-                    fontSize: 10, fontWeight: FontWeight.w800)),
-          ),
-        ),
-      ]),
-    ));
   }
 
   Widget _beenaTab(BuildContext context) {

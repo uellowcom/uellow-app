@@ -396,36 +396,129 @@ class _VendorScreenState extends State<VendorScreen> {
     );
   }
 
+  // v2.1.69 — premium about sheet: 60% height, logo header, rating
+  // chips, scrollable text. The old one was a tiny strip at the bottom.
   void _showAbout(bool ar, String about) {
     final v = _v;
+    final logo = (v['logo'] as String?) ?? '';
+    final name = _name();
+    final rating = (v['rating'] as Map?)?.cast<String, dynamic>() ?? const {};
+    final avg = ((rating['avg'] as num?) ?? 0).toDouble();
+    final pCount = ((v['product_count'] as num?) ?? 0).toInt();
+    final oCount = ((v['order_count'] as num?) ?? 0).toInt();
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.white,
+      isScrollControlled: true,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(
-          top: Radius.circular(18))),
+          top: Radius.circular(22))),
       builder: (_) => Directionality(
         textDirection: ar ? TextDirection.rtl : TextDirection.ltr,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 18, 20, 30),
-          child: Column(mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(ar ? 'حول المتجر' : 'About the store', style: UT.h2),
+        child: SizedBox(
+          height: MediaQuery.of(context).size.height * 0.6,
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
             const SizedBox(height: 10),
-            Text(about, style: UT.body),
-            if ((v['business_name'] ?? '').toString().isNotEmpty) ...[
-              const SizedBox(height: 12),
-              Row(children: [
-                const Icon(Icons.business_outlined, size: 15,
-                    color: UellowColors.muted),
-                const SizedBox(width: 6),
-                Text((v['business_name']).toString(), style: UT.small),
+            Center(child: Container(width: 42, height: 4,
+                decoration: BoxDecoration(color: const Color(0xFFE3E3E3),
+                    borderRadius: BorderRadius.circular(2)))),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+              child: Row(children: [
+                Container(
+                  width: 52, height: 52,
+                  clipBehavior: Clip.antiAlias,
+                  decoration: BoxDecoration(
+                    color: UellowColors.yellowLight,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: UellowColors.yellow),
+                  ),
+                  alignment: Alignment.center,
+                  child: logo.isNotEmpty
+                      ? CachedNetworkImage(imageUrl: logo,
+                          fit: BoxFit.cover, width: 52, height: 52,
+                          errorWidget: (_, __, ___) => Text(
+                              name.isEmpty ? 'U' : name[0].toUpperCase(),
+                              style: const TextStyle(fontSize: 20,
+                                  fontWeight: FontWeight.w900,
+                                  color: UellowColors.darkBrown)))
+                      : Text(name.isEmpty ? 'U' : name[0].toUpperCase(),
+                          style: const TextStyle(fontSize: 20,
+                              fontWeight: FontWeight.w900,
+                              color: UellowColors.darkBrown)),
+                ),
+                const SizedBox(width: 12),
+                Expanded(child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(name, maxLines: 1, overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 16,
+                          fontWeight: FontWeight.w900,
+                          color: UellowColors.ink)),
+                  const SizedBox(height: 2),
+                  Text(ar ? 'حول المتجر' : 'About the store',
+                      style: const TextStyle(fontSize: 11.5,
+                          color: UellowColors.muted)),
+                ])),
               ]),
-            ],
+            ),
+            const SizedBox(height: 14),
+            // quick stat chips
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Wrap(spacing: 8, children: [
+                _aboutChip('⭐ ${avg > 0 ? avg.toStringAsFixed(1) : '—'}'),
+                _aboutChip(ar ? '🛍 $pCount منتج' : '🛍 $pCount products'),
+                _aboutChip(ar ? '📦 $oCount طلب' : '📦 $oCount orders'),
+              ]),
+            ),
+            const SizedBox(height: 14),
+            const Divider(height: 1, color: UellowColors.border),
+            Expanded(child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 30),
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(about, style: const TextStyle(fontSize: 14,
+                    height: 1.7, color: UellowColors.text)),
+                if ((v['business_name'] ?? '').toString().isNotEmpty) ...[
+                  const SizedBox(height: 18),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFAFAFA),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: UellowColors.border),
+                    ),
+                    child: Row(children: [
+                      const Icon(Icons.business_outlined, size: 16,
+                          color: UellowColors.muted),
+                      const SizedBox(width: 8),
+                      Expanded(child: Text((v['business_name']).toString(),
+                          style: const TextStyle(fontSize: 12.5,
+                              fontWeight: FontWeight.w700,
+                              color: UellowColors.text))),
+                    ]),
+                  ),
+                ],
+              ]),
+            )),
           ]),
         ),
       ),
     );
   }
+
+  Widget _aboutChip(String label) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: UellowColors.yellowFaint,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+              color: UellowColors.yellow.withValues(alpha: .5)),
+        ),
+        child: Text(label, style: const TextStyle(fontSize: 12,
+            fontWeight: FontWeight.w800, color: UellowColors.darkBrown)),
+      );
 
   // ── stats row ──
   Widget _stats(bool ar, Map<String, dynamic> v) {
