@@ -13,7 +13,11 @@ import '../../api/uellow_api.dart';
 import '../theme/uellow_theme.dart';
 
 class BarcodeScanScreen extends StatefulWidget {
-  const BarcodeScanScreen({super.key});
+  const BarcodeScanScreen({super.key, this.returnRaw = false});
+
+  /// v2.1.66 — when true the scanner just pops with the raw scanned
+  /// value (used by the cart QR import) instead of a product lookup.
+  final bool returnRaw;
   @override
   State<BarcodeScanScreen> createState() => _BarcodeScanScreenState();
 }
@@ -30,6 +34,10 @@ class _BarcodeScanScreenState extends State<BarcodeScanScreen> {
     final code = cap.barcodes.firstOrNull?.rawValue?.trim() ?? '';
     if (code.isEmpty) return;
     setState(() => _busy = true);
+    if (widget.returnRaw) {
+      Navigator.of(context).pop(code);
+      return;
+    }
     try {
       final r = await http.post(
         Uri.parse('${UellowApi.instance.baseUrl}/api/mobile/v2/search/barcode'),

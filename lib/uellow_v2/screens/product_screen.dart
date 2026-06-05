@@ -20,7 +20,6 @@ import '../router/uellow_router.dart';
 import '../services/first_launch_service.dart';
 import '../theme/uellow_l10n.dart';
 import '../theme/uellow_theme.dart';
-import '../widgets/announcement_strip.dart';
 import '../widgets/review_requests_strip.dart';
 import 'compare_screen.dart' show CompareService;
 import 'auth_screen.dart';
@@ -262,7 +261,6 @@ class _ProductScreenState extends State<ProductScreen> {
           );
         })),
       // v2.1.57 — targeted announcement strip (admin-controlled).
-      const SliverToBoxAdapter(child: AnnouncementStrip(screen: 'product')),
       // v2.1.59 — pending/replied specialist-request strip.
       const SliverToBoxAdapter(child: ReviewRequestsStrip()),
       SliverToBoxAdapter(child: KeyedSubtree(

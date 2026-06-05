@@ -23,11 +23,11 @@ import '../router/uellow_router.dart';
 import '../services/ads_service.dart';
 import '../theme/uellow_theme.dart';
 import '../widgets/product_card.dart';
-import '../widgets/announcement_strip.dart';
 import '../widgets/review_requests_strip.dart';
 import '../widgets/review_prompt_dialog.dart';
 import '../widgets/update_gate.dart';
 import '../widgets/uellow_bottom_nav.dart';
+import '../widgets/updating_pane.dart';
 import 'dynamic_page_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -198,7 +198,6 @@ class _HomeScreenState extends State<HomeScreen> {
         slivers: [
           SliverToBoxAdapter(child: _TopBar()),
           // v2.1.57 — targeted announcement strip (admin-controlled).
-          const SliverToBoxAdapter(child: AnnouncementStrip(screen: 'home')),
           // v2.1.59 — personal strip for the customer's specialist
           // requests (pending → replied).
           const SliverToBoxAdapter(child: ReviewRequestsStrip()),
@@ -1187,30 +1186,17 @@ class _LoadingState extends StatelessWidget {
 }
 
 class _ErrorState extends StatelessWidget {
+  // v2.1.66 — friendly "app is being updated" pane (animated icon +
+  // retry) instead of the raw connection-error text.
   const _ErrorState({required this.message, required this.onRetry});
   final String message;
   final VoidCallback onRetry;
   @override
   Widget build(BuildContext context) {
-    return ListView(
-      children: [
-        const SizedBox(height: 80),
-        const Center(child: Icon(Icons.cloud_off_outlined,
-            size: 56, color: UellowColors.muted)),
-        const SizedBox(height: 14),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 30),
-          child: Text(message,
-              textAlign: TextAlign.center, style: UT.body),
-        ),
-        const SizedBox(height: 18),
-        Center(child: ElevatedButton(
-          onPressed: onRetry,
-          child: Text(UellowApi.instance.lang.toLowerCase().startsWith('ar')
-              ? 'إعادة المحاولة' : 'Retry'),
-        )),
-      ],
-    );
+    return ListView(children: [
+      const SizedBox(height: 70),
+      SizedBox(height: 380, child: UpdatingPane(onRetry: onRetry)),
+    ]);
   }
 }
 

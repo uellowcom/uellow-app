@@ -17,9 +17,11 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../api/uellow_api.dart';
 import '../router/uellow_router.dart';
+import 'announcement_strip.dart';
 import 'review_requests_strip.dart';
 import '../screens/dynamic_page_screen.dart';
 import '../theme/uellow_l10n.dart';
@@ -105,6 +107,10 @@ class DynNavItem {
 
 class NavBarCache {
   NavBarCache._() {
+    // v2.1.66 — SNAPSHOT-FIRST: the last good nav design renders from
+    // disk instantly, so the old hardcoded tabs never flash on slow
+    // starts (the same fix the home page got in v2.1.61).
+    _loadSnapshot();
     // v2.1.61 — language switch refreshes the nav design + forces every
     // listening nav bar to rebuild (labels resolve per current lang).
     UellowApi.instance.langNotifier.addListener(() {
@@ -119,6 +125,21 @@ class NavBarCache {
       ValueNotifier<List<DynNavItem>>(const []);
   bool _loaded = false;
   Future<void>? _loading;
+
+  static const _snapKey = 'navbar_cache_v1';
+
+  Future<void> _loadSnapshot() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_snapKey);
+      if (raw == null || raw.isEmpty || items.value.isNotEmpty) return;
+      final list = (jsonDecode(raw) as List)
+          .map((e) => DynNavItem.fromJson((e as Map)))
+          .where((it) => it.label.isNotEmpty)
+          .toList();
+      if (list.isNotEmpty && items.value.isEmpty) items.value = list;
+    } catch (_) {}
+  }
 
   Future<void> ensure() {
     if (_loaded) return Future.value();
@@ -145,9 +166,16 @@ class NavBarCache {
           .map((e) => DynNavItem.fromJson((e as Map)))
           .where((it) => it.label.isNotEmpty)
           .toList();
-      if (list.isNotEmpty) items.value = list;
+      if (list.isNotEmpty) {
+        items.value = list;
+        // persist for the next cold start (snapshot-first render)
+        try {
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString(_snapKey, jsonEncode(raw));
+        } catch (_) {}
+      }
     } catch (_) {
-      // ignore — fall back to hardcoded tabs
+      // ignore — snapshot (already rendered) or hardcoded tabs stay
     } finally {
       _loaded = true;
     }
@@ -252,11 +280,26 @@ class _UellowBottomNavState extends State<UellowBottomNav> {
   }
 
   @override
+  // v2.1.66 — admin Announcement Strips render directly ABOVE the nav bar
+  // (so they only ever appear on pages that HAVE a nav bar) and stay
+  // screen-targeted via the tab → screen mapping.
+  String _stripScreen() {
+    switch (widget.active) {
+      case UNavTab.home:    return 'home';
+      case UNavTab.shop:    return 'shop';
+      case UNavTab.cart:    return 'cart';
+      case UNavTab.account: return 'account';
+      case UNavTab.reels:   return 'reels';
+      case UNavTab.beena:   return 'beena';
+    }
+  }
+
   Widget build(BuildContext context) {
     // v2.1.62 — the specialist-review banner floats ABOVE the nav bar on
     // every page that carries it, until the customer closes it.
     return Column(mainAxisSize: MainAxisSize.min, children: [
       const ReviewReplyBanner(),
+      AnnouncementStrip(screen: _stripScreen()),
       ValueListenableBuilder<List<DynNavItem>>(
         valueListenable: NavBarCache.instance.items,
         builder: (_, items, __) {
@@ -315,17 +358,29 @@ class _UellowBottomNavState extends State<UellowBottomNav> {
               onTap: () => _gotoDyn(context, it),
               child: Stack(alignment: Alignment.center, children: [
                 Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                  _renderNavIcon(
-                    it.icon,
-                    color: on ? UellowColors.darkBrown : const Color(0xFF3F3F3F),
-                    size: 22,
+                  // v2.1.66 — the ACTIVE tab gets a yellow pill behind its
+                  // icon so the current page is unmistakable.
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 3),
+                    decoration: on
+                        ? BoxDecoration(
+                            color: UellowColors.yellow,
+                            borderRadius: BorderRadius.circular(14),
+                          )
+                        : null,
+                    child: _renderNavIcon(
+                      it.icon,
+                      color: on ? UellowColors.darkBrown : const Color(0xFF3F3F3F),
+                      size: 22,
+                    ),
                   ),
                   const SizedBox(height: 2),
                   Text(it.label, maxLines: 1, overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                           fontSize: 10.5,
                           color: on ? UellowColors.darkBrown : const Color(0xFF3F3F3F),
-                          fontWeight: FontWeight.w600)),
+                          fontWeight: on ? FontWeight.w900 : FontWeight.w600)),
                 ]),
                 if (badge > 0) Positioned(
                   top: 4, right: 20,
@@ -356,10 +411,21 @@ class _UellowBottomNavState extends State<UellowBottomNav> {
       onTap: () => _goto(context, tab),
       child: Stack(alignment: Alignment.center, children: [
         Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-          Icon(icon, size: 22, color: col),
+          // v2.1.66 — yellow pill behind the active tab's icon.
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 3),
+            decoration: on
+                ? BoxDecoration(
+                    color: UellowColors.yellow,
+                    borderRadius: BorderRadius.circular(14),
+                  )
+                : null,
+            child: Icon(icon, size: 22, color: col),
+          ),
           const SizedBox(height: 3),
           Text(label, style: TextStyle(
-              fontSize: 10.5, color: col, fontWeight: FontWeight.w600)),
+              fontSize: 10.5, color: col,
+              fontWeight: on ? FontWeight.w900 : FontWeight.w600)),
         ]),
         if (badge > 0) Positioned(
           top: 6, right: 28,

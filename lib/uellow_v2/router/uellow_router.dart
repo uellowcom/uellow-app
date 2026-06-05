@@ -132,7 +132,11 @@ class UellowRouter {
     Routes.settings:      (ctx) => const SettingsScreen(),
     Routes.profile:       (ctx) => const ProfileScreen(),
     Routes.addresses:     (ctx) => const AddressesScreen(),
-    Routes.scan:          (ctx) => const BarcodeScanScreen(),
+    Routes.scan:          (ctx) {
+      final args = ModalRoute.of(ctx)?.settings.arguments;
+      final raw = args is Map && args['return_raw'] == true;
+      return BarcodeScanScreen(returnRaw: raw);
+    },
     Routes.reels:         (ctx) => const ReelsScreen(),
     Routes.freeShipping:  (ctx) => const FreeShippingScreen(),
     Routes.deliveryCoverage: (ctx) => const DeliveryCoverageScreen(),

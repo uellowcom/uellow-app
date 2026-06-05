@@ -1,11 +1,11 @@
 // =============================================================================
-// VendorScreen — REAL vendor store (v2.1.56 full rewrite).
-// Everything on this page is live data from /api/mobile/v2/vendors/<id>:
-// hero (brand color/banner), logo, bilingual name + tagline, true rating,
-// real stats (products / orders / rating / SLA), category chips, sortable
-// paginated product grid, about sheet, working follow (persisted) + share.
-// The old screen was hardcoded mock content ("Uellow Official", fake flash,
-// placeholder cards) — all removed.
+// VendorScreen — premium vendor storefront (v2.1.66 full redesign).
+// ONE call to /api/mobile/v2/vendors/<id>/storefront powers the page:
+//   hero (banner/brand color) → info card (logo/name/rating/follow)
+//   → stats → ⚡ flash sale rail → offers/coupons → categories menu
+//   → 🆕 new arrivals rail → 🏆 best sellers rail → per-category rails
+//   → customer reviews → "all products" paginated grid (more products).
+// Every rail/grid uses the standard adopted ProductCard.
 // =============================================================================
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
@@ -16,6 +16,7 @@ import '../../api/uellow_api.dart';
 import '../../api/uellow_models.dart';
 import '../theme/uellow_theme.dart';
 import '../widgets/product_card.dart';
+import '../widgets/updating_pane.dart';
 
 class VendorScreen extends StatefulWidget {
   const VendorScreen({super.key, required this.vendorId});
@@ -25,26 +26,23 @@ class VendorScreen extends StatefulWidget {
 }
 
 class _VendorScreenState extends State<VendorScreen> {
-  Map<String, dynamic>? _vendor;     // null = loading
+  Map<String, dynamic>? _store;      // storefront payload, null = loading
   bool _error = false;
 
-  // products
+  // "All products" grid (tail of the page)
   final List<UellowProductCard> _items = [];
-  String _sort = 'newest';
   int _page = 1;
   bool _hasMore = true;
   bool _loading = false;
 
   bool _following = false;
-
   final _scroll = ScrollController();
 
   @override
   void initState() {
     super.initState();
     _scroll.addListener(() {
-      if (_scroll.position.pixels >
-          _scroll.position.maxScrollExtent - 400) {
+      if (_scroll.position.pixels > _scroll.position.maxScrollExtent - 400) {
         _loadMore();
       }
     });
@@ -56,12 +54,15 @@ class _VendorScreenState extends State<VendorScreen> {
 
   Future<void> _load() async {
     try {
-      final v = await UellowApi.instance.vendors.detail(widget.vendorId);
+      final res = await UellowApi.instance.getRaw(
+          '/api/mobile/v2/vendors/${widget.vendorId}/storefront');
+      final data = (res['data'] as Map?)?.cast<String, dynamic>();
+      if (data == null) throw Exception('empty');
       final prefs = await SharedPreferences.getInstance();
       final followed = prefs.getStringList('followed_vendors') ?? const [];
       if (!mounted) return;
       setState(() {
-        _vendor = v;
+        _store = data;
         _following = followed.contains('${widget.vendorId}');
       });
       _loadMore();
@@ -75,7 +76,7 @@ class _VendorScreenState extends State<VendorScreen> {
     setState(() => _loading = true);
     try {
       final page = await UellowApi.instance.vendors.products(
-          widget.vendorId, sort: _sort, page: _page, perPage: 20);
+          widget.vendorId, sort: 'newest', page: _page, perPage: 20);
       if (!mounted) return;
       setState(() {
         _items.addAll(page.items);
@@ -86,14 +87,6 @@ class _VendorScreenState extends State<VendorScreen> {
     } catch (_) {
       if (mounted) setState(() { _loading = false; _hasMore = false; });
     }
-  }
-
-  void _changeSort(String s) {
-    if (s == _sort) return;
-    setState(() {
-      _sort = s; _items.clear(); _page = 1; _hasMore = true; _loading = false;
-    });
-    _loadMore();
   }
 
   Future<void> _toggleFollow() async {
@@ -126,21 +119,37 @@ class _VendorScreenState extends State<VendorScreen> {
     } catch (_) {}
   }
 
-  String _name() {
+  Map<String, dynamic> get _v =>
+      (_store?['vendor'] as Map?)?.cast<String, dynamic>() ?? const {};
+
+  String _bi(Map? m) {
     final ar = UellowApi.instance.lang == 'ar';
-    final n = (_vendor?['name'] as Map?)?.cast<String, dynamic>();
-    return ((ar ? (n?['ar']) : (n?['en'])) ?? n?['en'] ?? '').toString();
+    final mm = m?.cast<String, dynamic>();
+    return ((ar ? (mm?['ar']) : (mm?['en'])) ?? mm?['en'] ?? '').toString();
   }
+
+  String _name() => _bi(_v['name'] as Map?);
 
   Color _brandColor() {
     try {
-      var s = (_vendor?['brand_color'] ?? '#412402')
-          .toString().replaceAll('#', '');
+      var s = (_v['brand_color'] ?? '#412402').toString().replaceAll('#', '');
       if (s.length == 6) s = 'FF$s';
       return Color(int.parse(s, radix: 16));
     } catch (_) {
       return UellowColors.darkBrown;
     }
+  }
+
+  List<UellowProductCard> _cards(String key, [Map? src]) {
+    final raw = ((src ?? _store)?[key] as List?) ?? const [];
+    final out = <UellowProductCard>[];
+    for (final e in raw) {
+      try {
+        out.add(UellowProductCard.fromJson(
+            (e as Map).cast<String, dynamic>()));
+      } catch (_) {}
+    }
+    return out;
   }
 
   @override
@@ -151,11 +160,11 @@ class _VendorScreenState extends State<VendorScreen> {
       child: Scaffold(
         backgroundColor: UellowColors.bg,
         body: _error
-            ? _ErrorPane(onRetry: () {
-                setState(() { _error = false; _vendor = null; });
+            ? UpdatingPane(onRetry: () {
+                setState(() { _error = false; _store = null; });
                 _load();
               })
-            : _vendor == null
+            : _store == null
                 ? const Center(child: CircularProgressIndicator(
                     color: UellowColors.darkBrown))
                 : _content(ar),
@@ -164,25 +173,64 @@ class _VendorScreenState extends State<VendorScreen> {
   }
 
   Widget _content(bool ar) {
-    final v = _vendor!;
+    final v = _v;
     final rating = (v['rating'] as Map?)?.cast<String, dynamic>() ?? const {};
     final avg = ((rating['avg'] as num?) ?? 0).toDouble();
     final rCount = ((rating['count'] as num?) ?? 0).toInt();
     final cats = List<Map<String, dynamic>>.from(
-        (v['categories'] as List?) ?? const []);
-    final aboutMap = (v['about'] as Map?)?.cast<String, dynamic>();
-    final about = ((ar ? (aboutMap?['ar']) : (aboutMap?['en']))
-        ?? aboutMap?['en'] ?? '').toString().trim();
-    final tagMap = (v['tagline'] as Map?)?.cast<String, dynamic>();
-    final tagline = ((ar ? (tagMap?['ar']) : (tagMap?['en']))
-        ?? tagMap?['en'] ?? '').toString().trim();
+        (_store?['categories'] as List?) ?? const []);
+    final about = _bi(v['about'] as Map?).trim();
+    final tagline = _bi(v['tagline'] as Map?).trim();
+    final flash = (_store?['flash_sale'] as Map?)?.cast<String, dynamic>();
+    final offers = List<Map<String, dynamic>>.from(
+        (_store?['offers'] as List?) ?? const []);
+    final rails = List<Map<String, dynamic>>.from(
+        (_store?['category_rails'] as List?) ?? const []);
+    final reviews = (_store?['reviews'] as Map?)?.cast<String, dynamic>();
+    final reviewItems = List<Map<String, dynamic>>.from(
+        (reviews?['items'] as List?) ?? const []);
+    final newArrivals = _cards('new_arrivals');
+    final bestSellers = _cards('best_sellers');
 
     return CustomScrollView(controller: _scroll, slivers: [
       SliverToBoxAdapter(child: _hero(v)),
       SliverToBoxAdapter(child: _infoCard(ar, avg, rCount, tagline, about)),
       SliverToBoxAdapter(child: _stats(ar, v)),
+
+      // ⚡ Flash sale — vendor's own live campaign
+      if (flash != null && (flash['products'] as List?)?.isNotEmpty == true)
+        SliverToBoxAdapter(child: _flashRail(ar, flash)),
+
+      // 🎟 Offers / coupons & joined campaigns
+      if (offers.isNotEmpty)
+        SliverToBoxAdapter(child: _offersRow(ar, offers)),
+
+      // 📂 Categories menu
       if (cats.isNotEmpty) SliverToBoxAdapter(child: _catChips(ar, cats)),
-      SliverToBoxAdapter(child: _sortBar(ar)),
+
+      // 🆕 New arrivals
+      if (newArrivals.isNotEmpty)
+        SliverToBoxAdapter(child: _rail(
+            ar ? '🆕 وصل حديثاً' : '🆕 New Arrivals', newArrivals)),
+
+      // 🏆 Best sellers
+      if (bestSellers.isNotEmpty)
+        SliverToBoxAdapter(child: _rail(
+            ar ? '🏆 الأكثر مبيعاً' : '🏆 Best Sellers', bestSellers)),
+
+      // 📂 One rail per category that has products
+      for (final r in rails)
+        SliverToBoxAdapter(child: _rail(
+            _bi((r['category'] as Map?)?['name'] as Map?),
+            _cards('products', r))),
+
+      // ⭐ Customer reviews
+      if (reviewItems.isNotEmpty)
+        SliverToBoxAdapter(child: _reviewsBlock(ar, reviews!, reviewItems)),
+
+      // 🛍 All products (more products)
+      SliverToBoxAdapter(child: _sectionTitle(
+          ar ? '🛍 المزيد من المنتجات' : '🛍 More products')),
       _productsGrid(),
       SliverToBoxAdapter(child: _loading
           ? const Padding(padding: EdgeInsets.all(18),
@@ -210,7 +258,6 @@ class _VendorScreenState extends State<VendorScreen> {
                 ? banner : '${UellowApi.instance.baseUrl}$banner',
             fit: BoxFit.cover,
             errorWidget: (_, __, ___) => const SizedBox.shrink()),
-      // soft dark veil so the buttons always read
       Container(color: Colors.black.withValues(alpha: 0.12)),
       SafeArea(child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -236,7 +283,7 @@ class _VendorScreenState extends State<VendorScreen> {
   // ── info card: logo + name + rating + follow/contact ──
   Widget _infoCard(bool ar, double avg, int rCount,
       String tagline, String about) {
-    final v = _vendor!;
+    final v = _v;
     final logo = (v['logo'] as String?) ?? '';
     final name = _name();
     final tier = (v['tier'] ?? 'standard').toString();
@@ -254,10 +301,10 @@ class _VendorScreenState extends State<VendorScreen> {
           Container(
             width: 72, height: 72,
             clipBehavior: Clip.antiAlias,
-            decoration: BoxDecoration(
+            decoration: const BoxDecoration(
               color: UellowColors.yellowLight,
-              borderRadius: const BorderRadius.all(Radius.circular(18)),
-              boxShadow: const [BoxShadow(color: Color(0x33000000),
+              borderRadius: BorderRadius.all(Radius.circular(18)),
+              boxShadow: [BoxShadow(color: Color(0x33000000),
                   blurRadius: 14, offset: Offset(0, 6))],
             ),
             alignment: Alignment.center,
@@ -308,7 +355,6 @@ class _VendorScreenState extends State<VendorScreen> {
                       color: UellowColors.muted)),
             ),
             const SizedBox(height: 4),
-            // Real rating — hidden entirely when no reviews yet.
             if (rCount > 0) Row(children: [
               for (var i = 0; i < 5; i++) Icon(
                 i < avg.round() ? Icons.star_rounded
@@ -384,7 +430,7 @@ class _VendorScreenState extends State<VendorScreen> {
   }
 
   void _showAbout(bool ar, String about) {
-    final v = _vendor!;
+    final v = _v;
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.white,
@@ -414,7 +460,7 @@ class _VendorScreenState extends State<VendorScreen> {
     );
   }
 
-  // ── real stats row ──
+  // ── stats row ──
   Widget _stats(bool ar, Map<String, dynamic> v) {
     String fmt(num? n) {
       final x = (n ?? 0).toInt();
@@ -458,82 +504,281 @@ class _VendorScreenState extends State<VendorScreen> {
     );
   }
 
-  // ── real category chips (top categories this vendor sells) ──
-  Widget _catChips(bool ar, List<Map<String, dynamic>> cats) {
+  // ── ⚡ flash sale rail (dark band + countdown-ish end time) ──
+  Widget _flashRail(bool ar, Map<String, dynamic> flash) {
+    final prods = _cards('products', flash);
+    if (prods.isEmpty) return const SizedBox.shrink();
+    final pct = ((flash['discount_pct'] as num?) ?? 0).toInt();
+    final ends = (flash['ends_at'] as String?) ?? '';
+    final endsTxt = ends.length >= 16
+        ? ends.replaceFirst('T', ' ').substring(0, 16) : '';
     return Container(
-      transform: Matrix4.translationValues(0, -26, 0),
-      color: Colors.white,
-      padding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
-      child: SizedBox(height: 30, child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        itemCount: cats.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 6),
-        itemBuilder: (_, i) {
-          final c = cats[i];
-          final nm = (c['name'] as Map?)?.cast<String, dynamic>();
-          final label = ((ar ? (nm?['ar']) : (nm?['en']))
-              ?? nm?['en'] ?? '').toString();
-          final count = ((c['count'] as num?) ?? 0).toInt();
-          return GestureDetector(
-            onTap: () => Navigator.pushNamed(context, '/collection',
-                arguments: {'category_id': (c['id'] as num?)?.toInt()}),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: const Color(0xFFF7F7F7),
-                border: Border.all(color: UellowColors.border),
-                borderRadius: BorderRadius.circular(999),
-              ),
-              child: Text('$label ($count)', style: const TextStyle(
-                  fontSize: 11, fontWeight: FontWeight.w700,
-                  color: UellowColors.ink)),
-            ),
-          );
-        },
-      )),
-    );
-  }
-
-  // ── sort tabs (real backend sorts) ──
-  Widget _sortBar(bool ar) {
-    final tabs = <(String, String)>[
-      ('newest', ar ? 'الأحدث' : 'Newest'),
-      ('top_rated', ar ? 'الأعلى تقييماً' : 'Top rated'),
-      ('price_asc', ar ? 'السعر ⬆' : 'Price ↑'),
-      ('price_desc', ar ? 'السعر ⬇' : 'Price ↓'),
-    ];
-    return Container(
-      transform: Matrix4.translationValues(0, -26, 0),
-      color: Colors.white,
-      padding: const EdgeInsets.fromLTRB(14, 0, 14, 10),
-      child: Row(children: [
-        for (final t in tabs) Padding(
-          padding: const EdgeInsetsDirectional.only(end: 6),
-          child: GestureDetector(
-            onTap: () => _changeSort(t.$1),
-            child: Container(
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: _sort == t.$1
-                    ? UellowColors.darkBrown : Colors.white,
-                border: Border.all(color: _sort == t.$1
-                    ? UellowColors.darkBrown : UellowColors.border),
-                borderRadius: BorderRadius.circular(999),
-              ),
-              child: Text(t.$2, style: TextStyle(
-                  fontSize: 11, fontWeight: FontWeight.w800,
-                  color: _sort == t.$1
-                      ? UellowColors.yellowLight : UellowColors.text)),
-            ),
-          ),
+      margin: const EdgeInsets.fromLTRB(0, 0, 0, 10),
+      padding: const EdgeInsets.only(bottom: 12),
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft, end: Alignment.bottomRight,
+          colors: [Color(0xFF412402), Color(0xFF6B4A1B)],
         ),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(14, 12, 14, 8),
+          child: Row(children: [
+            Text(ar ? '⚡ تخفيضات المتجر' : '⚡ Store Flash Sale',
+                style: const TextStyle(color: UellowColors.yellow,
+                    fontWeight: FontWeight.w900, fontSize: 14.5)),
+            const SizedBox(width: 8),
+            if (pct > 0) Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              decoration: BoxDecoration(
+                color: UellowColors.yellow,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text('-$pct%', style: const TextStyle(
+                  color: UellowColors.darkBrown,
+                  fontWeight: FontWeight.w900, fontSize: 11)),
+            ),
+            const Spacer(),
+            if (endsTxt.isNotEmpty)
+              Text(ar ? 'حتى $endsTxt' : 'until $endsTxt',
+                  style: const TextStyle(color: Colors.white70,
+                      fontSize: 10)),
+          ]),
+        ),
+        SizedBox(height: 290, child: ListView.separated(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          itemCount: prods.length,
+          separatorBuilder: (_, __) => const SizedBox(width: 8),
+          itemBuilder: (_, i) => SizedBox(width: 168,
+              child: ProductCard(rich: true, product: prods[i])),
+        )),
       ]),
     );
   }
 
-  // ── real product grid ──
+  // ── 🎟 offers / coupons row ──
+  Widget _offersRow(bool ar, List<Map<String, dynamic>> offers) {
+    return Container(
+      color: Colors.white,
+      padding: const EdgeInsets.fromLTRB(0, 6, 0, 10),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        _sectionTitle(ar ? '🎟 كوبونات وعروض المتجر' : '🎟 Store coupons & offers'),
+        SizedBox(height: 74, child: ListView.separated(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          itemCount: offers.length,
+          separatorBuilder: (_, __) => const SizedBox(width: 8),
+          itemBuilder: (_, i) {
+            final o = offers[i];
+            final pct = ((o['discount_pct'] as num?) ?? 0).toInt();
+            final to = (o['date_to'] as String?) ?? '';
+            final toTxt = to.length >= 10 ? to.substring(0, 10) : '';
+            return Container(
+              width: 230,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFFFFF6D9), Color(0xFFFFEDB3)],
+                ),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                    color: UellowColors.yellow.withValues(alpha: .7)),
+              ),
+              child: Row(children: [
+                Text((o['emoji'] ?? '🎉').toString(),
+                    style: const TextStyle(fontSize: 24)),
+                const SizedBox(width: 10),
+                Expanded(child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(_bi(o['label'] as Map?), maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontWeight: FontWeight.w900,
+                          fontSize: 12, color: UellowColors.darkBrown)),
+                  const SizedBox(height: 2),
+                  Text([
+                    if (pct > 0) (ar ? 'خصم حتى $pct%' : 'Up to $pct% off'),
+                    if (toTxt.isNotEmpty) (ar ? 'حتى $toTxt' : 'till $toTxt'),
+                  ].join(' · '),
+                      style: const TextStyle(fontSize: 10,
+                          color: Color(0xFF8B6508),
+                          fontWeight: FontWeight.w700)),
+                ])),
+              ]),
+            );
+          },
+        )),
+      ]),
+    );
+  }
+
+  // ── 📂 category chips menu ──
+  Widget _catChips(bool ar, List<Map<String, dynamic>> cats) {
+    return Container(
+      color: Colors.white,
+      padding: const EdgeInsets.fromLTRB(0, 4, 0, 12),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        _sectionTitle(ar ? '📂 أقسام المتجر' : '📂 Store sections'),
+        SizedBox(height: 32, child: ListView.separated(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          itemCount: cats.length,
+          separatorBuilder: (_, __) => const SizedBox(width: 6),
+          itemBuilder: (_, i) {
+            final c = cats[i];
+            final label = _bi(c['name'] as Map?);
+            final count = ((c['count'] as num?) ?? 0).toInt();
+            return GestureDetector(
+              onTap: () => Navigator.pushNamed(context, '/collection',
+                  arguments: {'category_id': (c['id'] as num?)?.toInt()}),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 13),
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: UellowColors.yellowFaint,
+                  border: Border.all(
+                      color: UellowColors.yellow.withValues(alpha: .55)),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text('$label ($count)', style: const TextStyle(
+                    fontSize: 11.5, fontWeight: FontWeight.w800,
+                    color: UellowColors.darkBrown)),
+              ),
+            );
+          },
+        )),
+      ]),
+    );
+  }
+
+  // ── generic horizontal product rail ──
+  Widget _rail(String title, List<UellowProductCard> prods) {
+    if (prods.isEmpty) return const SizedBox.shrink();
+    return Container(
+      color: Colors.white,
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.only(top: 4, bottom: 10),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        _sectionTitle(title),
+        SizedBox(height: 290, child: ListView.separated(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          itemCount: prods.length,
+          separatorBuilder: (_, __) => const SizedBox(width: 8),
+          itemBuilder: (_, i) => SizedBox(width: 168,
+              child: ProductCard(rich: true, product: prods[i])),
+        )),
+      ]),
+    );
+  }
+
+  Widget _sectionTitle(String t) => Padding(
+        padding: const EdgeInsets.fromLTRB(14, 8, 14, 8),
+        child: Text(t, style: const TextStyle(fontSize: 14.5,
+            fontWeight: FontWeight.w900, color: UellowColors.ink)),
+      );
+
+  // ── ⭐ reviews block ──
+  Widget _reviewsBlock(bool ar, Map<String, dynamic> reviews,
+      List<Map<String, dynamic>> items) {
+    final summary = (reviews['summary'] as Map?)?.cast<String, dynamic>()
+        ?? const {};
+    final avg = ((summary['avg'] as num?) ?? 0).toDouble();
+    final count = ((summary['count'] as num?) ?? 0).toInt();
+    return Container(
+      color: Colors.white,
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.only(top: 4, bottom: 12),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(14, 8, 14, 8),
+          child: Row(children: [
+            Text(ar ? '⭐ آراء العملاء' : '⭐ Customer reviews',
+                style: const TextStyle(fontSize: 14.5,
+                    fontWeight: FontWeight.w900, color: UellowColors.ink)),
+            const Spacer(),
+            if (count > 0)
+              Text('${avg.toStringAsFixed(1)} · $count',
+                  style: const TextStyle(fontSize: 12,
+                      fontWeight: FontWeight.w800,
+                      color: UellowColors.muted)),
+          ]),
+        ),
+        SizedBox(height: 132, child: ListView.separated(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          itemCount: items.length,
+          separatorBuilder: (_, __) => const SizedBox(width: 8),
+          itemBuilder: (_, i) {
+            final r = items[i];
+            final stars = ((r['stars'] as num?) ?? 0).round();
+            final prod = (r['product'] as Map?)?.cast<String, dynamic>();
+            final img = (prod?['image'] as String?) ?? '';
+            return Container(
+              width: 250,
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFAFAFA),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: UellowColors.border),
+              ),
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Row(children: [
+                  if (img.isNotEmpty) ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: CachedNetworkImage(imageUrl: img,
+                        width: 34, height: 34, fit: BoxFit.cover,
+                        errorWidget: (_, __, ___) =>
+                            const SizedBox(width: 34, height: 34)),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                    Row(children: [
+                      for (var s = 0; s < 5; s++) Icon(
+                          s < stars ? Icons.star_rounded
+                                    : Icons.star_outline_rounded,
+                          size: 12,
+                          color: s < stars ? const Color(0xFFFFC107)
+                                           : const Color(0xFFCFCFCF)),
+                      const SizedBox(width: 4),
+                      if (r['verified'] == true)
+                        Text(ar ? '✓ شراء موثّق' : '✓ Verified',
+                            style: const TextStyle(fontSize: 8.5,
+                                color: Color(0xFF15803D),
+                                fontWeight: FontWeight.w800)),
+                    ]),
+                    Text(_bi(prod?['name'] as Map?), maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 10,
+                            color: UellowColors.muted)),
+                  ])),
+                ]),
+                const SizedBox(height: 6),
+                Expanded(child: Text(
+                    ((r['title'] ?? '').toString().isNotEmpty
+                        ? '${r['title']} — ' : '') +
+                    (r['text'] ?? '').toString(),
+                    maxLines: 3, overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 11.5, height: 1.4,
+                        color: UellowColors.text))),
+                Text((r['customer'] ?? '').toString(),
+                    style: const TextStyle(fontSize: 10,
+                        fontWeight: FontWeight.w800,
+                        color: UellowColors.muted)),
+              ]),
+            );
+          },
+        )),
+      ]),
+    );
+  }
+
+  // ── all-products grid (the "more products" tail) ──
   Widget _productsGrid() {
     if (_items.isEmpty && !_loading) {
       final ar = UellowApi.instance.lang == 'ar';
@@ -561,23 +806,5 @@ class _VendorScreenState extends State<VendorScreen> {
         ),
       ),
     );
-  }
-}
-
-class _ErrorPane extends StatelessWidget {
-  const _ErrorPane({required this.onRetry});
-  final VoidCallback onRetry;
-  @override
-  Widget build(BuildContext context) {
-    final ar = UellowApi.instance.lang == 'ar';
-    return Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
-      const Icon(Icons.cloud_off_outlined, size: 56, color: UellowColors.muted),
-      const SizedBox(height: 12),
-      Text(ar ? 'تعذّر تحميل المتجر' : 'Could not load this store',
-          style: UT.body),
-      const SizedBox(height: 14),
-      ElevatedButton(onPressed: onRetry,
-          child: Text(ar ? 'إعادة المحاولة' : 'Retry')),
-    ]));
   }
 }

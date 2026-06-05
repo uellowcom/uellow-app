@@ -53,12 +53,15 @@ class _AffiliateScreenState extends State<AffiliateScreen> {
       textDirection: ar ? TextDirection.rtl : TextDirection.ltr,
       child: Scaffold(
         backgroundColor: UellowColors.bg,
+        // v2.1.66 — yellow header (brown looked off) + an always-visible
+        // dark back arrow.
         appBar: AppBar(
-          backgroundColor: UellowColors.darkBrown,
-          foregroundColor: UellowColors.yellowLight,
+          backgroundColor: UellowColors.yellow,
+          foregroundColor: UellowColors.darkBrown,
+          leading: const BackButton(color: UellowColors.darkBrown),
           title: Text(ar ? '🤝 شركاء يلو' : '🤝 Uellow Partners',
               style: const TextStyle(fontWeight: FontWeight.w900,
-                  fontSize: 16)),
+                  fontSize: 16, color: UellowColors.darkBrown)),
         ),
         body: _body(ar),
       ),

@@ -918,6 +918,24 @@ class _CartApi {
     return (res['data']?['url'] as String?) ?? '';
   }
 
+  /// v2.1.66 — full share payload for the QR dialog:
+  /// {url, token, serial, serial_display}.
+  Future<Map<String, dynamic>> shareDetails() async {
+    final res = await _c._post(EP.cartShare);
+    return (res['data'] as Map?)?.cast<String, dynamic>() ?? {};
+  }
+
+  /// v2.1.66 — adopt a shared cart by QR value / link / typed serial.
+  /// Returns (cart, addedCount).
+  Future<(UellowCart, int)> importShared(String code) async {
+    final res = await _c._post('/api/mobile/v2/cart/import',
+        body: {'code': code});
+    final cart = UellowCart.fromJson(
+        (res['data']?['cart'] as Map).cast<String, dynamic>());
+    await _save(cart);
+    return (cart, (res['data']?['added'] as num?)?.toInt() ?? 0);
+  }
+
   Future<UellowCart> bulkRemove(List<int> lineIds) async {
     final res = await _c._post(EP.cartBulkRemove, body: {'line_ids': lineIds});
     return _save(UellowCart.fromJson(res['data']['cart']));

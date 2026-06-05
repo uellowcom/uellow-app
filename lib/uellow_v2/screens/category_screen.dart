@@ -14,7 +14,6 @@ import '../../api/uellow_api.dart';
 import '../../api/uellow_models.dart';
 import '../router/uellow_router.dart';
 import '../theme/uellow_theme.dart';
-import '../widgets/announcement_strip.dart';
 import '../widgets/product_card.dart';
 import '../widgets/uellow_bottom_nav.dart';
 
@@ -61,7 +60,6 @@ class _CategoryScreenState extends State<CategoryScreen> {
       body: SafeArea(child: Column(children: [
         const _CatTopBar(),
         // v2.1.57 — targeted announcement strip (admin-controlled).
-        const AnnouncementStrip(screen: 'shop'),
         if (_searchQuery != null && _searchQuery!.isNotEmpty)
           _SearchResultsHeader(query: _searchQuery!),
         Expanded(

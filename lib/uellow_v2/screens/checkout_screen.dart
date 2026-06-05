@@ -22,6 +22,7 @@ import '../router/uellow_router.dart';
 import '../services/first_launch_service.dart';
 import '../theme/uellow_l10n.dart';
 import '../theme/uellow_theme.dart';
+import '../widgets/updating_pane.dart';
 import 'address_picker_screen.dart';
 import 'addresses_screen.dart';
 import 'auth_screen.dart';
@@ -490,35 +491,10 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                 ]),
               ));
             }
-            final friendly = ar
-                ? 'تعذّر تحميل صفحة الإتمام — تحقق من اتصالك وحاول مرة أخرى'
-                : 'Could not load checkout — check your connection and try again';
-            return Center(child: Padding(
-              padding: const EdgeInsets.all(30),
-              child: Column(mainAxisSize: MainAxisSize.min, children: [
-                const Icon(Icons.cloud_off_outlined, size: 56, color: UellowColors.muted),
-                const SizedBox(height: 14),
-                Text(friendly, textAlign: TextAlign.center, style: UT.body),
-                const SizedBox(height: 6),
-                // Show the raw error in a small dim line so we can debug
-                // if the user reports the problem with a screenshot.
-                Text(rawMsg, textAlign: TextAlign.center,
-                    maxLines: 2, overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 10.5,
-                        color: UellowColors.muted)),
-                const SizedBox(height: 18),
-                ElevatedButton.icon(
-                  onPressed: () => setState(() => _data = _bootstrap()),
-                  icon: const Icon(Icons.refresh, size: 16),
-                  label: Text(ar ? 'إعادة المحاولة' : 'Retry'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: UellowColors.yellow,
-                    foregroundColor: UellowColors.darkBrown,
-                    padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
-                  ),
-                ),
-              ]),
-            ));
+            // v2.1.66 — friendly "app is being updated" pane instead of
+            // the raw connection error.
+            return UpdatingPane(
+                onRetry: () => setState(() => _data = _bootstrap()));
           }
           return _content(snap.data!);
         },

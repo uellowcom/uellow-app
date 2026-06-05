@@ -5,14 +5,17 @@
 // =============================================================================
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../api/uellow_api.dart';
 import '../../api/uellow_models.dart';
 import '../router/uellow_router.dart';
 import '../theme/uellow_theme.dart';
-import '../widgets/announcement_strip.dart';
 import '../widgets/product_card.dart';
+import '../widgets/updating_pane.dart';
 
 class CartScreen extends StatefulWidget {
   const CartScreen({super.key});
@@ -75,27 +78,274 @@ class _CartScreenState extends State<CartScreen> {
     }
   }
 
-  Future<void> _shareCart() async {
-    // v2.0.77 — was only catching UellowApiException, so a PlatformException
-    // from share_plus (e.g. no installed share targets) bubbled up as a red
-    // overlay. Now any failure surfaces as a friendly snackbar.
+  // ── v2.1.66 — QR share dialog ──────────────────────────────────────
+  // QR (scan → cart opens on the friend's app) + readable serial +
+  // WhatsApp / copy link / generic share.
+  Future<void> _shareCartDialog() async {
     final ar = UellowApi.instance.lang == 'ar';
+    Map<String, dynamic> d;
     try {
-      final url = await UellowApi.instance.cart.share();
-      if (url.isEmpty) {
-        _snack(ar ? 'تعذّر مشاركة السلة' : 'Could not share cart');
-        return;
-      }
-      final msg = ar
-          ? 'شاهد سلتي في يلو 🛒\n$url'
-          : 'Check out my Uellow cart 🛒\n$url';
-      await Share.share(msg, subject: ar ? 'سلتي' : 'My Uellow cart');
+      d = await UellowApi.instance.cart.shareDetails();
     } on UellowApiException catch (e) {
       _snack(e.message);
-    } catch (e) {
-      _snack(ar
-          ? 'تعذّر فتح المشاركة — تأكد من تثبيت تطبيقات مشاركة'
-          : 'Sharing failed — make sure a share target app is installed');
+      return;
+    } catch (_) {
+      _snack(ar ? 'تعذّر مشاركة السلة' : 'Could not share cart');
+      return;
+    }
+    final url = (d['url'] as String?) ?? '';
+    final serial = (d['serial_display'] as String?)
+        ?? (d['serial'] as String?) ?? '';
+    if (url.isEmpty || !mounted) return;
+    final msg = ar
+        ? 'شاهد سلتي في يلو 🛒\n$url\nأو أدخل الرمز في التطبيق: $serial'
+        : 'Check out my Uellow cart 🛒\n$url\nOr enter this code in the app: $serial';
+    await showDialog(
+      context: context,
+      builder: (dctx) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 18, 20, 16),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            Row(children: [
+              const Icon(Icons.shopping_cart_outlined,
+                  color: UellowColors.darkBrown, size: 20),
+              const SizedBox(width: 8),
+              Expanded(child: Text(ar ? 'مشاركة سلتي' : 'Share my cart',
+                  style: const TextStyle(fontWeight: FontWeight.w900,
+                      fontSize: 15, color: UellowColors.ink))),
+              IconButton(
+                visualDensity: VisualDensity.compact,
+                onPressed: () => Navigator.of(dctx).pop(),
+                icon: const Icon(Icons.close, size: 20,
+                    color: UellowColors.muted),
+              ),
+            ]),
+            const SizedBox(height: 10),
+            // QR — a friend scans it from the cart's import button
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: UellowColors.yellow, width: 2),
+              ),
+              child: QrImageView(
+                data: url, size: 180,
+                backgroundColor: Colors.white,
+                eyeStyle: const QrEyeStyle(
+                    eyeShape: QrEyeShape.square,
+                    color: UellowColors.darkBrown),
+                dataModuleStyle: const QrDataModuleStyle(
+                    dataModuleShape: QrDataModuleShape.square,
+                    color: UellowColors.darkBrown),
+              ),
+            ),
+            const SizedBox(height: 10),
+            Text(ar ? 'أو أدخل الرمز يدوياً' : 'or enter this code',
+                style: UT.small),
+            const SizedBox(height: 4),
+            // Serial — tap to copy
+            InkWell(
+              borderRadius: BorderRadius.circular(10),
+              onTap: () async {
+                await Clipboard.setData(ClipboardData(text: serial));
+                if (dctx.mounted) {
+                  ScaffoldMessenger.of(dctx).showSnackBar(SnackBar(
+                      content: Text(ar ? 'تم نسخ الرمز' : 'Code copied')));
+                }
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 16, vertical: 8),
+                decoration: BoxDecoration(
+                  color: UellowColors.yellowFaint,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                      color: UellowColors.yellow.withValues(alpha: .6)),
+                ),
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  Text(serial, style: const TextStyle(
+                      fontSize: 18, fontWeight: FontWeight.w900,
+                      letterSpacing: 2, color: UellowColors.darkBrown)),
+                  const SizedBox(width: 8),
+                  const Icon(Icons.copy, size: 16,
+                      color: UellowColors.darkBrown),
+                ]),
+              ),
+            ),
+            const SizedBox(height: 14),
+            Row(children: [
+              Expanded(child: _shareAction(
+                icon: Icons.chat, color: const Color(0xFF25D366),
+                label: ar ? 'واتساب' : 'WhatsApp',
+                onTap: () async {
+                  final wa = Uri.parse(
+                      'https://wa.me/?text=${Uri.encodeComponent(msg)}');
+                  try {
+                    await launchUrl(wa,
+                        mode: LaunchMode.externalApplication);
+                  } catch (_) {}
+                },
+              )),
+              const SizedBox(width: 8),
+              Expanded(child: _shareAction(
+                icon: Icons.link, color: UellowColors.darkBrown,
+                label: ar ? 'نسخ الرابط' : 'Copy link',
+                onTap: () async {
+                  await Clipboard.setData(ClipboardData(text: url));
+                  if (dctx.mounted) {
+                    ScaffoldMessenger.of(dctx).showSnackBar(SnackBar(
+                        content: Text(ar ? 'تم نسخ الرابط' : 'Link copied')));
+                  }
+                },
+              )),
+              const SizedBox(width: 8),
+              Expanded(child: _shareAction(
+                icon: Icons.share_outlined, color: UellowColors.darkBrown,
+                label: ar ? 'مشاركة' : 'Share',
+                onTap: () async {
+                  try {
+                    await Share.share(msg,
+                        subject: ar ? 'سلتي' : 'My Uellow cart');
+                  } catch (_) {}
+                },
+              )),
+            ]),
+          ]),
+        ),
+      ),
+    );
+  }
+
+  Widget _shareAction({required IconData icon, required Color color,
+      required String label, required VoidCallback onTap}) {
+    return OutlinedButton(
+      onPressed: onTap,
+      style: OutlinedButton.styleFrom(
+        foregroundColor: color,
+        side: BorderSide(color: color.withValues(alpha: .5)),
+        padding: const EdgeInsets.symmetric(vertical: 9),
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12)),
+      ),
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        Icon(icon, size: 18),
+        const SizedBox(height: 2),
+        Text(label, style: const TextStyle(
+            fontSize: 10, fontWeight: FontWeight.w800)),
+      ]),
+    );
+  }
+
+  // ── v2.1.66 — import a friend's cart: scan its QR or type the code ─
+  Future<void> _importCartSheet() async {
+    final ar = UellowApi.instance.lang == 'ar';
+    final ctrl = TextEditingController();
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (sctx) => Padding(
+        padding: EdgeInsets.fromLTRB(
+            18, 16, 18, 16 + MediaQuery.of(sctx).viewInsets.bottom),
+        child: Column(mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(ar ? 'استيراد سلة صديق 🛒' : "Import a friend's cart 🛒",
+              style: const TextStyle(fontWeight: FontWeight.w900,
+                  fontSize: 15.5, color: UellowColors.ink)),
+          const SizedBox(height: 4),
+          Text(ar
+              ? 'امسح رمز QR الخاص بسلة صديقك أو أدخل رمزها — تُضاف منتجاتها إلى سلتك.'
+              : "Scan your friend's cart QR or type its code — the items get added to your cart.",
+              style: UT.small),
+          const SizedBox(height: 14),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: () async {
+                Navigator.of(sctx).pop();
+                final code = await Navigator.of(context).pushNamed(
+                    '/scan', arguments: {'return_raw': true});
+                if (code is String && code.isNotEmpty) {
+                  await _doImport(code);
+                }
+              },
+              icon: const Icon(Icons.qr_code_scanner, size: 19),
+              label: Text(ar ? 'مسح رمز QR' : 'Scan QR code',
+                  style: const TextStyle(fontWeight: FontWeight.w900)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: UellowColors.yellow,
+                foregroundColor: UellowColors.darkBrown,
+                elevation: 0,
+                padding: const EdgeInsets.symmetric(vertical: 13),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(13)),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Row(children: [
+            const Expanded(child: Divider()),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              child: Text(ar ? 'أو' : 'or', style: UT.small),
+            ),
+            const Expanded(child: Divider()),
+          ]),
+          const SizedBox(height: 12),
+          TextField(
+            controller: ctrl,
+            textCapitalization: TextCapitalization.characters,
+            decoration: InputDecoration(
+              hintText: ar ? 'أدخل رمز السلة (مثال K7F2-9Q4D)'
+                           : 'Enter cart code (e.g. K7F2-9Q4D)',
+              hintStyle: const TextStyle(fontSize: 12.5),
+              border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12)),
+              contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 14, vertical: 12),
+            ),
+          ),
+          const SizedBox(height: 10),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton(
+              onPressed: () async {
+                final code = ctrl.text.trim();
+                if (code.isEmpty) return;
+                Navigator.of(sctx).pop();
+                await _doImport(code);
+              },
+              style: OutlinedButton.styleFrom(
+                foregroundColor: UellowColors.darkBrown,
+                side: const BorderSide(color: UellowColors.darkBrown),
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(13)),
+              ),
+              child: Text(ar ? 'إضافة إلى سلتي' : 'Add to my cart',
+                  style: const TextStyle(fontWeight: FontWeight.w900)),
+            ),
+          ),
+        ]),
+      ),
+    );
+  }
+
+  Future<void> _doImport(String code) async {
+    final ar = UellowApi.instance.lang == 'ar';
+    try {
+      final (cart, added) = await UellowApi.instance.cart.importShared(code);
+      if (!mounted) return;
+      setState(() => _future = Future.value(cart));
+      _snack(ar ? 'أُضيف $added منتج إلى سلتك ✅'
+                : '$added item(s) added to your cart ✅');
+    } on UellowApiException catch (e) {
+      _snack(e.message);
+    } catch (_) {
+      _snack(ar ? 'تعذّر استيراد السلة' : 'Could not import cart');
     }
   }
 
@@ -218,8 +468,7 @@ class _CartScreenState extends State<CartScreen> {
             future: _future,
             builder: (_, snap) {
               final hasLines = snap.data?.lineCount != null && snap.data!.lineCount > 0;
-              if (!hasLines) return const SizedBox.shrink();
-              if (_selectMode) {
+              if (_selectMode && hasLines) {
                 return TextButton(
                   onPressed: () => _selectAll(snap.data!.lines),
                   child: Text(
@@ -233,17 +482,25 @@ class _CartScreenState extends State<CartScreen> {
                 );
               }
               return Row(children: [
-                IconButton(
+                if (hasLines) IconButton(
                   icon: const Icon(Icons.checklist_rtl,
                       color: UellowColors.darkBrown, size: 22),
                   tooltip: UellowApi.instance.lang == 'ar' ? 'تحديد' : 'Select',
                   onPressed: _toggleSelectMode,
                 ),
+                // v2.1.66 — import a friend's cart (works on empty carts too)
                 IconButton(
+                  icon: const Icon(Icons.qr_code_scanner,
+                      color: UellowColors.darkBrown, size: 22),
+                  tooltip: UellowApi.instance.lang == 'ar'
+                      ? 'استيراد سلة' : 'Import cart',
+                  onPressed: _importCartSheet,
+                ),
+                if (hasLines) IconButton(
                   icon: const Icon(Icons.share_outlined,
                       color: UellowColors.darkBrown, size: 22),
                   tooltip: UellowApi.instance.lang == 'ar' ? 'مشاركة' : 'Share',
-                  onPressed: _shareCart,
+                  onPressed: _shareCartDialog,
                 ),
               ]);
             },
@@ -295,7 +552,6 @@ class _CartScreenState extends State<CartScreen> {
   Widget _buildContent(UellowCart cart) {
     return SafeArea(bottom: false, child: CustomScrollView(slivers: [
       // v2.1.57 — targeted announcement strip (admin-controlled).
-      const SliverToBoxAdapter(child: AnnouncementStrip(screen: 'cart')),
       SliverList.builder(
         itemCount: cart.lines.length,
         itemBuilder: (_, i) => _LineCard(
@@ -1176,21 +1432,11 @@ class _JustForYouState extends State<_JustForYou> {
 }
 
 class _ErrorPane extends StatelessWidget {
+  // v2.1.66 — raw exception text replaced with the friendly "app is
+  // being updated" pane (animated icon + retry).
   const _ErrorPane({required this.message, required this.onRetry});
   final String message;
   final VoidCallback onRetry;
   @override
-  Widget build(BuildContext context) {
-    return Center(child: Padding(
-      padding: const EdgeInsets.all(30),
-      child: Column(mainAxisSize: MainAxisSize.min, children: [
-        const Icon(Icons.cloud_off_outlined, size: 56, color: UellowColors.muted),
-        const SizedBox(height: 14),
-        Text(message, textAlign: TextAlign.center, style: UT.body),
-        const SizedBox(height: 16),
-        ElevatedButton(onPressed: onRetry,
-            child: Text(UellowApi.instance.lang == 'ar' ? 'إعادة المحاولة' : 'Retry')),
-      ]),
-    ));
-  }
+  Widget build(BuildContext context) => UpdatingPane(onRetry: onRetry);
 }

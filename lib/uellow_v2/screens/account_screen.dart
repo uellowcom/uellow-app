@@ -15,7 +15,6 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../api/uellow_api.dart';
 import '../router/uellow_router.dart';
 import '../theme/uellow_theme.dart';
-import '../widgets/announcement_strip.dart';
 import '../widgets/uellow_bottom_nav.dart';
 
 class AccountScreen extends StatefulWidget {
@@ -81,7 +80,6 @@ class _AccountScreenState extends State<AccountScreen> {
       child: ListView(padding: EdgeInsets.zero, children: [
         _ProfileHeader(user: user, isGuest: isGuest),
         // v2.1.57 — targeted announcement strip (admin-controlled).
-        const AnnouncementStrip(screen: 'account'),
         if (isGuest) _GuestSigninBanner(),
         if (!isGuest) _BannersRow(banners: banners),
         if (!isGuest && recent != null) _RecentOrderCard(order: recent),
@@ -953,15 +951,14 @@ class _ActionTilesState extends State<_ActionTiles> {
     } catch (_) {}
   }
 
+  // v2.1.66 — Settings tile removed (the gear stays in the header only).
   static const _en = ['Wishlist','Alerts','Coupons','Loyalty',
-                      'Wallet','Smart Fit','Tracking','My Reviews',
-                      'Settings'];
+                      'Wallet','Smart Fit','Tracking','My Reviews'];
   static const _ar = ['المفضلة','التنبيهات','الكوبونات','الولاء',
-                      'المحفظة','مقاسي','التتبع','آراء المختصين',
-                      'الإعدادات'];
-  // Public tiles (Smart Fit, Settings) work for guests too — the rest
+                      'المحفظة','مقاسي','التتبع','آراء المختصين'];
+  // Public tiles (Smart Fit) work for guests too — the rest
   // need a session, so guests get bounced to /auth.
-  static const _public = {Routes.tryOn, Routes.settings};
+  static const _public = {Routes.tryOn};
   static const _tiles = [
     (Icons.favorite_border, Routes.wishlist),
     (Icons.notifications_outlined, Routes.notifications),
@@ -972,7 +969,6 @@ class _ActionTilesState extends State<_ActionTiles> {
     (Icons.local_shipping_outlined, Routes.order),
     // v2.1.62 — specialist-review history (product + the review itself).
     (Icons.rate_review_outlined, Routes.myReviews),
-    (Icons.settings_outlined, Routes.settings),
   ];
   @override
   Widget build(BuildContext context) {
