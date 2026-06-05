@@ -245,12 +245,35 @@ class DynSectionHeader extends StatelessWidget {
     required this.ar,
     required this.fallbackEn,
     this.trailing,
+    this.showMore = false,
   });
   final Map<String, dynamic> props;
   final DynTheme theme;
   final bool ar;
   final String fallbackEn;
   final Widget? trailing;
+  // v2.1.60 — carousel blocks opt in: renders a quiet «عرض المزيد»
+  // beside the title (opens props.link, falls back to the shop).
+  final bool showMore;
+
+  Widget _moreBtn(BuildContext context) => TextButton(
+        onPressed: () {
+          final link = (props['link'] as Map?)?.cast<String, dynamic>();
+          if (link != null && (link['type'] ?? 'none') != 'none') {
+            openBlockLink(context, link);
+          } else {
+            Navigator.pushNamed(context, '/category');
+          }
+        },
+        style: TextButton.styleFrom(
+          foregroundColor: theme.primary,
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+          minimumSize: const Size(40, 26),
+          textStyle: const TextStyle(
+              fontSize: 11.5, fontWeight: FontWeight.w800),
+        ),
+        child: Text(ar ? 'عرض المزيد ←' : 'View more →'),
+      );
 
   @override
   Widget build(BuildContext context) {
@@ -337,10 +360,10 @@ class DynSectionHeader extends StatelessWidget {
                         shadows: [Shadow(color: Colors.black54, blurRadius: 4)],
                       )),
                 ),
-              if (trailing != null)
+              if (trailing != null || showMore)
                 Positioned(
                   top: 8, right: ar ? null : 8, left: ar ? 8 : null,
-                  child: trailing!,
+                  child: trailing ?? Builder(builder: _moreBtn),
                 ),
             ]),
           ),
@@ -400,7 +423,8 @@ class DynSectionHeader extends StatelessWidget {
             ],
           )),
         ],
-        if (trailing != null) trailing!,
+        if (trailing != null) trailing!
+        else if (showMore) Builder(builder: _moreBtn),
       ]),
     );
   }
@@ -1371,7 +1395,8 @@ class DiscountStripBlock extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        DynSectionHeader(props: p, theme: t, ar: ar, fallbackEn: 'Hot deals'),
+        DynSectionHeader(props: p, theme: t, ar: ar,
+            fallbackEn: 'Hot deals', showMore: true),
         Padding(padding: EdgeInsets.only(bottom: hasBg ? 10 : 0), child: body),
       ],
     );
@@ -3549,6 +3574,15 @@ class BestsellersBlock extends StatelessWidget {
     final podium = showPodium ? items.take(3).toList() : <UellowProductCard>[];
     final rest = items.skip(showPodium ? 3 : 0).take(listCount).toList();
 
+    // v2.1.60 — NEW default look: «Champions Arena» — a premium panel in
+    // the New-User-block spirit: the #1 champion as a big hero card with
+    // a crown, the rest racing beside it with rank medals. Products are
+    // front and center. The old podium stays as bs_style='podium'.
+    final style = (p['bs_style'] as String?) ?? 'arena';
+    if (style == 'arena') {
+      return _arena(context, items, th, title, showSold, listCount);
+    }
+
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 10),
       clipBehavior: Clip.antiAlias,
@@ -3771,6 +3805,217 @@ class BestsellersBlock extends StatelessWidget {
 
   String _fmtSold(int n) => n >= 1000
       ? '${(n / 1000).toStringAsFixed(n >= 10000 ? 0 : 1)}K' : '$n';
+  // ── Champions Arena (v2.1.60) ──────────────────────────────────────
+  Widget _arena(BuildContext context, List<UellowProductCard> items,
+      ({Color bg1, Color bg2, Color ink, Color sub, Color card,
+        Color border}) th,
+      String title, bool showSold, int listCount) {
+    final champ = items.first;
+    final rest = items.skip(1).take(listCount + 2).toList();
+    final sym = ar ? 'د.ك' : 'KD';
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 10),
+      padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft, end: Alignment.bottomRight,
+          colors: [Color(0xFF2C1801), Color(0xFF5A3A0E), Color(0xFF2C1801)],
+        ),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0x33FFD75E)),
+        boxShadow: const [BoxShadow(color: Color(0x33000000),
+            blurRadius: 12, offset: Offset(0, 5))],
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        // header: crown title + live chip + view more
+        Row(children: [
+          const Text('👑', style: TextStyle(fontSize: 17)),
+          const SizedBox(width: 6),
+          Expanded(child: Text(title, maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(color: Color(0xFFFFD75E),
+                  fontSize: 15, fontWeight: FontWeight.w900,
+                  letterSpacing: -0.2))),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+            decoration: BoxDecoration(
+              color: const Color(0x26FFFFFF),
+              borderRadius: BorderRadius.circular(999),
+            ),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              Container(width: 6, height: 6, decoration: const BoxDecoration(
+                  color: Color(0xFF7BE495), shape: BoxShape.circle)),
+              const SizedBox(width: 4),
+              Text(ar ? 'مبيعات حية' : 'LIVE sales',
+                  style: const TextStyle(color: Colors.white70,
+                      fontSize: 9, fontWeight: FontWeight.w800)),
+            ]),
+          ),
+          const SizedBox(width: 4),
+          GestureDetector(
+            onTap: () {
+              final link = (p['link'] as Map?)?.cast<String, dynamic>();
+              if (link != null && (link['type'] ?? 'none') != 'none') {
+                openBlockLink(context, link);
+              } else {
+                Navigator.pushNamed(context, '/category');
+              }
+            },
+            child: Text(ar ? 'عرض المزيد ←' : 'View more →',
+                style: const TextStyle(color: Color(0xFFFFD75E),
+                    fontSize: 10.5, fontWeight: FontWeight.w800)),
+          ),
+        ]),
+        const SizedBox(height: 10),
+        SizedBox(height: 216, child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          // ── #1 champion hero ──
+          SizedBox(width: 158, child: GestureDetector(
+            onTap: () => UellowRouter.goProduct(context, champ.id),
+            child: Container(
+              clipBehavior: Clip.antiAlias,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: const Color(0xFFFFD75E),
+                    width: 2),
+                boxShadow: const [BoxShadow(color: Color(0x59D4AF37),
+                    blurRadius: 12)],
+              ),
+              child: Stack(fit: StackFit.expand, children: [
+                CachedNetworkImage(imageUrl: champ.image,
+                    fit: BoxFit.cover,
+                    errorWidget: (_, __, ___) =>
+                        const ColoredBox(color: Color(0xFF3A2A10))),
+                // crown chip
+                PositionedDirectional(top: 8, start: 8, child: Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(colors: [
+                        Color(0xFFFFE082), Color(0xFFD4AF37)]),
+                    borderRadius: BorderRadius.circular(999),
+                    boxShadow: const [BoxShadow(
+                        color: Color(0x66000000), blurRadius: 4)],
+                  ),
+                  child: Text(ar ? '👑 الأول' : '👑 #1',
+                      style: const TextStyle(fontSize: 10,
+                          fontWeight: FontWeight.w900,
+                          color: Color(0xFF4A2E04))),
+                )),
+                // bottom veil: name + price + sold
+                Positioned(left: 0, right: 0, bottom: 0, child: Container(
+                  padding: const EdgeInsets.fromLTRB(9, 18, 9, 9),
+                  decoration: const BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [Colors.transparent, Color(0xE6000000)],
+                    ),
+                  ),
+                  child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                    Text(champ.name.current(UellowApi.instance.lang),
+                        maxLines: 1, overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(color: Colors.white,
+                            fontSize: 11, fontWeight: FontWeight.w800)),
+                    const SizedBox(height: 3),
+                    Row(children: [
+                      Text('${champ.price.amount.toStringAsFixed(3)} $sym',
+                          style: const TextStyle(
+                              color: Color(0xFFFFD75E), fontSize: 13,
+                              fontWeight: FontWeight.w900)),
+                      const Spacer(),
+                      if (showSold && champ.soldCount > 0)
+                        Text(ar ? '🔥 ${champ.soldCount} بيعت'
+                                : '🔥 ${champ.soldCount} sold',
+                            style: const TextStyle(color: Colors.white70,
+                                fontSize: 9.5,
+                                fontWeight: FontWeight.w800)),
+                    ]),
+                  ]),
+                )),
+              ]),
+            ),
+          )),
+          const SizedBox(width: 8),
+          // ── the chasing pack ──
+          Expanded(child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            itemCount: rest.length,
+            separatorBuilder: (_, __) => const SizedBox(width: 8),
+            itemBuilder: (_, i) => _arenaCard(context, rest[i], i + 2,
+                showSold, sym),
+          )),
+        ])),
+      ]),
+    );
+  }
+
+  Widget _arenaCard(BuildContext context, UellowProductCard pr, int rank,
+      bool showSold, String sym) {
+    final medal = rank == 2 ? '🥈' : rank == 3 ? '🥉' : '#$rank';
+    return GestureDetector(
+      onTap: () => UellowRouter.goProduct(context, pr.id),
+      child: Container(
+        width: 122,
+        clipBehavior: Clip.antiAlias,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+          Expanded(child: Stack(fit: StackFit.expand, children: [
+            CachedNetworkImage(imageUrl: pr.image, fit: BoxFit.cover,
+                errorWidget: (_, __, ___) =>
+                    const ColoredBox(color: Color(0xFFEFEFEF))),
+            PositionedDirectional(top: 6, start: 6, child: Container(
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: rank <= 3
+                    ? const Color(0xE6FFFFFF) : const Color(0xB3412402),
+                borderRadius: BorderRadius.circular(999),
+              ),
+              child: Text(medal, style: TextStyle(fontSize: 10,
+                  fontWeight: FontWeight.w900,
+                  color: rank <= 3
+                      ? const Color(0xFF4A2E04) : Colors.white)),
+            )),
+          ])),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(7, 5, 7, 7),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+              Text(pr.name.current(UellowApi.instance.lang),
+                  maxLines: 1, overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 9.5,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF1F1206))),
+              const SizedBox(height: 2),
+              Row(children: [
+                Text('${pr.price.amount.toStringAsFixed(3)}',
+                    style: const TextStyle(fontSize: 11.5,
+                        fontWeight: FontWeight.w900,
+                        color: Color(0xFF4A2E04))),
+                const SizedBox(width: 2),
+                Text(sym, style: const TextStyle(fontSize: 7.5,
+                    color: Color(0xFF9A7B33),
+                    fontWeight: FontWeight.w700)),
+                const Spacer(),
+                if (showSold && pr.soldCount > 0)
+                  Text('🔥${pr.soldCount}', style: const TextStyle(
+                      fontSize: 8.5, fontWeight: FontWeight.w800,
+                      color: Color(0xFFBF360C))),
+              ]),
+            ]),
+          ),
+        ]),
+      ),
+    );
+  }
 }
 
 // ─── TAB NAV — horizontal SHEIN-style tabs ──────────────────────────────────
@@ -4756,6 +5001,13 @@ class TrustStripBlock extends StatelessWidget {
         .map((e) => (e as Map).cast<String, dynamic>()).toList();
     if (items.isEmpty) return const SizedBox.shrink();
     final style = (p['style'] ?? 'plain').toString();
+    // v2.1.60 — admin-chosen background: hex color, or 'none' for a
+    // fully transparent strip.
+    final rawBg = (p['strip_bg'] ?? '').toString().trim();
+    final noBg = rawBg == 'none';
+    final stripBg = (!noBg && rawBg.isNotEmpty)
+        ? (_parseColor(rawBg) ?? Colors.white)
+        : Colors.white;
 
     Widget cell(Map<String, dynamic> it, {bool card = false}) {
       final label = ((ar ? it['labelAr'] : it['labelEn'])
@@ -4799,8 +5051,10 @@ class TrustStripBlock extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 10),
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
-      decoration: BoxDecoration(
-        color: Colors.white, borderRadius: BorderRadius.circular(10)),
+      decoration: noBg
+          ? null
+          : BoxDecoration(
+              color: stripBg, borderRadius: BorderRadius.circular(10)),
       child: Row(children: [
         for (var i = 0; i < items.length; i++) ...[
           Expanded(child: Center(child: cell(items[i]))),

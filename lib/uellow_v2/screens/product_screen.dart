@@ -712,8 +712,10 @@ class _Title extends StatelessWidget {
           _MetaChip(icon: Icons.inventory_2_outlined, label: 'ID ${p.id}'),
           if (p.soldCount > 0)
             _MetaChip(icon: Icons.shopping_cart_outlined,
+                // v2.1.60 — «بيع» بدل «تم بيع» so the lowest-price chip
+                // fits on the same line.
                 label: lang == 'ar'
-                    ? 'تم بيع ${p.soldCount}'
+                    ? 'بيع ${p.soldCount}'
                     : '${p.soldCount} sold'),
           if (p.viewCount > 0)
             _MetaChip(icon: Icons.visibility_outlined,
@@ -2562,23 +2564,50 @@ class _ExpertReviewsBlockState extends State<_ExpertReviewsBlock> {
         ),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: [
+        Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
           const Text('🎓', style: TextStyle(fontSize: 14)),
           const SizedBox(width: 5),
-          Text(ar ? 'آراء المتخصصين' : 'Expert opinions',
-              style: const TextStyle(fontSize: 13,
-                  fontWeight: FontWeight.w900, color: UellowColors.ink)),
-          if (_online > 0) ...[
-            const SizedBox(width: 8),
-            Container(width: 6, height: 6, decoration: const BoxDecoration(
-                color: UellowColors.success, shape: BoxShape.circle)),
-            const SizedBox(width: 3),
-            Text(ar ? '$_online متاح' : '$_online online',
-                style: const TextStyle(fontSize: 9.5,
-                    color: UellowColors.successDk,
-                    fontWeight: FontWeight.w800)),
-          ],
-          const Spacer(),
+          // v2.1.60 — online count sits UNDER the title (was inline).
+          Expanded(child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(ar ? 'آراء المتخصصين' : 'Expert opinions',
+                style: const TextStyle(fontSize: 13,
+                    fontWeight: FontWeight.w900, color: UellowColors.ink)),
+            if (_online > 0) Row(children: [
+              Container(width: 6, height: 6,
+                  decoration: const BoxDecoration(
+                      color: UellowColors.success,
+                      shape: BoxShape.circle)),
+              const SizedBox(width: 3),
+              Text(ar ? '$_online متاح' : '$_online online',
+                  style: const TextStyle(fontSize: 9.5,
+                      color: UellowColors.successDk,
+                      fontWeight: FontWeight.w800)),
+            ]),
+          ])),
+          // v2.1.60 — YELLOW see-more pill in the header, before the
+          // ask-a-specialist pill.
+          if (_items.length > 2) Padding(
+            padding: const EdgeInsetsDirectional.only(end: 6),
+            child: Material(
+              color: UellowColors.yellow,
+              shape: const StadiumBorder(),
+              child: InkWell(
+                customBorder: const StadiumBorder(),
+                onTap: () => _openAllVerdicts(context, ar),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 10, vertical: 5),
+                  child: Text(
+                      ar ? 'مشاهدة المزيد (${_items.length})'
+                         : 'See all (${_items.length})',
+                      style: const TextStyle(
+                          color: UellowColors.darkBrown,
+                          fontSize: 9.5, fontWeight: FontWeight.w900)),
+                ),
+              ),
+            ),
+          ),
           // small CTA pill — the big full-width button is gone.
           Material(
             color: const Color(0xFF1565C0),
@@ -2597,27 +2626,6 @@ class _ExpertReviewsBlockState extends State<_ExpertReviewsBlock> {
           ),
         ]),
         for (final it in _items.take(2)) _verdictCard(it, ar),
-        // v2.1.59 — more than 2 opinions → professional dialog with a
-        // stats header + the full list.
-        if (_items.length > 2) Padding(
-          padding: const EdgeInsets.only(top: 8),
-          child: Center(child: OutlinedButton.icon(
-            onPressed: () => _openAllVerdicts(context, ar),
-            icon: const Icon(Icons.expand_more, size: 15),
-            label: Text(
-                ar ? 'مشاهدة المزيد (${_items.length})'
-                   : 'See all (${_items.length})',
-                style: const TextStyle(fontSize: 11.5,
-                    fontWeight: FontWeight.w800)),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: const Color(0xFF1565C0),
-              side: const BorderSide(color: Color(0xFFCBD9F0)),
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 16, vertical: 7),
-              shape: const StadiumBorder(),
-            ),
-          )),
-        ),
       ]),
     );
   }
