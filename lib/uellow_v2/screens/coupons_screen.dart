@@ -68,7 +68,14 @@ class _CouponsScreenState extends State<CouponsScreen> {
                 color: UellowColors.darkBrown));
           }
           if (snap.hasError) {
-            return _errorState(snap.error.toString(), ar);
+            final err = snap.error.toString();
+            // v2.1.68 — guests get the sign-in invite, not a raw
+            // "Authentication required" screen.
+            if (err.toLowerCase().contains('authentication')
+                || err.contains('AUTH_REQUIRED')) {
+              return _signInState(ar);
+            }
+            return _errorState(err, ar);
           }
           final all = snap.data ?? const <_Coupon>[];
           final filtered = _tab == 0
@@ -147,6 +154,58 @@ class _CouponsScreenState extends State<CouponsScreen> {
             textAlign: TextAlign.center, style: UT.subtitle),
       ]),
     );
+  }
+
+  // v2.1.68 — friendly sign-in invite for guests (instead of the raw
+  // "Authentication required" error). Returning from /auth reloads.
+  Widget _signInState(bool ar) {
+    return Center(child: Padding(
+      padding: const EdgeInsets.all(30),
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        Container(
+          width: 84, height: 84,
+          decoration: BoxDecoration(
+            color: UellowColors.yellowFaint,
+            shape: BoxShape.circle,
+            border: Border.all(
+                color: UellowColors.yellow.withValues(alpha: .5)),
+          ),
+          child: const Icon(Icons.card_giftcard, size: 42,
+              color: UellowColors.darkBrown),
+        ),
+        const SizedBox(height: 16),
+        Text(ar ? 'سجّل دخولك لمشاهدة كوبوناتك 🎟'
+                : 'Sign in to see your coupons 🎟',
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 15,
+                fontWeight: FontWeight.w900, color: UellowColors.ink)),
+        const SizedBox(height: 6),
+        Text(ar ? 'العروض والخصومات الخاصة بك تظهر هنا بعد تسجيل الدخول'
+                : 'Your personal offers and discounts appear here after signing in',
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 12.5, height: 1.5,
+                color: UellowColors.muted)),
+        const SizedBox(height: 18),
+        ElevatedButton.icon(
+          onPressed: () async {
+            await Navigator.pushNamed(context, '/auth');
+            if (mounted) _refresh();
+          },
+          icon: const Icon(Icons.login, size: 18),
+          label: Text(ar ? 'تسجيل الدخول' : 'Sign in',
+              style: const TextStyle(fontWeight: FontWeight.w900)),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: UellowColors.yellow,
+            foregroundColor: UellowColors.darkBrown,
+            elevation: 0,
+            padding: const EdgeInsets.symmetric(
+                horizontal: 28, vertical: 12),
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14)),
+          ),
+        ),
+      ]),
+    ));
   }
 
   Widget _errorState(String msg, bool ar) {

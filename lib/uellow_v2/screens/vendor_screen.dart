@@ -130,16 +130,6 @@ class _VendorScreenState extends State<VendorScreen> {
 
   String _name() => _bi(_v['name'] as Map?);
 
-  Color _brandColor() {
-    try {
-      var s = (_v['brand_color'] ?? '#412402').toString().replaceAll('#', '');
-      if (s.length == 6) s = 'FF$s';
-      return Color(int.parse(s, radix: 16));
-    } catch (_) {
-      return UellowColors.darkBrown;
-    }
-  }
-
   List<UellowProductCard> _cards(String key, [Map? src]) {
     final raw = ((src ?? _store)?[key] as List?) ?? const [];
     final out = <UellowProductCard>[];
@@ -155,10 +145,28 @@ class _VendorScreenState extends State<VendorScreen> {
   @override
   Widget build(BuildContext context) {
     final ar = UellowApi.instance.lang == 'ar';
+    // v2.1.68 — the colored hero band is gone (per ali@uellow): a clean
+    // white app bar with back + share replaces it.
     return Directionality(
       textDirection: ar ? TextDirection.rtl : TextDirection.ltr,
       child: Scaffold(
         backgroundColor: UellowColors.bg,
+        appBar: AppBar(
+          backgroundColor: Colors.white,
+          elevation: 0.5,
+          leading: const BackButton(color: UellowColors.darkBrown),
+          title: Text(_store == null ? '' : _name(),
+              maxLines: 1, overflow: TextOverflow.ellipsis,
+              style: const TextStyle(color: UellowColors.ink,
+                  fontWeight: FontWeight.w900, fontSize: 15)),
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.share_outlined,
+                  color: UellowColors.darkBrown, size: 22),
+              onPressed: _share,
+            ),
+          ],
+        ),
         body: _error
             ? UpdatingPane(onRetry: () {
                 setState(() { _error = false; _store = null; });
@@ -193,7 +201,6 @@ class _VendorScreenState extends State<VendorScreen> {
     final bestSellers = _cards('best_sellers');
 
     return CustomScrollView(controller: _scroll, slivers: [
-      SliverToBoxAdapter(child: _hero(v)),
       SliverToBoxAdapter(child: _infoCard(ar, avg, rCount, tagline, about)),
       SliverToBoxAdapter(child: _stats(ar, v)),
 
@@ -241,45 +248,6 @@ class _VendorScreenState extends State<VendorScreen> {
     ]);
   }
 
-  // ── hero: brand color gradient + optional banner image ──
-  Widget _hero(Map<String, dynamic> v) {
-    final brand = _brandColor();
-    final banner = (v['banner'] as String?) ?? '';
-    return SizedBox(height: 150, child: Stack(fit: StackFit.expand, children: [
-      DecoratedBox(decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft, end: Alignment.bottomRight,
-          colors: [brand, Color.lerp(brand, Colors.black, 0.35)!],
-        ),
-      )),
-      if (banner.isNotEmpty)
-        CachedNetworkImage(
-            imageUrl: banner.startsWith('http')
-                ? banner : '${UellowApi.instance.baseUrl}$banner',
-            fit: BoxFit.cover,
-            errorWidget: (_, __, ___) => const SizedBox.shrink()),
-      Container(color: Colors.black.withValues(alpha: 0.12)),
-      SafeArea(child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        child: Row(children: [
-          _heroBtn(Icons.arrow_back, () => Navigator.maybePop(context)),
-          const Spacer(),
-          _heroBtn(Icons.share_outlined, _share),
-        ]),
-      )),
-    ]));
-  }
-
-  Widget _heroBtn(IconData icon, VoidCallback onTap) => IconButton(
-        onPressed: onTap,
-        icon: Icon(icon, color: Colors.white),
-        style: IconButton.styleFrom(
-          backgroundColor: const Color(0x4D000000),
-          shape: const RoundedRectangleBorder(
-              borderRadius: BorderRadius.all(Radius.circular(10))),
-        ),
-      );
-
   // ── info card: logo + name + rating + follow/contact ──
   Widget _infoCard(bool ar, double avg, int rCount,
       String tagline, String about) {
@@ -288,7 +256,6 @@ class _VendorScreenState extends State<VendorScreen> {
     final name = _name();
     final tier = (v['tier'] ?? 'standard').toString();
     return Container(
-      transform: Matrix4.translationValues(0, -26, 0),
       padding: const EdgeInsets.fromLTRB(18, 14, 18, 4),
       decoration: const BoxDecoration(
         color: Colors.white,
@@ -477,7 +444,6 @@ class _VendorScreenState extends State<VendorScreen> {
       if (sla > 0) ('$slaس', ar ? 'يشحن خلال' : 'Ships in'),
     ];
     return Container(
-      transform: Matrix4.translationValues(0, -26, 0),
       color: Colors.white,
       padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
       child: Row(children: [

@@ -92,7 +92,9 @@ class _AccountScreenState extends State<AccountScreen> {
         const _RecentlyViewed(),
         _SectionCard(title: '', tightHorizontal: true,
             child: _ActionTiles(isGuest: isGuest)),
-        if (!isGuest) const _BecomeReviewerCard(),
+        // v2.1.68 — shown to GUESTS too: tapping Apply sends them to
+        // sign in first (the card knows isGuest).
+        _BecomeReviewerCard(isGuest: isGuest),
         const _MenuList(),
         const _SocialMediaSection(),
         if (!isGuest) const _SignOutBtn(),
@@ -1305,7 +1307,8 @@ class _RecentlyViewedState extends State<_RecentlyViewed> {
 // account page. Status-aware: no profile → apply sheet; pending → quiet
 // "under review" chip; approved → green confirmation.
 class _BecomeReviewerCard extends StatefulWidget {
-  const _BecomeReviewerCard();
+  const _BecomeReviewerCard({this.isGuest = false});
+  final bool isGuest;
   @override
   State<_BecomeReviewerCard> createState() => _BecomeReviewerCardState();
 }
@@ -1316,7 +1319,11 @@ class _BecomeReviewerCardState extends State<_BecomeReviewerCard> {
   @override
   void initState() {
     super.initState();
-    _load();
+    if (widget.isGuest) {
+      _status = 'none';       // guests always see the pitch card
+    } else {
+      _load();
+    }
   }
 
   Future<void> _load() async {
@@ -1333,6 +1340,11 @@ class _BecomeReviewerCardState extends State<_BecomeReviewerCard> {
   }
 
   void _applySheet() {
+    // Guests must sign in before applying.
+    if (widget.isGuest) {
+      Navigator.pushNamed(context, '/auth');
+      return;
+    }
     final ar = UellowApi.instance.lang == 'ar';
     final nameC = TextEditingController();
     final bioC = TextEditingController();

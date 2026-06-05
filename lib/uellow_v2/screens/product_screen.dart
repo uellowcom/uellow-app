@@ -3618,50 +3618,64 @@ class _RelatedInfinite extends StatefulWidget {
 }
 
 class _RelatedInfiniteState extends State<_RelatedInfinite> {
-  final List<UellowProductCard> _items = [];
+  // v2.1.68 — exact paging per ali@uellow: the section opens with
+  // EXACTLY 16 products, then a Load-more button adds 10 per tap.
+  // A buffer absorbs the current-product filtering (the old code
+  // fetched 16 then dropped the product itself → only 15 showed).
+  final List<UellowProductCard> _items = [];     // shown
+  final List<UellowProductCard> _buffer = [];    // fetched, not shown yet
+  final Set<int> _seen = {};
   int _page = 1;
   bool _loading = false;
-  bool _hasMore = true;
-  int _autoRounds = 0;
-  // v2.1.29 — infinite-load the first 3 rounds, then show a Load-more
-  // button (per design) while the backend reports hasNext.
-  static const int _kAutoLimit = 3;
+  bool _srvHasMore = true;
+
+  bool get _hasMore => _buffer.isNotEmpty || _srvHasMore;
+
   @override
-  void initState() { super.initState(); _loadMore(); }
-  Future<void> _loadMore() async {
-    if (_loading || !_hasMore) return;
+  void initState() {
+    super.initState();
+    _show(16);
+    _seen.add(widget.productId);
+  }
+
+  Future<void> _fetchIntoBuffer() async {
+    final page = await UellowApi.instance.products.list(
+        categoryId: widget.categoryId, page: _page, perPage: 16);
+    for (final p in page.items) {
+      if (p.id == widget.productId || _seen.contains(p.id)) continue;
+      _seen.add(p.id);
+      _buffer.add(p);
+    }
+    _srvHasMore = page.hasNext;
+    _page++;
+  }
+
+  Future<void> _show(int n) async {
+    if (_loading) return;
     setState(() => _loading = true);
     try {
-      // Same-category only — that's what makes them "related". If the
-      // product has no public category, fall back to the global list.
-      // v2.0.79 — larger pages (10 → 16) so the auto-load doesn't fire as
-      // aggressively while still feeling infinite.
-      final page = await UellowApi.instance.products.list(
-          categoryId: widget.categoryId,
-          page: _page, perPage: 16);
-      if (mounted) setState(() {
-        _items.addAll(page.items.where((p) => p.id != widget.productId));
-        _hasMore = page.hasNext;
-        _page++;
-        _autoRounds++;
-        _loading = false;
-      });
+      while (_buffer.length < n && _srvHasMore) {
+        await _fetchIntoBuffer();
+      }
     } catch (_) {
-      if (mounted) setState(() { _loading = false; _hasMore = false; });
+      _srvHasMore = false;
     }
+    if (!mounted) return;
+    setState(() {
+      final take = _buffer.take(n).toList();
+      _items.addAll(take);
+      _buffer.removeRange(0, take.length);
+      _loading = false;
+    });
   }
+
+  Future<void> _loadMore() => _show(10);
+
   @override
   Widget build(BuildContext context) {
     final ar = UellowApi.instance.lang == 'ar';
     return NotificationListener<ScrollEndNotification>(
-      onNotification: (n) {
-        // Auto-load first 5 rounds, then user must tap View more.
-        if (_autoRounds < _kAutoLimit && _hasMore && !_loading
-            && n.metrics.pixels >= n.metrics.maxScrollExtent - 400) {
-          _loadMore();
-        }
-        return false;
-      },
+      onNotification: (n) => false,
       child: Container(
         color: Colors.white, margin: const EdgeInsets.only(top: 8),
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
@@ -3689,7 +3703,7 @@ class _RelatedInfiniteState extends State<_RelatedInfinite> {
             child: Center(child: CircularProgressIndicator(
                 strokeWidth: 2, color: UellowColors.darkBrown)),
           ),
-          if (_hasMore && !_loading && _autoRounds >= _kAutoLimit) Padding(
+          if (_hasMore && !_loading) Padding(
             padding: const EdgeInsets.fromLTRB(40, 16, 40, 8),
             child: SizedBox(width: double.infinity, child: ElevatedButton.icon(
               onPressed: _loadMore,

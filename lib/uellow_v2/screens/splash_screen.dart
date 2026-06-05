@@ -147,15 +147,14 @@ class _SplashScreenState extends State<SplashScreen> {
     // snappy; idempotent across cold starts.
     unawaited(FirstLaunchService.kickOff());
     if (!mounted) return;
-    // Visible confirmation so the user knows the URL switch happened.
+    // Visible confirmation — country name only (v2.1.68: no technical
+    // domain shown to customers).
     final cname = (_picked?['country']?['name']?['en'] as String?) ?? code ?? '';
-    final domain = (apiBase ?? '')
-        .replaceFirst(RegExp(r'^https?://'), '').split('/').first;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         duration: const Duration(seconds: 2),
         content: Text(_lang == 'ar'
-            ? 'تم التحويل إلى $cname · $domain'
-            : 'Switched to $cname · $domain')));
+            ? 'تم التحويل إلى $cname'
+            : 'Switched to $cname')));
     Navigator.of(context).pushReplacementNamed(Routes.home);
   }
 
@@ -487,8 +486,6 @@ class _SplashScreenState extends State<SplashScreen> {
     // "Kuwait App" instead of the technical "Connecting to <domain>".
     final src = _picked ?? _detected?['recommended'] as Map<String, dynamic>?;
     final country = src?['country'] as Map<String, dynamic>?;
-    final domain = (src?['website']?['domain'] as String? ?? '')
-        .replaceAll(RegExp(r'^https?://'), '');
     final name = (country?['name']?[_lang == 'ar' ? 'ar' : 'en']
         ?? country?['name']?['en'] ?? '').toString();
     final flag = country?['flag'] as String? ?? '📍';
@@ -506,12 +503,11 @@ class _SplashScreenState extends State<SplashScreen> {
           const SizedBox(width: 10),
           Expanded(child: Column(
               crossAxisAlignment: CrossAxisAlignment.start, children: [
+            // v2.1.68 — domain line removed (no technical URLs on the
+            // entry screen per ali@uellow).
             Text(label, style: const TextStyle(fontSize: 13.5,
                 fontWeight: FontWeight.w900,
                 color: UellowColors.darkBrown)),
-            if (domain.isNotEmpty)
-              Text(domain, style: const TextStyle(fontSize: 10.5,
-                  color: UellowColors.muted)),
           ])),
           const Icon(Icons.check_circle, size: 18,
               color: UellowColors.success),

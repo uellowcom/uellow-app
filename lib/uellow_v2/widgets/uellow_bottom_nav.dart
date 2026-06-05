@@ -297,17 +297,23 @@ class _UellowBottomNavState extends State<UellowBottomNav> {
   Widget build(BuildContext context) {
     // v2.1.62 — the specialist-review banner floats ABOVE the nav bar on
     // every page that carries it, until the customer closes it.
-    return Column(mainAxisSize: MainAxisSize.min, children: [
-      const ReviewReplyBanner(),
-      AnnouncementStrip(screen: _stripScreen()),
-      ValueListenableBuilder<List<DynNavItem>>(
-        valueListenable: NavBarCache.instance.items,
-        builder: (_, items, __) {
-          if (items.isNotEmpty) return _buildDynamic(context, items);
-          return _buildStatic(context);
-        },
-      ),
-    ]);
+    // v2.1.68 — white backdrop: the area around the floating banner used
+    // to show the page's GRAY scaffold background; now the banner sits
+    // alone on clean white that merges with the nav bar.
+    return ColoredBox(
+      color: Colors.white,
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        const ReviewReplyBanner(),
+        AnnouncementStrip(screen: _stripScreen()),
+        ValueListenableBuilder<List<DynNavItem>>(
+          valueListenable: NavBarCache.instance.items,
+          builder: (_, items, __) {
+            if (items.isNotEmpty) return _buildDynamic(context, items);
+            return _buildStatic(context);
+          },
+        ),
+      ]),
+    );
   }
 
   Widget _buildStatic(BuildContext context) {
