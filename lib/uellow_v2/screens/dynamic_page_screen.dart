@@ -258,6 +258,15 @@ Widget _renderBlock(BuildContext c, Map<String, dynamic> b, DynTheme t) {
     case 'sticky-cta':     inner = StickyCtaBlock(p: p, t: t, ar: ar); break;
     // v2.1.57 — conversion blocks
     case 'new-user':       inner = NewUserBlock(p: p, data: data, t: t, ar: ar); break;
+    // v2.1.75 — 5 promo-section presets share one flexible engine.
+    case 'promo-spotlight':
+    case 'promo-category':
+    case 'promo-rank':
+    case 'promo-arrivals':
+    case 'promo-mega':
+      inner = PromoSectionBlock(
+          variant: kind.replaceFirst('promo-', ''),
+          p: p, data: data, t: t, ar: ar); break;
     case 'trust-strip':    inner = TrustStripBlock(p: p, t: t, ar: ar); break;
     default:               return const SizedBox.shrink();
   }

@@ -4741,6 +4741,201 @@ Color _hexColor(dynamic v, Color fb) {
 // start side, "New User Bonus" product cards scrolling after it.
 // Audience prop: all | guests | new (guests OR signed-in with 0 orders).
 
+// =====================================================================
+// PromoSectionBlock (v2.1.75) — ONE powerful, settings-rich promo
+// section that powers 5 builder presets via a `variant` prop:
+//   spotlight  — featured first product + rail (great for "on offer")
+//   category   — clean category showcase rail
+//   rank       — best-sellers with #1/#2/#3 rank medals
+//   arrivals   — "NEW" ribbon on fresh products
+//   mega       — bold sale band with big % OFF chips
+// Every preset shares the same engine: gradient header band (2 colors),
+// a logo (emoji OR image url), bilingual title/subtitle/badge, optional
+// CTA, rail-or-grid layout, and the standard product card.
+// =====================================================================
+class PromoSectionBlock extends StatelessWidget {
+  const PromoSectionBlock({super.key, required this.variant, required this.p,
+      required this.data, required this.t, required this.ar});
+  final String variant;          // spotlight | category | rank | arrivals | mega
+  final Map<String, dynamic> p;
+  final Map<String, dynamic> data;
+  final DynTheme t;
+  final bool ar;
+
+  String _tx(String en, String arr) {
+    final v = ((ar ? p[arr] : p[en]) ?? p[en] ?? '').toString();
+    return v;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final items = ((data['items'] as List?) ?? const [])
+        .map((e) {
+          try { return UellowProductCard.fromJson((e as Map).cast<String, dynamic>()); }
+          catch (_) { return null; }
+        }).whereType<UellowProductCard>().toList();
+    if (items.isEmpty) return const SizedBox.shrink();
+
+    // per-variant defaults (overridable from the builder)
+    final defaults = <String, List<dynamic>>{
+      // [c1, c2, logo, badgeEn, badgeAr]
+      'spotlight': ['#7B2FF7', '#B86CFF', '✨', 'Featured', 'مميّز'],
+      'category':  ['#2F6E62', '#3E9C88', '🛍', 'Shop', 'تسوّق'],
+      'rank':      ['#C19A2E', '#E8C45A', '🏆', 'Best Seller', 'الأكثر مبيعاً'],
+      'arrivals':  ['#1E88A8', '#43C0D6', '🆕', 'New', 'جديد'],
+      'mega':      ['#E63946', '#FF7A85', '🔥', 'SALE', 'تخفيض'],
+    }[variant] ?? ['#2F6E62', '#3E9C88', '⭐', 'Offer', 'عرض'];
+
+    final c1 = _parseColor(p['c1']) ?? _parseColor(defaults[0] as String)!;
+    final c2 = _parseColor(p['c2']) ?? _parseColor(defaults[1] as String)!;
+    final logo = (p['logo'] ?? defaults[2]).toString();
+    final logoImg = (p['logo_image'] ?? '').toString();
+    final title = _tx('titleEn', 'titleAr');
+    final sub = _tx('subEn', 'subAr');
+    final badge = (() {
+      final b = _tx('badgeEn', 'badgeAr');
+      return b.isNotEmpty ? b : (ar ? defaults[4] : defaults[3]).toString();
+    })();
+    final cta = _tx('ctaEn', 'ctaAr');
+    final layout = (p['layout'] ?? (variant == 'category' ? 'grid' : 'rail'))
+        .toString();
+    final onHeaderTap = () {
+      final cid = (p['category_id'] as num?)?.toInt() ?? 0;
+      if (cid > 0) {
+        Navigator.pushNamed(context, '/collection',
+            arguments: {'category_id': cid});
+      } else if (variant == 'rank') {
+        Navigator.pushNamed(context, '/bestsellers');
+      }
+    };
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        boxShadow: [BoxShadow(color: c1.withValues(alpha: 0.18),
+            blurRadius: 14, offset: const Offset(0, 6))],
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        // ── gradient header band ──
+        GestureDetector(
+          onTap: onHeaderTap,
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                  begin: Alignment.topLeft, end: Alignment.bottomRight,
+                  colors: [c1, c2]),
+            ),
+            child: Row(children: [
+              // logo bubble
+              Container(
+                width: 38, height: 38, alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.22),
+                  borderRadius: BorderRadius.circular(11),
+                ),
+                clipBehavior: Clip.antiAlias,
+                child: logoImg.isNotEmpty
+                    ? CachedNetworkImage(imageUrl: logoImg,
+                        width: 38, height: 38, fit: BoxFit.cover,
+                        errorWidget: (_, __, ___) =>
+                            Text(logo, style: const TextStyle(fontSize: 20)))
+                    : Text(logo, style: const TextStyle(fontSize: 20)),
+              ),
+              const SizedBox(width: 10),
+              Expanded(child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(title.isNotEmpty ? title
+                        : (ar ? 'عرض مميّز' : 'Featured offer'),
+                    maxLines: 1, overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: Colors.white, fontSize: 15.5,
+                        fontWeight: FontWeight.w900)),
+                if (sub.isNotEmpty) Text(sub,
+                    maxLines: 1, overflow: TextOverflow.ellipsis,
+                    style: TextStyle(color: Colors.white.withValues(alpha: .92),
+                        fontSize: 11)),
+              ])),
+              if (cta.isNotEmpty) Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                decoration: BoxDecoration(color: Colors.white,
+                    borderRadius: BorderRadius.circular(999)),
+                child: Text(cta, style: TextStyle(color: c1,
+                    fontSize: 12, fontWeight: FontWeight.w900)),
+              ) else Icon(ar ? Icons.chevron_left : Icons.chevron_right,
+                  color: Colors.white.withValues(alpha: .9), size: 22),
+            ]),
+          ),
+        ),
+        // ── products ──
+        Padding(
+          padding: const EdgeInsets.fromLTRB(10, 10, 10, 12),
+          child: layout == 'grid'
+              ? GridView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  gridDelegate:
+                      const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 2, mainAxisSpacing: 8, crossAxisSpacing: 8,
+                    childAspectRatio: 0.60,
+                  ),
+                  itemCount: items.length,
+                  itemBuilder: (_, i) => _card(items[i], i, c1, badge),
+                )
+              : SizedBox(height: 288, child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: items.length,
+                  separatorBuilder: (_, __) => const SizedBox(width: 8),
+                  itemBuilder: (_, i) => SizedBox(
+                      width: variant == 'spotlight' && i == 0 ? 210 : 168,
+                      child: _card(items[i], i, c1, badge)),
+                )),
+        ),
+      ]),
+    );
+  }
+
+  Widget _card(UellowProductCard prod, int i, Color accent, String badge) {
+    Widget card = ProductCard(rich: true, product: prod, hideAvail: true);
+    // variant-specific overlay badge
+    String? overlay;
+    if (variant == 'rank') {
+      overlay = '#${i + 1}';
+    } else if (variant == 'arrivals') {
+      overlay = ar ? 'جديد' : 'NEW';
+    } else if (variant == 'mega') {
+      final d = prod.discountPct;
+      if (d > 0) overlay = '-$d%';
+    } else if (variant == 'spotlight' && i == 0) {
+      overlay = badge;
+    }
+    if (overlay == null) return card;
+    final isMedal = variant == 'rank';
+    return Stack(clipBehavior: Clip.none, children: [
+      card,
+      PositionedDirectional(
+        top: 6, start: 6,
+        child: Container(
+          padding: EdgeInsets.symmetric(
+              horizontal: isMedal ? 8 : 7, vertical: isMedal ? 5 : 3),
+          decoration: BoxDecoration(
+            color: variant == 'mega' ? const Color(0xFFE63946)
+                : (isMedal ? const Color(0xFFC19A2E) : accent),
+            borderRadius: BorderRadius.circular(isMedal ? 999 : 7),
+            boxShadow: const [BoxShadow(color: Color(0x33000000),
+                blurRadius: 4, offset: Offset(0, 2))],
+          ),
+          child: Text(overlay,
+              style: const TextStyle(color: Colors.white,
+                  fontSize: 10.5, fontWeight: FontWeight.w900)),
+        ),
+      ),
+    ]);
+  }
+}
+
 class NewUserBlock extends StatefulWidget {
   const NewUserBlock({super.key, required this.p, required this.data,
       required this.t, required this.ar});
