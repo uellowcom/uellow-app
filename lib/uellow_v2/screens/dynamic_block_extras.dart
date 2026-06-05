@@ -84,8 +84,11 @@ class BlockEnvelope extends StatelessWidget {
       );
     }
 
+    // v2.1.56 — optional asymmetric bottom padding (`pad_bottom`); the
+    // Explore More block uses 0 so nothing trails the Load-more button.
+    final padBottom = (props['pad_bottom'] as num?)?.toDouble() ?? padY;
     return Padding(
-      padding: EdgeInsets.symmetric(vertical: padY),
+      padding: EdgeInsets.only(top: padY, bottom: padBottom),
       child: content,
     );
   }
@@ -1407,8 +1410,9 @@ class DiscountStripBlock extends StatelessWidget {
     final pp = (raw as Map).cast<String, dynamic>();
     try {
       final prod = UellowProductCard.fromJson(pp);
+      // v2.1.56 — availability pill hidden in this block only per spec.
       return SizedBox(width: width,
-          child: ProductCard(rich: true, product: prod));
+          child: ProductCard(rich: true, product: prod, hideAvail: true));
     } catch (_) {
       return _DiscountCard(p: pp, props: p, t: t, ar: ar, width: width);
     }

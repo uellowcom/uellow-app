@@ -11,6 +11,7 @@ import '../../api/uellow_api.dart';
 import '../../api/uellow_models.dart';
 import '../router/uellow_router.dart';
 import '../theme/uellow_theme.dart';
+import '../widgets/product_card.dart';
 
 class CartScreen extends StatefulWidget {
   const CartScreen({super.key});
@@ -62,9 +63,10 @@ class _CartScreenState extends State<CartScreen> {
     }
   }
 
-  Future<void> _removeCoupon() async {
+  Future<void> _removeCoupon(String code) async {
+    // v2.1.56 — removes ONLY the tapped coupon (× used to wipe them all).
     try {
-      final c = await UellowApi.instance.cart.removeCoupon();
+      final c = await UellowApi.instance.cart.removeCoupon(code);
       setState(() => _future = Future.value(c));
       _snack(UellowApi.instance.lang == 'ar' ? 'تم حذف الكوبون' : 'Coupon removed');
     } on UellowApiException catch (e) {
@@ -252,8 +254,16 @@ class _CartScreenState extends State<CartScreen> {
           final c = snap.data!;
           if (c.lineCount == 0) return const SizedBox.shrink();
           if (_selectMode) {
+            // v2.1.56 — bottom bar shows the total of the SELECTED items
+            // only (used to keep showing the whole-cart total).
+            final sel = c.lines.where((l) => _selected.contains(l.id));
+            final selSum = sel.fold<double>(0, (s, l) => s + l.subtotal.amount);
+            final ref = c.totals.total;
             return _BulkActionsBar(
               count: _selected.length,
+              selectedTotal: UellowMoney(
+                  amount: selSum, currency: ref.currency,
+                  symbol: ref.symbol, digits: ref.digits).format(),
               onDelete: _selected.isEmpty ? null : _bulkDelete,
               onWishlist: _selected.isEmpty ? null : _bulkWishlist,
             );
@@ -285,7 +295,8 @@ class _CartScreenState extends State<CartScreen> {
         controller: _couponCtrl, onApply: _applyCoupon,
       )),
       for (final code in cart.coupons)
-        SliverToBoxAdapter(child: _AppliedCoupon(code: code, onRemove: _removeCoupon)),
+        SliverToBoxAdapter(child: _AppliedCoupon(
+            code: code, onRemove: () => _removeCoupon(code))),
       SliverToBoxAdapter(child: _Totals(totals: cart.totals)),
       const SliverToBoxAdapter(child: SizedBox(height: 110)),
     ]));
@@ -498,16 +509,21 @@ class _DeliveryBar extends StatelessWidget {
                     fontWeight: FontWeight.w800)),
           ],
         )),
-        const SizedBox(height: 6),
+        const SizedBox(height: 8),
+        // v2.1.56 — the light-green "remaining" track is now unmistakable:
+        // taller bar, stronger light-green + hairline border, and the fill
+        // starts from the reading direction (right in Arabic).
         Container(
-          height: 8,
-          // v2.1.34 — light-green track so "done vs remaining" reads at a
-          // glance: solid green = collected, light green = still to add.
-          decoration: BoxDecoration(color: const Color(0xFFD7F0DF),
-              borderRadius: BorderRadius.circular(999)),
+          height: 10,
+          decoration: BoxDecoration(
+            color: const Color(0xFFBFE8CC),
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(color: const Color(0xFF9BD9B0), width: 0.8),
+          ),
+          clipBehavior: Clip.antiAlias,
           child: FractionallySizedBox(
-            alignment: Alignment.centerLeft, widthFactor: info.progress.clamp(0, 1),
-            // v2.1.18 — green progress per request (was yellow gradient).
+            alignment: AlignmentDirectional.centerStart,
+            widthFactor: info.progress.clamp(0, 1),
             child: const DecoratedBox(decoration: BoxDecoration(
               gradient: LinearGradient(colors: [Color(0xFF34D399), UellowColors.success]),
               borderRadius: BorderRadius.all(Radius.circular(999)),
@@ -718,10 +734,12 @@ class _AppliedCoupon extends StatelessWidget {
 class _BulkActionsBar extends StatelessWidget {
   const _BulkActionsBar({
     required this.count,
+    this.selectedTotal,
     this.onDelete,
     this.onWishlist,
   });
   final int count;
+  final String? selectedTotal;
   final VoidCallback? onDelete;
   final VoidCallback? onWishlist;
 
@@ -739,7 +757,20 @@ class _BulkActionsBar extends StatelessWidget {
       ),
       child: SafeArea(
         top: false,
-        child: Row(children: [
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+        // v2.1.56 — live total of the SELECTED products only.
+        if (enabled && selectedTotal != null) Padding(
+          padding: const EdgeInsets.only(bottom: 10),
+          child: Row(children: [
+            Text(ar ? 'إجمالي المحدّد ($count)' : 'Selected total ($count)',
+                style: const TextStyle(fontSize: 12.5,
+                    fontWeight: FontWeight.w700, color: UellowColors.muted)),
+            const Spacer(),
+            Text(selectedTotal!, style: const TextStyle(fontSize: 16,
+                fontWeight: FontWeight.w900, color: UellowColors.darkBrown)),
+          ]),
+        ),
+        Row(children: [
           Expanded(
             child: OutlinedButton.icon(
               onPressed: enabled ? onWishlist : null,
@@ -773,6 +804,7 @@ class _BulkActionsBar extends StatelessWidget {
               ),
             ),
           ),
+        ]),
         ]),
       ),
     );
@@ -894,7 +926,7 @@ class _EmptyCart extends StatelessWidget {
   Widget build(BuildContext context) {
     final ar = UellowApi.instance.lang.toLowerCase().startsWith('ar');
     return ListView(children: [
-      const SizedBox(height: 100),
+      const SizedBox(height: 60),
       const Center(child: Icon(Icons.shopping_cart_outlined,
           size: 80, color: UellowColors.muted)),
       const SizedBox(height: 18),
@@ -915,6 +947,110 @@ class _EmptyCart extends StatelessWidget {
         label: Text(UellowApi.instance.lang == 'ar'
             ? 'متابعة التسوق' : 'Continue shopping'),
       )),
+      // v2.1.56 — coupons strip + «مختارة لك» suggestions so the empty
+      // cart still sells (the reference design the user sent).
+      const SizedBox(height: 24),
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 14),
+        child: Material(
+          color: Colors.transparent,
+          borderRadius: BorderRadius.circular(14),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(14),
+            onTap: () => Navigator.pushNamed(context, '/coupons'),
+            child: Container(
+              padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
+              decoration: BoxDecoration(
+                color: UellowColors.darkBrown,
+                borderRadius: BorderRadius.circular(14),
+                boxShadow: const [BoxShadow(color: Color(0x33412402),
+                    blurRadius: 10, offset: Offset(0, 4))],
+              ),
+              child: Row(children: [
+                const Text('🎟️', style: TextStyle(fontSize: 22)),
+                const SizedBox(width: 10),
+                Expanded(child: Text(
+                    ar ? 'عندك كوبونات بانتظارك — لا تفوّتها!'
+                       : 'You have coupons waiting — don\'t miss them!',
+                    style: const TextStyle(color: Colors.white,
+                        fontSize: 12.5, fontWeight: FontWeight.w800))),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 14, vertical: 7),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(colors: [
+                        UellowColors.yellowLight, UellowColors.yellow]),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(ar ? 'احصل عليها' : 'Get',
+                      style: const TextStyle(color: UellowColors.darkBrown,
+                          fontSize: 11.5, fontWeight: FontWeight.w900)),
+                ),
+              ]),
+            ),
+          ),
+        ),
+      ),
+      const SizedBox(height: 18),
+      const _JustForYou(),
+      const SizedBox(height: 30),
+    ]);
+  }
+}
+
+// «مختارة لك» — live recommended products under the empty-cart state.
+class _JustForYou extends StatefulWidget {
+  const _JustForYou();
+  @override
+  State<_JustForYou> createState() => _JustForYouState();
+}
+
+class _JustForYouState extends State<_JustForYou> {
+  List<UellowProductCard>? _items;
+
+  @override
+  void initState() {
+    super.initState();
+    UellowApi.instance.products.recommended().then((v) {
+      if (mounted) setState(() => _items = v);
+    }).catchError((_) {
+      if (mounted) setState(() => _items = const []);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ar = UellowApi.instance.lang == 'ar';
+    final items = _items;
+    if (items == null || items.isEmpty) return const SizedBox.shrink();
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Padding(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+        child: Row(children: [
+          const Expanded(child: Divider()),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            child: Text(ar ? '✨ مختارة لك' : '✨ Just for you',
+                style: const TextStyle(fontSize: 13,
+                    fontWeight: FontWeight.w900,
+                    color: UellowColors.darkBrown)),
+          ),
+          const Expanded(child: Divider()),
+        ]),
+      ),
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        child: GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 2, mainAxisSpacing: 8, crossAxisSpacing: 8,
+            childAspectRatio: 0.585,
+          ),
+          itemCount: items.length.clamp(0, 6),
+          itemBuilder: (_, i) => ProductCard(rich: true, product: items[i]),
+        ),
+      ),
     ]);
   }
 }

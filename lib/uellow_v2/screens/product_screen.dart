@@ -39,6 +39,25 @@ class _ProductScreenState extends State<ProductScreen> {
   int _qty = 1;
   bool _inWishlist = false;
 
+  // v2.1.56 — sticky section tabs (نظرة عامة/التفاصيل/التقييمات/مقترحات)
+  // that scroll to their section, AliExpress-style.
+  final _kOverview = GlobalKey();
+  final _kDetails = GlobalKey();
+  final _kReviews = GlobalKey();
+  final _kRelated = GlobalKey();
+  int _sectionTab = 0;
+
+  void _goSection(int i) {
+    setState(() => _sectionTab = i);
+    final key = [_kOverview, _kDetails, _kReviews, _kRelated][i];
+    final ctx = key.currentContext;
+    if (ctx != null) {
+      Scrollable.ensureVisible(ctx,
+          duration: const Duration(milliseconds: 380),
+          curve: Curves.easeOut, alignment: 0.0);
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -185,7 +204,12 @@ class _ProductScreenState extends State<ProductScreen> {
                 : ((b['subtitle'] as Map?)?[l] ?? '').toString(),
           );
         })),
-      SliverToBoxAdapter(child: _Title(p: p)),
+      // v2.1.56 — sticky section tabs; pin to the top once the gallery
+      // scrolls away and jump to their section on tap.
+      SliverPersistentHeader(pinned: true, delegate: _SectionTabs(
+          tab: _sectionTab, onTap: _goSection)),
+      SliverToBoxAdapter(child: KeyedSubtree(
+          key: _kOverview, child: _Title(p: p))),
       SliverToBoxAdapter(child: _PriceRow(p: p)),
       // v2.0.78 — when a product has no vendor, show a "Fulfilled by
       // Uellow" badge so the user knows who's responsible (instead of an
@@ -230,13 +254,16 @@ class _ProductScreenState extends State<ProductScreen> {
           currentQty: _qty,
           onTierTap: (minQty) => setState(() => _qty = minQty),
         )),
-      SliverToBoxAdapter(child: _DescriptionBlock(product: p)),
+      SliverToBoxAdapter(child: KeyedSubtree(
+          key: _kDetails, child: _DescriptionBlock(product: p))),
       SliverToBoxAdapter(child: _SpecsBlock(product: p,
           onOpen: () => _showSpecsDialog(context, p))),
-      SliverToBoxAdapter(child: _ReviewsBlock(productId: p.id)),
-      SliverToBoxAdapter(child: _RelatedInfinite(
+      SliverToBoxAdapter(child: KeyedSubtree(
+          key: _kReviews, child: _ReviewsBlock(productId: p.id))),
+      SliverToBoxAdapter(child: KeyedSubtree(
+          key: _kRelated, child: _RelatedInfinite(
           productId: p.id,
-          categoryId: p.categories.isNotEmpty ? p.categories.first.id : null)),
+          categoryId: p.categories.isNotEmpty ? p.categories.first.id : null))),
       const SliverToBoxAdapter(child: SizedBox(height: 80)),
     ]);
   }
@@ -1210,7 +1237,11 @@ class _Attributes extends StatelessWidget {
 Color _hexColor(Object? raw, Color fallback) {
   try {
     var s = (raw ?? '').toString().replaceAll('#', '');
-    if (s.length == 6) s = 'FF\$s';
+    // v2.1.56 — was the LITERAL string 'FF\$s' (escaped $), so every
+    // 6-digit hex failed to parse and fell back to the default color:
+    // the "banner colors / icon circle never change from the backend"
+    // bug. Now interpolates correctly.
+    if (s.length == 6) s = 'FF$s';
     return Color(int.parse(s, radix: 16));
   } catch (_) {
     return fallback;
@@ -4391,4 +4422,64 @@ class _ScallopPainter extends CustomPainter {
   }
   @override
   bool shouldRepaint(covariant _ScallopPainter old) => old.color != color;
+}
+
+// ─── Sticky section tabs (v2.1.56) ───────────────────────────────────
+// AliExpress-style: نظرة عامة / التفاصيل / التقييمات / مقترحات. Pinned
+// under the status bar once the gallery scrolls away; taps jump to the
+// section anchors.
+class _SectionTabs extends SliverPersistentHeaderDelegate {
+  _SectionTabs({required this.tab, required this.onTap});
+  final int tab;
+  final ValueChanged<int> onTap;
+
+  static List<String> get _labels => UellowApi.instance.lang == 'ar'
+      ? const ['نظرة عامة', 'التفاصيل', 'التقييمات', 'مقترحات']
+      : const ['Overview', 'Details', 'Reviews', 'For you'];
+
+  @override
+  Widget build(BuildContext c, double shrink, bool overlaps) {
+    final ar = UellowApi.instance.lang == 'ar';
+    return Directionality(
+      textDirection: ar ? TextDirection.rtl : TextDirection.ltr,
+      child: Container(
+        color: Colors.white,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          border: const Border(bottom: BorderSide(color: UellowColors.border)),
+          boxShadow: overlaps
+              ? const [BoxShadow(color: Color(0x14000000),
+                  blurRadius: 6, offset: Offset(0, 2))]
+              : null,
+        ),
+        child: Row(children: [
+          for (var i = 0; i < _labels.length; i++) Expanded(
+            child: InkWell(
+              onTap: () => onTap(i),
+              child: Container(
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  border: Border(bottom: BorderSide(
+                    color: i == tab
+                        ? UellowColors.yellow : Colors.transparent,
+                    width: 2.5,
+                  )),
+                ),
+                child: Text(_labels[i], style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: i == tab ? FontWeight.w900 : FontWeight.w600,
+                  color: i == tab
+                      ? UellowColors.darkBrown : UellowColors.muted,
+                )),
+              ),
+            ),
+          ),
+        ]),
+      ),
+    );
+  }
+
+  @override double get maxExtent => 42;
+  @override double get minExtent => 42;
+  @override bool shouldRebuild(_SectionTabs old) => old.tab != tab;
 }

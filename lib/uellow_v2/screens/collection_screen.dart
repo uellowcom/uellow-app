@@ -97,8 +97,10 @@ class _CollectionScreenState extends State<CollectionScreen> {
     try {
       UellowPage<UellowProductCard> page;
       if (widget.searchQuery != null && widget.searchQuery!.isNotEmpty) {
+        // v2.1.56 — analytics: log the term once (page 1 = the submitted
+        // search), not again on every pagination fetch.
         page = (await UellowApi.instance.search.search(widget.searchQuery!,
-                page: _page, perPage: 20)).asProductsPage();
+                page: _page, perPage: 20, log: _page == 1)).asProductsPage();
       } else if (widget.brandValueId != null) {
         page = await UellowApi.instance.products.list(
               brandId: widget.brandValueId,

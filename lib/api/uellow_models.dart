@@ -1110,9 +1110,15 @@ class UellowAddress {
 class UellowSearchResult {
   final List<UellowProductCard> products;
   final List<UellowCategoryRef> categories;
+  // v2.1.56 — brand + seller sections:
+  // brands:  [{id (attribute value), name, image, product_count}]
+  // vendors: [{id, name{en,ar}, logo, product_count}]
+  final List<Map<String, dynamic>> brands;
+  final List<Map<String, dynamic>> vendors;
   final List<String> suggestions;
   const UellowSearchResult({
     required this.products, required this.categories, required this.suggestions,
+    this.brands = const [], this.vendors = const [],
   });
   factory UellowSearchResult.fromJson(Map<String, dynamic> env) {
     final d = env['data'] as Map<String, dynamic>;
@@ -1123,6 +1129,10 @@ class UellowSearchResult {
       categories: ((d['categories'] as List?) ?? const [])
           .map((e) => UellowCategoryRef.fromJson(e))
           .toList(),
+      brands: List<Map<String, dynamic>>.from(
+          (d['brands'] as List?) ?? const []),
+      vendors: List<Map<String, dynamic>>.from(
+          (d['vendors'] as List?) ?? const []),
       suggestions: List<String>.from((d['suggestions'] as List?) ?? const []),
     );
   }

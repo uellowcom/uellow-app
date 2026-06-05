@@ -91,6 +91,7 @@ class UellowApi {
     home          = _HomeApi(this);
     products      = _ProductsApi(this);
     categories    = _CategoriesApi(this);
+    vendors       = _VendorsApi(this);
     cart          = _CartApi(this);
     orders        = _OrdersApi(this);
     addresses     = _AddressesApi(this);
@@ -182,6 +183,7 @@ class UellowApi {
   late final _HomeApi home;
   late final _ProductsApi products;
   late final _CategoriesApi categories;
+  late final _VendorsApi vendors;
   late final _CartApi cart;
   late final _OrdersApi orders;
   late final _AddressesApi addresses;
@@ -672,6 +674,29 @@ class _ProductsApi {
   }
 }
 
+// v2.1.56 — real vendor-store data (was missing; the vendor screen ran
+// on hardcoded mock content).
+class _VendorsApi {
+  _VendorsApi(this._c);
+  final UellowApi _c;
+
+  /// Full vendor profile: name{en,ar}, tagline, logo, banner,
+  /// brand_color, tier, product_count, order_count, rating{avg,count},
+  /// about{en,ar}, sla_hours, categories[{id,name,count}].
+  Future<Map<String, dynamic>> detail(int id) async {
+    final res = await _c._get('/api/mobile/v2/vendors/$id');
+    return (res['data'] as Map).cast<String, dynamic>();
+  }
+
+  Future<UellowPage<UellowProductCard>> products(int id,
+      {String sort = 'newest', int page = 1, int perPage = 20}) async {
+    final res = await _c._get('/api/mobile/v2/vendors/$id/products', query: {
+      'sort': sort, 'page': page, 'per_page': perPage,
+    });
+    return UellowPage.fromJson(res, (e) => UellowProductCard.fromJson(e));
+  }
+}
+
 class _CategoriesApi {
   _CategoriesApi(this._c);
   final UellowApi _c;
@@ -697,6 +722,14 @@ class _CategoriesApi {
     final res = await _c._get('${EP.categories}/$id');
     return UellowCategory.fromJson(
         res['data']['category'] as Map<String, dynamic>);
+  }
+
+  /// v2.1.56 — header slides for the shop page slider. Each item:
+  /// {image_url, link: {type: product|category|url|none, value}}.
+  Future<List<Map<String, dynamic>>> slides(int id) async {
+    final res = await _c._get('/api/mobile/v2/category/$id/slides');
+    return List<Map<String, dynamic>>.from(
+        (res['data']?['slides'] as List?) ?? const []);
   }
 }
 
@@ -740,8 +773,11 @@ class _CartApi {
     return _save(UellowCart.fromJson(res['data']['cart']));
   }
 
-  Future<UellowCart> removeCoupon() async {
-    final res = await _c._post(EP.cartRemoveCoupon);
+  Future<UellowCart> removeCoupon([String? code]) async {
+    // v2.1.56 — pass the specific code so only THAT coupon is removed
+    // (no code = legacy wipe-all).
+    final res = await _c._post(EP.cartRemoveCoupon,
+        body: code == null ? null : {'code': code});
     return _save(UellowCart.fromJson(res['data']['cart']));
   }
 
@@ -980,11 +1016,21 @@ class _SearchApi {
   final UellowApi _c;
 
   Future<UellowSearchResult> search(String query,
-      {int page = 1, int perPage = 20}) async {
+      {int page = 1, int perPage = 20, bool log = true}) async {
+    // v2.1.56 — log:false for as-you-type suggestion calls so half-typed
+    // words never reach recent/trending analytics.
     final res = await _c._get(EP.search, query: {
       'q': query, 'page': page, 'per_page': perPage,
+      if (!log) 'log': '0',
     });
     return UellowSearchResult.fromJson(res);
+  }
+
+  /// v2.1.56 — record a FINISHED search (submit / result tap).
+  Future<void> record(String query) async {
+    try {
+      await _c._post('/api/mobile/v2/search/record', body: {'q': query});
+    } catch (_) {/* analytics must never break UX */}
   }
 
   Future<List<UellowPopularQuery>> popular() async {

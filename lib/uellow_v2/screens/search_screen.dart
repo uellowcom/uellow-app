@@ -53,7 +53,11 @@ class _SearchScreenState extends State<SearchScreen> {
   void _onChanged() {
     final q = _ctrl.text.trim();
     if (q.length >= 2) {
-      setState(() => _results = UellowApi.instance.search.search(q, perPage: 6));
+      // v2.1.56 — log:false: typing pauses are suggestions, NOT searches.
+      // The term is recorded only when the user finishes (submit / taps
+      // a result) — see _goSeeAll and the result onTap.
+      setState(() => _results =
+          UellowApi.instance.search.search(q, perPage: 6, log: false));
     } else {
       setState(() => _results = null);
     }
@@ -311,7 +315,8 @@ class _SearchScreenState extends State<SearchScreen> {
                     child: SizedBox(width: 88, child: Container(
                       padding: const EdgeInsets.symmetric(vertical: 10),
                       decoration: const BoxDecoration(
-                        color: UellowColors.yellowSoft,
+                        // v2.1.56 — gray background per spec (was yellow).
+                        color: Color(0xFFEFEFEF),
                         borderRadius: BorderRadius.all(Radius.circular(12)),
                       ),
                       child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
@@ -393,20 +398,165 @@ class _SearchScreenState extends State<SearchScreen> {
         }
         final r = snap.data!;
         final lang = UellowApi.instance.lang;
-        if (r.products.isEmpty) {
+        final ar = lang == 'ar';
+        final nothing = r.products.isEmpty && r.brands.isEmpty &&
+            r.categories.isEmpty && r.vendors.isEmpty;
+        if (nothing) {
           return Padding(
             padding: const EdgeInsets.all(30),
             child: Column(children: [
               const Icon(Icons.search_off, size: 64, color: UellowColors.muted),
               const SizedBox(height: 12),
               Text(lang == 'ar'
-                  ? 'لا توجد منتجات تطابق "${_ctrl.text}"'
-                  : 'No products match "${_ctrl.text}"',
+                  ? 'لا توجد نتائج تطابق "${_ctrl.text}"'
+                  : 'No results match "${_ctrl.text}"',
                   textAlign: TextAlign.center, style: UT.body),
             ]),
           );
         }
+        // v2.1.56 — multi-section results: brands / categories / sellers
+        // each in their own section above the product suggestions.
         return ListView(children: [
+          if (r.brands.isNotEmpty) _resultSection(
+            title: ar ? 'الماركات' : 'BRANDS',
+            child: SizedBox(height: 86, child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              itemCount: r.brands.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 10),
+              itemBuilder: (_, i) {
+                final b = r.brands[i];
+                final img = (b['image'] as String?) ?? '';
+                final name = (b['name'] ?? '').toString();
+                final count = (b['product_count'] as num?)?.toInt() ?? 0;
+                return GestureDetector(
+                  onTap: () {
+                    UellowApi.instance.search.record(_ctrl.text.trim());
+                    Navigator.pushNamed(context, '/collection', arguments: {
+                      'brand_value_id': (b['id'] as num?)?.toInt(),
+                      'brand_name': name,
+                    });
+                  },
+                  child: Column(mainAxisSize: MainAxisSize.min, children: [
+                    Container(
+                      width: 52, height: 52,
+                      clipBehavior: Clip.antiAlias,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFEFEFEF), shape: BoxShape.circle,
+                        border: Border.all(color: UellowColors.border),
+                      ),
+                      child: img.isNotEmpty
+                          ? CachedNetworkImage(
+                              imageUrl: img.startsWith('http')
+                                  ? img
+                                  : '${UellowApi.instance.baseUrl}$img',
+                              fit: BoxFit.contain,
+                              errorWidget: (_, __, ___) => Center(child: Text(
+                                  name.isEmpty ? '🏷️' : name[0].toUpperCase(),
+                                  style: const TextStyle(fontSize: 18,
+                                      fontWeight: FontWeight.w900,
+                                      color: UellowColors.darkBrown))))
+                          : Center(child: Text(
+                              name.isEmpty ? '🏷️' : name[0].toUpperCase(),
+                              style: const TextStyle(fontSize: 18,
+                                  fontWeight: FontWeight.w900,
+                                  color: UellowColors.darkBrown))),
+                    ),
+                    const SizedBox(height: 4),
+                    SizedBox(width: 64, child: Text(
+                        count > 0 ? '$name ($count)' : name,
+                        maxLines: 1, overflow: TextOverflow.ellipsis,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(fontSize: 9.5,
+                            fontWeight: FontWeight.w700,
+                            color: UellowColors.ink))),
+                  ]),
+                );
+              },
+            )),
+          ),
+          if (r.categories.isNotEmpty) _resultSection(
+            title: ar ? 'الأقسام' : 'CATEGORIES',
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Wrap(spacing: 6, runSpacing: 6,
+                  children: r.categories.take(8).map((c) => GestureDetector(
+                onTap: () {
+                  UellowApi.instance.search.record(_ctrl.text.trim());
+                  Navigator.pushNamed(context, '/collection',
+                      arguments: {'category_id': c.id});
+                },
+                child: Container(
+                  padding: const EdgeInsets.fromLTRB(12, 7, 12, 7),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFEFEFEF),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    const Icon(Icons.category_outlined, size: 13,
+                        color: UellowColors.darkBrown),
+                    const SizedBox(width: 5),
+                    Text(c.name.current(lang), style: const TextStyle(
+                        fontSize: 12, fontWeight: FontWeight.w700,
+                        color: UellowColors.ink)),
+                  ]),
+                ),
+              )).toList()),
+            ),
+          ),
+          if (r.vendors.isNotEmpty) _resultSection(
+            title: ar ? 'التجّار' : 'SELLERS',
+            child: Column(children: r.vendors.take(4).map((v) {
+              final name = ((v['name'] as Map?)?[ar ? 'ar' : 'en'] ??
+                  (v['name'] as Map?)?['en'] ?? '').toString();
+              final logo = (v['logo'] as String?) ?? '';
+              final count = (v['product_count'] as num?)?.toInt() ?? 0;
+              return InkWell(
+                onTap: () {
+                  UellowApi.instance.search.record(_ctrl.text.trim());
+                  UellowRouter.goVendor(
+                      context, (v['id'] as num?)?.toInt() ?? 0);
+                },
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 6, 16, 6),
+                  child: Row(children: [
+                    Container(
+                      width: 40, height: 40,
+                      clipBehavior: Clip.antiAlias,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFEFEFEF), shape: BoxShape.circle,
+                      ),
+                      child: logo.isNotEmpty
+                          ? CachedNetworkImage(
+                              imageUrl: logo.startsWith('http')
+                                  ? logo
+                                  : '${UellowApi.instance.baseUrl}$logo',
+                              fit: BoxFit.cover,
+                              errorWidget: (_, __, ___) => const Icon(
+                                  Icons.storefront_outlined, size: 18,
+                                  color: UellowColors.darkBrown))
+                          : const Icon(Icons.storefront_outlined, size: 18,
+                              color: UellowColors.darkBrown),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                      Text(name, maxLines: 1, overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 12.5,
+                              fontWeight: FontWeight.w800,
+                              color: UellowColors.ink)),
+                      Text(ar ? '$count منتج' : '$count products',
+                          style: const TextStyle(fontSize: 10.5,
+                              color: UellowColors.muted)),
+                    ])),
+                    const Icon(Icons.chevron_right, color: UellowColors.muted),
+                  ]),
+                ),
+              );
+            }).toList()),
+          ),
+          if (r.products.isNotEmpty) ...[
           Container(
             color: Colors.white,
             padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
@@ -418,7 +568,11 @@ class _SearchScreenState extends State<SearchScreen> {
             color: Colors.white,
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Column(children: r.products.take(6).map((p) => GestureDetector(
-              onTap: () => UellowRouter.goProduct(context, p.id),
+              onTap: () {
+                // v2.1.56 — tapping a result = a FINISHED search → record.
+                UellowApi.instance.search.record(_ctrl.text.trim());
+                UellowRouter.goProduct(context, p.id);
+              },
               child: Container(
                 padding: const EdgeInsets.symmetric(vertical: 10),
                 decoration: const BoxDecoration(
@@ -453,8 +607,27 @@ class _SearchScreenState extends State<SearchScreen> {
                   : 'See all results for "${_ctrl.text.trim()}"  →'),
             ),
           ),
+          ],
         ]);
       },
+    );
+  }
+
+  // White section card with the same quiet caps title used elsewhere.
+  Widget _resultSection({required String title, required Widget child}) {
+    return Container(
+      color: Colors.white,
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+          child: Text(title, style: const TextStyle(
+              fontSize: 11, fontWeight: FontWeight.w800,
+              color: UellowColors.muted, letterSpacing: 0.5)),
+        ),
+        child,
+      ]),
     );
   }
 }

@@ -237,7 +237,11 @@ Widget _renderBlock(BuildContext c, Map<String, dynamic> b, DynTheme t) {
     case 'discount-strip': inner = DiscountStripBlock(p: p, data: data, t: t, ar: ar); break;
     case 'pill-filter':    inner = PillFilterBlock(p: p, t: t, ar: ar); break;
     // v2.0.36 — Explore More
-    case 'explore-more':   inner = ExploreMoreBlock(p: p, data: data, t: t, ar: ar); break;
+    case 'explore-more':
+      // v2.1.56 — no trailing gap below the Load-more button.
+      if (p['pad_bottom'] == null) p['pad_bottom'] = 0;
+      inner = ExploreMoreBlock(p: p, data: data, t: t, ar: ar);
+      break;
     // v2.0.38 — Slider + 5 pro designs
     case 'slider':         inner = SliderBlock(p: p, t: t, ar: ar); break;
     case 'tab-nav':
@@ -572,13 +576,22 @@ class _CategoriesBlock extends StatelessWidget {
     final animateIn = p['animate_in'] == true;
     final showTitle = (p['show_title'] != false) && title.isNotEmpty;
 
+    // v2.1.56 — free tile color from the builder (`tile_bg` hex). When
+    // unset: palette if colored_bg else neutral GRAY (was yellow tint).
+    final customTileBg = (p['tile_bg'] is String &&
+            (p['tile_bg'] as String).trim().isNotEmpty &&
+            (p['tile_bg'] as String) != 'none')
+        ? DynTheme._hex(p['tile_bg'], const Color(0xFFEFEFEF))
+        : null;
+
     Widget itemTile(Map<String, dynamic> cat, int idx) {
       final url = (cat['icon_url'] as String?) ?? '';
       final name = cat['name']?.toString() ?? '';
       final count = (cat['product_count'] as num?)?.toInt() ?? 0;
-      final bg = coloredBg
-          ? _palette[idx % _palette.length]
-          : t.primary.withValues(alpha: 0.12);
+      final bg = customTileBg ??
+          (coloredBg
+              ? _palette[idx % _palette.length]
+              : const Color(0xFFEFEFEF));
       final borderC = showRing
           ? t.primary.withValues(alpha: 0.30)
           : Colors.transparent;
@@ -843,7 +856,10 @@ class _ProductsBlock extends StatelessWidget {
   }
 
   Widget _carousel(List<Map<String, dynamic>> items) {
-    return SizedBox(height: 300,
+    // v2.1.56 — 300→278: the rail was taller than the rich card's
+    // natural height (160 image + ~115 content), leaving an empty white
+    // band at the bottom of every card (مقترحاتنا لك + carousels).
+    return SizedBox(height: 278,
       child: ListView.separated(
         physics: const ClampingScrollPhysics(),
         padding: const EdgeInsets.symmetric(horizontal: 14),

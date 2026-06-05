@@ -30,6 +30,8 @@ class ProductCard extends StatefulWidget {
     this.compact = false,
     this.hideSavePill = false,
     this.hideDiscount = false,
+    this.hideFreeShip = false,
+    this.hideAvail = false,
     this.rich = false,
     this.surface = 'site',
   });
@@ -51,6 +53,12 @@ class ProductCard extends StatefulWidget {
   final bool compact;
   final bool hideSavePill;
   final bool hideDiscount;
+  // v2.1.56 — hideFreeShip: drops the free-shipping photo badge (shop
+  // screen "All products" + "Recently arrived" per spec).
+  final bool hideFreeShip;
+  // v2.1.56 — hideAvail: drops the availability (متاح/نفد) pill — used by
+  // the Discount Strip block per spec.
+  final bool hideAvail;
   // v2.1.26 — rich layout (category page): coins row, rating+price-trend
   // row, auto-rotating info ticker, availability/FREE/video bottom row.
   final bool rich;
@@ -103,7 +111,7 @@ class _ProductCardState extends State<ProductCard> {
           ? _RichLayout(product: product, lang: lang,
               hasDiscount: hasDiscount, discountPct: discountPct,
               saveAmount: saveAmount, faved: _faved, onFav: _toggleFav,
-              showRank: showRank)
+              showRank: showRank, hideAvail: widget.hideAvail)
           : widget.inFlashSale
           ? _FlashLayout(product: product, lang: lang,
               hasDiscount: hasDiscount, discountPct: discountPct,
@@ -117,6 +125,7 @@ class _ProductCardState extends State<ProductCard> {
               saveAmount: saveAmount,
               showStockLabel: widget.hideSavePill ? false : widget.showStockLabel,
               hideSavePill: widget.hideSavePill,
+              hideFreeShip: widget.hideFreeShip,
               compact: widget.compact,
               faved: _faved, onFav: _toggleFav,
               showRank: showRank),
@@ -155,6 +164,7 @@ class _StdLayout extends StatelessWidget {
     required this.saveAmount, required this.showStockLabel,
     required this.faved, required this.onFav,
     this.compact = false, this.hideSavePill = false,
+    this.hideFreeShip = false,
     this.showRank = false,
   });
   final UellowProductCard product;
@@ -171,6 +181,8 @@ class _StdLayout extends StatelessWidget {
   // price (not the current price) so "what you save" reads as a unit.
   final bool compact;
   final bool hideSavePill;
+  // v2.1.56 — suppress the free-shipping photo badge (shop screen rows).
+  final bool hideFreeShip;
   // v2.1.34 — quiet best-seller line under the name (no background).
   final bool showRank;
 
@@ -187,7 +199,8 @@ class _StdLayout extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _Image(product: product, hasDiscount: hasDiscount,
-            discountPct: discountPct, faved: faved, onFav: onFav),
+            discountPct: discountPct, faved: faved, onFav: onFav,
+            hideFreeShip: hideFreeShip),
         Padding(
           padding: EdgeInsets.fromLTRB(8, compact ? 4 : 6, 8, compact ? 6 : 8),
           child: Column(
@@ -486,6 +499,8 @@ class _FlashLayout extends StatelessWidget {
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           // Price row — current price + localized symbol, old price at
           // the end of the row (never crowds the new price).
+          // v2.1.56 — struck-through old price sits RIGHT NEXT to the
+          // current price (tiny gap), no longer pushed to the row end.
           Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
             Text(product.price.amount.toStringAsFixed(3),
                 style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w900,
@@ -494,11 +509,12 @@ class _FlashLayout extends StatelessWidget {
             Text(product.price.displaySymbol(lang),
                 style: const TextStyle(fontSize: 8.5, fontWeight: FontWeight.w800,
                     color: Color(0xFFC62828))),
-            const Spacer(),
-            if (hasDiscount)
-              MidStrikePrice(
+            if (hasDiscount) ...[
+              const SizedBox(width: 4),
+              Flexible(child: MidStrikePrice(
                   text: product.comparePrice!.amount.toStringAsFixed(3),
-                  fontSize: 9, color: UellowColors.muted),
+                  fontSize: 9, color: UellowColors.muted)),
+            ],
           ]),
           if (hasDiscount) ...[
             const SizedBox(height: 5),
@@ -549,6 +565,7 @@ class _Image extends StatelessWidget {
     required this.product, required this.hasDiscount,
     required this.discountPct, required this.faved, required this.onFav,
     this.clean = false,
+    this.hideFreeShip = false,
     this.extraBadges = const [],
   });
   final UellowProductCard product;
@@ -556,6 +573,8 @@ class _Image extends StatelessWidget {
   final int discountPct;
   final bool faved;
   final VoidCallback onFav;
+  // v2.1.56 — suppress the free-shipping badge only (shop rows).
+  final bool hideFreeShip;
   // v2.1.28 — clean image for the rich card: discount %, free-shipping
   // and rank badges all moved off the photo per design.
   final bool clean;
@@ -632,7 +651,8 @@ class _Image extends StatelessWidget {
           // a quiet text line under the name (see _RankLine), gated by the
           // backend rank_badge_scope setting.
           // v2.0.82 — Free shipping badge (when the product is tagged)
-          if (product.badges.contains('free_shipping') && !clean) Positioned(
+          if (product.badges.contains('free_shipping') && !clean
+              && !hideFreeShip) Positioned(
             bottom: 8, left: 8,
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
@@ -672,9 +692,10 @@ class _HeartBtn extends StatelessWidget {
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
+      // v2.1.56 — smaller heart per spec (was 32/16).
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
-        width: 32, height: 32,
+        width: 26, height: 26,
         decoration: BoxDecoration(
           color: filled ? UellowColors.danger : const Color(0xF2FFFFFF),
           shape: BoxShape.circle,
@@ -682,7 +703,7 @@ class _HeartBtn extends StatelessWidget {
               blurRadius: 6, offset: Offset(0, 2))],
         ),
         child: Icon(filled ? Icons.favorite : Icons.favorite_border,
-            size: 16,
+            size: 13,
             color: filled ? Colors.white : UellowColors.muted),
       ),
     );
@@ -783,6 +804,7 @@ class _RichLayout extends StatelessWidget {
     required this.hasDiscount, required this.discountPct,
     required this.saveAmount, required this.faved, required this.onFav,
     this.showRank = false,
+    this.hideAvail = false,
   });
   final UellowProductCard product;
   final String lang;
@@ -793,6 +815,8 @@ class _RichLayout extends StatelessWidget {
   final VoidCallback onFav;
   // v2.1.34 — quiet best-seller line under the name (no background).
   final bool showRank;
+  // v2.1.56 — drop the availability pill (Discount Strip block).
+  final bool hideAvail;
 
   // v2.1.32 — ALL bottom badges in priority order. The first 3 live in
   // the bottom row; everything beyond overflows onto the photo
@@ -812,7 +836,7 @@ class _RichLayout extends StatelessWidget {
             fontWeight: FontWeight.w900, color: fg, letterSpacing: 0.2)),
       ]),
     );
-    out.add(_AvailPill(product: product));
+    if (!hideAvail) out.add(_AvailPill(product: product));
     if (product.priceTrend?['is_lowest'] == true) {
       out.add(coin('🔥', ar ? 'أقل سعر' : 'LOWEST',
           const Color(0xFFFFF3E0), const Color(0xFFBF360C)));

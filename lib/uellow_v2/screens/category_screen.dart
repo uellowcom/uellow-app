@@ -5,11 +5,14 @@
 //   2. Latest products in the selected main category — horizontal slider
 //   3. All products grid
 // =============================================================================
+import 'dart:async';
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
 import '../../api/uellow_api.dart';
 import '../../api/uellow_models.dart';
+import '../router/uellow_router.dart';
 import '../theme/uellow_theme.dart';
 import '../widgets/product_card.dart';
 import '../widgets/uellow_bottom_nav.dart';
@@ -296,50 +299,12 @@ class _ContentState extends State<_Content> {
     final ar = lang == 'ar';
     final subs = widget.category.children;
     return ListView(padding: EdgeInsets.zero, children: [
-      // Featured banner — tap anywhere (or the Shop button) opens the
-      // category collection page.
-      InkWell(
-        onTap: () => Navigator.pushNamed(context, '/collection',
-            arguments: {'category_id': widget.category.id}),
-        child: Container(
-          margin: const EdgeInsets.fromLTRB(10, 10, 10, 0),
-          padding: const EdgeInsets.all(14),
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(colors: [UellowColors.yellow, UellowColors.yellowLight]),
-            borderRadius: BorderRadius.all(Radius.circular(12)),
-          ),
-          child: Row(children: [
-            Container(
-              width: 44, height: 44,
-              decoration: const BoxDecoration(
-                color: UellowColors.darkBrown,
-                borderRadius: BorderRadius.all(Radius.circular(10)),
-              ),
-              child: const Icon(Icons.bolt, size: 22, color: UellowColors.yellowLight),
-            ),
-            const SizedBox(width: 10),
-            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(widget.category.name.current(lang),
-                  style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 14,
-                      color: UellowColors.darkBrown)),
-              const SizedBox(height: 2),
-              Text(ar ? 'خصومات تصل إلى 50% · اليوم فقط'
-                      : 'Up to 50% off · today only',
-                  style: const TextStyle(color: Color(0xCC412402), fontSize: 11)),
-            ])),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-              decoration: const BoxDecoration(
-                color: UellowColors.darkBrown,
-                borderRadius: BorderRadius.all(Radius.circular(8)),
-              ),
-              child: Text(ar ? 'تسوّق ←' : 'Shop →',
-                  style: const TextStyle(color: UellowColors.yellowLight,
-                      fontWeight: FontWeight.w800, fontSize: 11)),
-            ),
-          ]),
-        ),
-      ),
+      // v2.1.56 — image slider replaces the old static "up to 50% off"
+      // banner. Slides come from the backend (category form ▸ App Header
+      // Slides); built-in default banners show until the admin adds some.
+      _CategoryHeaderSlider(
+          key: ValueKey('slider-${widget.category.id}'),
+          category: widget.category),
       // Sub-categories (only if any)
       if (subs.isNotEmpty) _SubCatsGrid(subs: subs, lang: lang),
       // Latest products slider
@@ -416,12 +381,13 @@ class _SubCatsGrid extends StatelessWidget {
                     : null,
               )),
               const SizedBox(height: 6),
+              // v2.1.56 — smaller sub-category font per spec.
               Text(c.name.current(lang), maxLines: 2,
                   overflow: TextOverflow.ellipsis, textAlign: TextAlign.center,
-                  style: const TextStyle(fontSize: 10, height: 1.25,
+                  style: const TextStyle(fontSize: 8.5, height: 1.25,
                       fontWeight: FontWeight.w700, color: UellowColors.ink)),
               Text('${c.productCount}',
-                  style: const TextStyle(fontSize: 9, color: UellowColors.muted,
+                  style: const TextStyle(fontSize: 8, color: UellowColors.muted,
                       fontWeight: FontWeight.w700)),
             ]));
           },
@@ -497,7 +463,9 @@ class _LatestSlider extends StatelessWidget {
                       surface: 'category',
                       compact: true,
                       hideSavePill: true,
-                      hideDiscount: true)),
+                      hideDiscount: true,
+                      // v2.1.56 — free-shipping badge off in shop rows.
+                      hideFreeShip: true)),
               );
             },
           ),
@@ -538,10 +506,221 @@ class _ProductsGrid extends StatelessWidget {
             // fonts. The clean grid the user asked for.
             itemBuilder: (_, i) => ProductCard(
                 product: items[i], surface: 'category',
-                compact: true, hideSavePill: true, hideDiscount: true),
+                compact: true, hideSavePill: true, hideDiscount: true,
+                // v2.1.56 — free-shipping badge off in shop grid.
+                hideFreeShip: true),
           ),
         );
       },
+    );
+  }
+}
+
+// ─── Category header slider (v2.1.56) ────────────────────────────────
+// Replaces the old static yellow banner. Slides are managed per MAIN
+// category from the backend (eCommerce category form ▸ App Header
+// Slides); each slide can link to a product, a category or a URL.
+// Until the admin uploads slides, tasteful built-in default banners
+// rotate (they all open the category collection page).
+
+class _CategoryHeaderSlider extends StatefulWidget {
+  const _CategoryHeaderSlider({super.key, required this.category});
+  final UellowCategory category;
+  @override
+  State<_CategoryHeaderSlider> createState() => _CategoryHeaderSliderState();
+}
+
+class _CategoryHeaderSliderState extends State<_CategoryHeaderSlider> {
+  List<Map<String, dynamic>>? _slides;   // null = loading
+  final _page = PageController();
+  Timer? _auto;
+  int _i = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final s = await UellowApi.instance.categories.slides(widget.category.id);
+      if (!mounted) return;
+      setState(() => _slides = s);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _slides = const []);
+    }
+    _scheduleAuto();
+  }
+
+  void _scheduleAuto() {
+    _auto?.cancel();
+    final n = _count;
+    if (n <= 1) return;
+    _auto = Timer.periodic(const Duration(seconds: 4), (_) {
+      if (!mounted || !_page.hasClients) return;
+      final next = (_i + 1) % n;
+      _page.animateToPage(next,
+          duration: const Duration(milliseconds: 420), curve: Curves.easeOut);
+    });
+  }
+
+  int get _count =>
+      (_slides == null || _slides!.isEmpty) ? 3 : _slides!.length;
+
+  void _openLink(Map<String, dynamic>? slide) {
+    final link = (slide?['link'] as Map?)?.cast<String, dynamic>();
+    final type = (link?['type'] ?? 'none').toString();
+    final value = link?['value'];
+    switch (type) {
+      case 'product':
+        final id = int.tryParse('$value') ?? 0;
+        if (id > 0) { UellowRouter.goProduct(context, id); return; }
+        break;
+      case 'category':
+        final id = int.tryParse('$value') ?? 0;
+        if (id > 0) {
+          Navigator.pushNamed(context, '/collection',
+              arguments: {'category_id': id});
+          return;
+        }
+        break;
+      case 'url':
+        final url = (value ?? '').toString();
+        if (url.isNotEmpty) {
+          Navigator.pushNamed(context, '/webview',
+              arguments: {'url': url, 'title': ''});
+          return;
+        }
+        break;
+    }
+    // default / no link → category collection
+    Navigator.pushNamed(context, '/collection',
+        arguments: {'category_id': widget.category.id});
+  }
+
+  @override
+  void dispose() { _auto?.cancel(); _page.dispose(); super.dispose(); }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_slides == null) {
+      return Container(
+        height: 120,
+        margin: const EdgeInsets.fromLTRB(10, 10, 10, 0),
+        decoration: BoxDecoration(color: const Color(0xFFEFEFEF),
+            borderRadius: BorderRadius.circular(12)),
+      );
+    }
+    final hasReal = _slides!.isNotEmpty;
+    return Container(
+      height: 120,
+      margin: const EdgeInsets.fromLTRB(10, 10, 10, 0),
+      child: Stack(children: [
+        PageView.builder(
+          controller: _page,
+          itemCount: _count,
+          onPageChanged: (i) => setState(() => _i = i),
+          itemBuilder: (_, i) => GestureDetector(
+            onTap: () => _openLink(hasReal ? _slides![i] : null),
+            child: Padding(
+              padding: const EdgeInsetsDirectional.only(end: 0),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: hasReal
+                    ? CachedNetworkImage(
+                        imageUrl:
+                            '${UellowApi.instance.baseUrl}${_slides![i]['image_url']}',
+                        fit: BoxFit.cover, width: double.infinity,
+                        placeholder: (_, __) =>
+                            const ColoredBox(color: Color(0xFFEFEFEF)),
+                        errorWidget: (_, __, ___) =>
+                            _defaultSlide(i),
+                      )
+                    : _defaultSlide(i),
+              ),
+            ),
+          ),
+        ),
+        // dots
+        if (_count > 1) PositionedDirectional(
+          bottom: 8, start: 0, end: 0,
+          child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+            for (var d = 0; d < _count; d++) AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              margin: const EdgeInsets.symmetric(horizontal: 2.5),
+              width: d == _i ? 16 : 6, height: 6,
+              decoration: BoxDecoration(
+                color: d == _i
+                    ? Colors.white
+                    : Colors.white.withValues(alpha: 0.55),
+                borderRadius: BorderRadius.circular(999),
+                boxShadow: const [BoxShadow(color: Color(0x33000000),
+                    blurRadius: 3)],
+              ),
+            ),
+          ]),
+        ),
+      ]),
+    );
+  }
+
+  // Built-in default banners (brand palette) — shown until the admin
+  // uploads real slides from the backend.
+  Widget _defaultSlide(int i) {
+    final ar = UellowApi.instance.lang == 'ar';
+    final name = widget.category.name.current(UellowApi.instance.lang);
+    final presets = [
+      (
+        const [Color(0xFFF5C320), Color(0xFFFFE066)],
+        '🛍️',
+        ar ? 'تسوّق $name' : 'Shop $name',
+        ar ? 'أفضل المنتجات بأفضل الأسعار' : 'Top picks at the best prices',
+        UellowColors.darkBrown,
+      ),
+      (
+        const [Color(0xFF412402), Color(0xFF6B4A1B)],
+        '⚡',
+        ar ? 'عروض $name' : '$name deals',
+        ar ? 'خصومات يومية متجددة' : 'Fresh discounts every day',
+        Colors.white,
+      ),
+      (
+        const [Color(0xFF0EA5E9), Color(0xFF38BDF8)],
+        '🚚',
+        ar ? 'توصيل سريع' : 'Fast delivery',
+        ar ? 'اطلب الآن واستلم خلال ساعات' : 'Order now, delivered in hours',
+        Colors.white,
+      ),
+    ];
+    final p = presets[i % presets.length];
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+            begin: Alignment.topLeft, end: Alignment.bottomRight,
+            colors: p.$1),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Row(children: [
+        Text(p.$2, style: const TextStyle(fontSize: 34)),
+        const SizedBox(width: 12),
+        Expanded(child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(p.$3, maxLines: 1, overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontWeight: FontWeight.w900,
+                    fontSize: 15, color: p.$5)),
+            const SizedBox(height: 3),
+            Text(p.$4, maxLines: 1, overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 11,
+                    color: p.$5.withValues(alpha: 0.85))),
+          ],
+        )),
+        Icon(Icons.arrow_forward_ios, size: 14,
+            color: p.$5.withValues(alpha: 0.8)),
+      ]),
     );
   }
 }

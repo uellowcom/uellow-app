@@ -1,11 +1,21 @@
 // =============================================================================
-// VendorScreen — vendor store with hero + stats + 7 tabs + internal
-// flash sale + product sections. Wires to /api/mobile/v2/vendors/<id>.
+// VendorScreen — REAL vendor store (v2.1.56 full rewrite).
+// Everything on this page is live data from /api/mobile/v2/vendors/<id>:
+// hero (brand color/banner), logo, bilingual name + tagline, true rating,
+// real stats (products / orders / rating / SLA), category chips, sortable
+// paginated product grid, about sheet, working follow (persisted) + share.
+// The old screen was hardcoded mock content ("Uellow Official", fake flash,
+// placeholder cards) — all removed.
 // =============================================================================
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../api/uellow_api.dart';
+import '../../api/uellow_models.dart';
 import '../theme/uellow_theme.dart';
+import '../widgets/product_card.dart';
 
 class VendorScreen extends StatefulWidget {
   const VendorScreen({super.key, required this.vendorId});
@@ -15,340 +25,559 @@ class VendorScreen extends StatefulWidget {
 }
 
 class _VendorScreenState extends State<VendorScreen> {
-  int _tab = 0;
+  Map<String, dynamic>? _vendor;     // null = loading
+  bool _error = false;
+
+  // products
+  final List<UellowProductCard> _items = [];
+  String _sort = 'newest';
+  int _page = 1;
+  bool _hasMore = true;
+  bool _loading = false;
+
+  bool _following = false;
+
+  final _scroll = ScrollController();
+
+  @override
+  void initState() {
+    super.initState();
+    _scroll.addListener(() {
+      if (_scroll.position.pixels >
+          _scroll.position.maxScrollExtent - 400) {
+        _loadMore();
+      }
+    });
+    _load();
+  }
+
+  @override
+  void dispose() { _scroll.dispose(); super.dispose(); }
+
+  Future<void> _load() async {
+    try {
+      final v = await UellowApi.instance.vendors.detail(widget.vendorId);
+      final prefs = await SharedPreferences.getInstance();
+      final followed = prefs.getStringList('followed_vendors') ?? const [];
+      if (!mounted) return;
+      setState(() {
+        _vendor = v;
+        _following = followed.contains('${widget.vendorId}');
+      });
+      _loadMore();
+    } catch (_) {
+      if (mounted) setState(() => _error = true);
+    }
+  }
+
+  Future<void> _loadMore() async {
+    if (_loading || !_hasMore) return;
+    setState(() => _loading = true);
+    try {
+      final page = await UellowApi.instance.vendors.products(
+          widget.vendorId, sort: _sort, page: _page, perPage: 20);
+      if (!mounted) return;
+      setState(() {
+        _items.addAll(page.items);
+        _hasMore = page.hasNext;
+        _page += 1;
+        _loading = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() { _loading = false; _hasMore = false; });
+    }
+  }
+
+  void _changeSort(String s) {
+    if (s == _sort) return;
+    setState(() {
+      _sort = s; _items.clear(); _page = 1; _hasMore = true; _loading = false;
+    });
+    _loadMore();
+  }
+
+  Future<void> _toggleFollow() async {
+    final prefs = await SharedPreferences.getInstance();
+    final followed = prefs.getStringList('followed_vendors') ?? <String>[];
+    final id = '${widget.vendorId}';
+    setState(() => _following = !_following);
+    if (_following) {
+      if (!followed.contains(id)) followed.add(id);
+    } else {
+      followed.remove(id);
+    }
+    await prefs.setStringList('followed_vendors', followed);
+    if (!mounted) return;
+    final ar = UellowApi.instance.lang == 'ar';
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        duration: const Duration(seconds: 1),
+        content: Text(_following
+            ? (ar ? 'تتابع هذا المتجر الآن ✓' : 'Now following this store ✓')
+            : (ar ? 'ألغيت المتابعة' : 'Unfollowed'))));
+  }
+
+  Future<void> _share() async {
+    final ar = UellowApi.instance.lang == 'ar';
+    final name = _name();
+    try {
+      await Share.share(ar
+          ? 'تسوّق من متجر $name على تطبيق يلو 🛍️\nhttps://uellow.com'
+          : 'Shop $name on the Uellow app 🛍️\nhttps://uellow.com');
+    } catch (_) {}
+  }
+
+  String _name() {
+    final ar = UellowApi.instance.lang == 'ar';
+    final n = (_vendor?['name'] as Map?)?.cast<String, dynamic>();
+    return ((ar ? (n?['ar']) : (n?['en'])) ?? n?['en'] ?? '').toString();
+  }
+
+  Color _brandColor() {
+    try {
+      var s = (_vendor?['brand_color'] ?? '#412402')
+          .toString().replaceAll('#', '');
+      if (s.length == 6) s = 'FF$s';
+      return Color(int.parse(s, radix: 16));
+    } catch (_) {
+      return UellowColors.darkBrown;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: UellowColors.bg,
-      body: SafeArea(bottom: false, child: NestedScrollView(
-        headerSliverBuilder: (_, __) => [
-          SliverToBoxAdapter(child: _Hero()),
-          SliverToBoxAdapter(child: _Info()),
-          SliverToBoxAdapter(child: _Stats()),
-          SliverPersistentHeader(pinned: true, delegate: _StickyTabs(
-            tab: _tab, onChange: (i) => setState(() => _tab = i),
-          )),
-        ],
-        body: ListView(padding: EdgeInsets.zero, children: [
-          const _InternalFlash(),
-          _ProductsSection(title: UellowApi.instance.lang == 'ar' ? 'وصل حديثاً' : 'New arrivals'),
-          _ProductsSection(title: UellowApi.instance.lang == 'ar' ? 'الأكثر مبيعاً' : 'Best sellers'),
-          const SizedBox(height: 30),
-        ]),
-      )),
+    final ar = UellowApi.instance.lang == 'ar';
+    return Directionality(
+      textDirection: ar ? TextDirection.rtl : TextDirection.ltr,
+      child: Scaffold(
+        backgroundColor: UellowColors.bg,
+        body: _error
+            ? _ErrorPane(onRetry: () {
+                setState(() { _error = false; _vendor = null; });
+                _load();
+              })
+            : _vendor == null
+                ? const Center(child: CircularProgressIndicator(
+                    color: UellowColors.darkBrown))
+                : _content(ar),
+      ),
     );
   }
-}
 
-class _Hero extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: 160,
-      decoration: const BoxDecoration(
+  Widget _content(bool ar) {
+    final v = _vendor!;
+    final rating = (v['rating'] as Map?)?.cast<String, dynamic>() ?? const {};
+    final avg = ((rating['avg'] as num?) ?? 0).toDouble();
+    final rCount = ((rating['count'] as num?) ?? 0).toInt();
+    final cats = List<Map<String, dynamic>>.from(
+        (v['categories'] as List?) ?? const []);
+    final aboutMap = (v['about'] as Map?)?.cast<String, dynamic>();
+    final about = ((ar ? (aboutMap?['ar']) : (aboutMap?['en']))
+        ?? aboutMap?['en'] ?? '').toString().trim();
+    final tagMap = (v['tagline'] as Map?)?.cast<String, dynamic>();
+    final tagline = ((ar ? (tagMap?['ar']) : (tagMap?['en']))
+        ?? tagMap?['en'] ?? '').toString().trim();
+
+    return CustomScrollView(controller: _scroll, slivers: [
+      SliverToBoxAdapter(child: _hero(v)),
+      SliverToBoxAdapter(child: _infoCard(ar, avg, rCount, tagline, about)),
+      SliverToBoxAdapter(child: _stats(ar, v)),
+      if (cats.isNotEmpty) SliverToBoxAdapter(child: _catChips(ar, cats)),
+      SliverToBoxAdapter(child: _sortBar(ar)),
+      _productsGrid(),
+      SliverToBoxAdapter(child: _loading
+          ? const Padding(padding: EdgeInsets.all(18),
+              child: Center(child: SizedBox(width: 22, height: 22,
+                  child: CircularProgressIndicator(strokeWidth: 2.5,
+                      color: UellowColors.darkBrown))))
+          : const SizedBox(height: 30)),
+    ]);
+  }
+
+  // ── hero: brand color gradient + optional banner image ──
+  Widget _hero(Map<String, dynamic> v) {
+    final brand = _brandColor();
+    final banner = (v['banner'] as String?) ?? '';
+    return SizedBox(height: 150, child: Stack(fit: StackFit.expand, children: [
+      DecoratedBox(decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft, end: Alignment.bottomRight,
-          colors: [UellowColors.darkBrown, Color(0xFF7A4A08)],
+          colors: [brand, Color.lerp(brand, Colors.black, 0.35)!],
         ),
-      ),
-      child: Stack(children: [
-        Positioned(top: 14, left: 14,
-          child: IconButton(
-            onPressed: () => Navigator.maybePop(context),
-            icon: const Icon(Icons.arrow_back, color: UellowColors.yellowLight),
-            style: IconButton.styleFrom(
-              backgroundColor: const Color(0x33000000),
-              shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(10))),
-            ),
-          ),
-        ),
-        Positioned(top: 14, right: 14,
-          child: IconButton(
-            onPressed: () {},
-            icon: const Icon(Icons.share_outlined, color: UellowColors.yellowLight),
-            style: IconButton.styleFrom(
-              backgroundColor: const Color(0x33000000),
-              shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(10))),
-            ),
-          ),
-        ),
-      ]),
-    );
+      )),
+      if (banner.isNotEmpty)
+        CachedNetworkImage(
+            imageUrl: banner.startsWith('http')
+                ? banner : '${UellowApi.instance.baseUrl}$banner',
+            fit: BoxFit.cover,
+            errorWidget: (_, __, ___) => const SizedBox.shrink()),
+      // soft dark veil so the buttons always read
+      Container(color: Colors.black.withValues(alpha: 0.12)),
+      SafeArea(child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        child: Row(children: [
+          _heroBtn(Icons.arrow_back, () => Navigator.maybePop(context)),
+          const Spacer(),
+          _heroBtn(Icons.share_outlined, _share),
+        ]),
+      )),
+    ]));
   }
-}
 
-class _Info extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
+  Widget _heroBtn(IconData icon, VoidCallback onTap) => IconButton(
+        onPressed: onTap,
+        icon: Icon(icon, color: Colors.white),
+        style: IconButton.styleFrom(
+          backgroundColor: const Color(0x4D000000),
+          shape: const RoundedRectangleBorder(
+              borderRadius: BorderRadius.all(Radius.circular(10))),
+        ),
+      );
+
+  // ── info card: logo + name + rating + follow/contact ──
+  Widget _infoCard(bool ar, double avg, int rCount,
+      String tagline, String about) {
+    final v = _vendor!;
+    final logo = (v['logo'] as String?) ?? '';
+    final name = _name();
+    final tier = (v['tier'] ?? 'standard').toString();
     return Container(
-      color: Colors.white,
-      transform: Matrix4.translationValues(0, -40, 0),
-      padding: const EdgeInsets.fromLTRB(18, 14, 18, 18),
+      transform: Matrix4.translationValues(0, -26, 0),
+      padding: const EdgeInsets.fromLTRB(18, 14, 18, 4),
       decoration: const BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.only(
           topLeft: Radius.circular(20), topRight: Radius.circular(20),
         ),
       ),
-      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Container(
-          width: 78, height: 78,
-          decoration: const BoxDecoration(
-            color: UellowColors.yellowLight,
-            borderRadius: BorderRadius.all(Radius.circular(18)),
-            boxShadow: [BoxShadow(color: Color(0x4D000000), blurRadius: 18, offset: Offset(0, 8))],
-          ),
-          alignment: Alignment.center,
-          child: const Text('U', style: TextStyle(
-              fontSize: 30, fontWeight: FontWeight.w900, color: UellowColors.darkBrown)),
-        ),
-        const SizedBox(width: 14),
-        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Padding(padding: EdgeInsets.only(top: 4),
-              child: Text('Uellow Official', style: UT.h1)),
-          const SizedBox(height: 4),
-          Text(UellowApi.instance.lang == 'ar'
-              ? 'بائع معتمد · شحن في نفس اليوم' : 'Authorized seller · same-day shipping',
-              style: const TextStyle(fontSize: 11.5, color: UellowColors.muted)),
-          const SizedBox(height: 2),
-          Row(children: const [
-            Text('★★★★★', style: TextStyle(color: UellowColors.yellow, fontSize: 11, letterSpacing: -1)),
-            SizedBox(width: 4),
-            Text('4.8 · 1.2k reviews',
-                style: TextStyle(fontSize: 11, color: UellowColors.muted)),
-          ]),
-          const SizedBox(height: 8),
-          Row(children: [
-            ElevatedButton(
-              onPressed: () {},
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-                shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(8))),
-              ),
-              child: Text(UellowApi.instance.lang == 'ar' ? '+ متابعة' : '+ Follow',
-                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+      child: Column(children: [
+        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Container(
+            width: 72, height: 72,
+            clipBehavior: Clip.antiAlias,
+            decoration: BoxDecoration(
+              color: UellowColors.yellowLight,
+              borderRadius: const BorderRadius.all(Radius.circular(18)),
+              boxShadow: const [BoxShadow(color: Color(0x33000000),
+                  blurRadius: 14, offset: Offset(0, 6))],
             ),
-            const SizedBox(width: 6),
-            OutlinedButton.icon(
-              onPressed: () {},
-              icon: const Icon(Icons.chat_bubble_outline, size: 13),
-              label: Text(UellowApi.instance.lang == 'ar' ? 'محادثة' : 'Chat'),
+            alignment: Alignment.center,
+            child: logo.isNotEmpty
+                ? CachedNetworkImage(
+                    imageUrl: logo.startsWith('http')
+                        ? logo : '${UellowApi.instance.baseUrl}$logo',
+                    fit: BoxFit.cover, width: 72, height: 72,
+                    errorWidget: (_, __, ___) => Text(
+                        name.isEmpty ? 'U' : name[0].toUpperCase(),
+                        style: const TextStyle(fontSize: 26,
+                            fontWeight: FontWeight.w900,
+                            color: UellowColors.darkBrown)))
+                : Text(name.isEmpty ? 'U' : name[0].toUpperCase(),
+                    style: const TextStyle(fontSize: 26,
+                        fontWeight: FontWeight.w900,
+                        color: UellowColors.darkBrown)),
+          ),
+          const SizedBox(width: 14),
+          Expanded(child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(children: [
+              Flexible(child: Text(name, maxLines: 1,
+                  overflow: TextOverflow.ellipsis, style: UT.h1)),
+              if (tier != 'standard') Padding(
+                padding: const EdgeInsetsDirectional.only(start: 6),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFF3D6),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: const Color(0xFFE8C76B)),
+                  ),
+                  child: Text(
+                      ar ? '⭐ متجر مميز' : '⭐ Premium store',
+                      style: const TextStyle(fontSize: 9,
+                          fontWeight: FontWeight.w900,
+                          color: Color(0xFF8B6508))),
+                ),
+              ),
+            ]),
+            if (tagline.isNotEmpty) Padding(
+              padding: const EdgeInsets.only(top: 3),
+              child: Text(tagline, maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 11.5,
+                      color: UellowColors.muted)),
+            ),
+            const SizedBox(height: 4),
+            // Real rating — hidden entirely when no reviews yet.
+            if (rCount > 0) Row(children: [
+              for (var i = 0; i < 5; i++) Icon(
+                i < avg.round() ? Icons.star_rounded
+                                : Icons.star_outline_rounded,
+                size: 13,
+                color: i < avg.round()
+                    ? const Color(0xFFFFC107) : const Color(0xFFCFCFCF)),
+              const SizedBox(width: 4),
+              Text('${avg.toStringAsFixed(1)} · '
+                   '${ar ? "$rCount تقييم" : "$rCount reviews"}',
+                  style: const TextStyle(fontSize: 11,
+                      color: UellowColors.muted)),
+            ]) else Text(ar ? 'لا توجد تقييمات بعد' : 'No reviews yet',
+                style: const TextStyle(fontSize: 11,
+                    color: UellowColors.muted)),
+          ])),
+        ]),
+        const SizedBox(height: 10),
+        Row(children: [
+          Expanded(child: ElevatedButton.icon(
+            onPressed: _toggleFollow,
+            icon: Icon(_following ? Icons.check : Icons.add, size: 15),
+            label: Text(_following
+                ? (ar ? 'متابَع' : 'Following')
+                : (ar ? 'متابعة' : 'Follow'),
+                style: const TextStyle(fontSize: 12,
+                    fontWeight: FontWeight.w800)),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _following
+                  ? UellowColors.border : UellowColors.yellowLight,
+              foregroundColor: UellowColors.darkBrown,
+              elevation: 0,
+              padding: const EdgeInsets.symmetric(vertical: 10),
+              shape: const RoundedRectangleBorder(
+                  borderRadius: BorderRadius.all(Radius.circular(10))),
+            ),
+          )),
+          const SizedBox(width: 8),
+          Expanded(child: OutlinedButton.icon(
+            onPressed: () => Navigator.pushNamed(context, '/helpdesk'),
+            icon: const Icon(Icons.support_agent, size: 15),
+            label: Text(ar ? 'تواصل' : 'Contact',
+                style: const TextStyle(fontSize: 12,
+                    fontWeight: FontWeight.w800)),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: UellowColors.darkBrown,
+              side: const BorderSide(color: UellowColors.border),
+              padding: const EdgeInsets.symmetric(vertical: 10),
+              shape: const RoundedRectangleBorder(
+                  borderRadius: BorderRadius.all(Radius.circular(10))),
+            ),
+          )),
+          if (about.isNotEmpty) ...[
+            const SizedBox(width: 8),
+            OutlinedButton(
+              onPressed: () => _showAbout(ar, about),
               style: OutlinedButton.styleFrom(
                 foregroundColor: UellowColors.darkBrown,
-                side: BorderSide.none,
-                backgroundColor: UellowColors.border,
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(8))),
+                side: const BorderSide(color: UellowColors.border),
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 12, vertical: 10),
+                shape: const RoundedRectangleBorder(
+                    borderRadius: BorderRadius.all(Radius.circular(10))),
               ),
+              child: Text(ar ? 'حول' : 'About',
+                  style: const TextStyle(fontSize: 12,
+                      fontWeight: FontWeight.w800)),
             ),
-          ]),
-        ])),
+          ],
+        ]),
       ]),
     );
   }
-}
 
-class _Stats extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
+  void _showAbout(bool ar, String about) {
+    final v = _vendor!;
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(
+          top: Radius.circular(18))),
+      builder: (_) => Directionality(
+        textDirection: ar ? TextDirection.rtl : TextDirection.ltr,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 18, 20, 30),
+          child: Column(mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(ar ? 'حول المتجر' : 'About the store', style: UT.h2),
+            const SizedBox(height: 10),
+            Text(about, style: UT.body),
+            if ((v['business_name'] ?? '').toString().isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Row(children: [
+                const Icon(Icons.business_outlined, size: 15,
+                    color: UellowColors.muted),
+                const SizedBox(width: 6),
+                Text((v['business_name']).toString(), style: UT.small),
+              ]),
+            ],
+          ]),
+        ),
+      ),
+    );
+  }
+
+  // ── real stats row ──
+  Widget _stats(bool ar, Map<String, dynamic> v) {
+    String fmt(num? n) {
+      final x = (n ?? 0).toInt();
+      if (x >= 1000) return '${(x / 1000).toStringAsFixed(x >= 10000 ? 0 : 1)}k';
+      return '$x';
+    }
+    final rating = (v['rating'] as Map?)?.cast<String, dynamic>() ?? const {};
+    final avg = ((rating['avg'] as num?) ?? 0).toDouble();
+    final sla = ((v['sla_hours'] as num?) ?? 0).toInt();
+    final cells = <(String, String)>[
+      (fmt(v['product_count'] as num?), ar ? 'منتج' : 'Products'),
+      (fmt(v['order_count'] as num?), ar ? 'طلب' : 'Orders'),
+      (avg > 0 ? avg.toStringAsFixed(1) : '—', ar ? 'التقييم' : 'Rating'),
+      if (sla > 0) ('$slaس', ar ? 'يشحن خلال' : 'Ships in'),
+    ];
     return Container(
+      transform: Matrix4.translationValues(0, -26, 0),
       color: Colors.white,
-      transform: Matrix4.translationValues(0, -40, 0),
-      padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
+      padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
       child: Row(children: [
-        for (final s in const [('248','Products'), ('1.2k','Orders'), ('4.8','Rating'), ('24h','Ships in')])
+        for (final s in cells)
           Expanded(child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 3),
             child: Container(
-              padding: const EdgeInsets.symmetric(vertical: 10),
+              padding: const EdgeInsets.symmetric(vertical: 9),
               decoration: BoxDecoration(
-                color: UellowColors.yellowFaint,
-                border: Border.all(color: UellowColors.warnBg),
+                color: const Color(0xFFF7F7F7),
+                border: Border.all(color: UellowColors.border),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Column(children: [
-                Text(s.$1, style: const TextStyle(
-                    fontSize: 16, fontWeight: FontWeight.w900, color: UellowColors.darkBrown)),
-                Text(s.$2, style: const TextStyle(
-                    fontSize: 10, color: UellowColors.text)),
+                Text(s.$1, style: const TextStyle(fontSize: 15,
+                    fontWeight: FontWeight.w900,
+                    color: UellowColors.darkBrown)),
+                Text(s.$2, style: const TextStyle(fontSize: 9.5,
+                    color: UellowColors.text)),
               ]),
             ),
           )),
       ]),
     );
   }
-}
 
-class _StickyTabs extends SliverPersistentHeaderDelegate {
-  _StickyTabs({required this.tab, required this.onChange});
-  final int tab;
-  final ValueChanged<int> onChange;
-  static List<String> get _tabs => UellowApi.instance.lang == 'ar'
-      ? const ['الكل','جديد','الأكثر مبيعاً','⚡ فلاش','الفئات','التقييمات','حول']
-      : const ['All','New','Best sellers','⚡ Flash','Categories','Reviews','About'];
-
-  @override
-  Widget build(BuildContext c, double s, bool o) {
+  // ── real category chips (top categories this vendor sells) ──
+  Widget _catChips(bool ar, List<Map<String, dynamic>> cats) {
     return Container(
+      transform: Matrix4.translationValues(0, -26, 0),
       color: Colors.white,
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        border: Border(bottom: BorderSide(color: UellowColors.border)),
-      ),
-      child: SizedBox(height: 46, child: ListView.builder(
+      padding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
+      child: SizedBox(height: 30, child: ListView.separated(
         scrollDirection: Axis.horizontal,
-        itemCount: _tabs.length,
+        itemCount: cats.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 6),
         itemBuilder: (_, i) {
-          final on = i == tab;
+          final c = cats[i];
+          final nm = (c['name'] as Map?)?.cast<String, dynamic>();
+          final label = ((ar ? (nm?['ar']) : (nm?['en']))
+              ?? nm?['en'] ?? '').toString();
+          final count = ((c['count'] as num?) ?? 0).toInt();
           return GestureDetector(
-            onTap: () => onChange(i),
+            onTap: () => Navigator.pushNamed(context, '/collection',
+                arguments: {'category_id': (c['id'] as num?)?.toInt()}),
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              decoration: BoxDecoration(
-                border: Border(bottom: BorderSide(
-                  color: on ? UellowColors.yellow : Colors.transparent, width: 2,
-                )),
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 12),
               alignment: Alignment.center,
-              child: Text(_tabs[i], style: TextStyle(
-                color: on ? UellowColors.darkBrown : UellowColors.muted,
-                fontWeight: FontWeight.w700, fontSize: 13)),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF7F7F7),
+                border: Border.all(color: UellowColors.border),
+                borderRadius: BorderRadius.circular(999),
+              ),
+              child: Text('$label ($count)', style: const TextStyle(
+                  fontSize: 11, fontWeight: FontWeight.w700,
+                  color: UellowColors.ink)),
             ),
           );
         },
       )),
     );
   }
-  @override double get maxExtent => 46;
-  @override double get minExtent => 46;
-  @override bool shouldRebuild(_StickyTabs old) => old.tab != tab;
-}
 
-class _InternalFlash extends StatelessWidget {
-  const _InternalFlash();
-  @override
-  Widget build(BuildContext context) {
+  // ── sort tabs (real backend sorts) ──
+  Widget _sortBar(bool ar) {
+    final tabs = <(String, String)>[
+      ('newest', ar ? 'الأحدث' : 'Newest'),
+      ('top_rated', ar ? 'الأعلى تقييماً' : 'Top rated'),
+      ('price_asc', ar ? 'السعر ⬆' : 'Price ↑'),
+      ('price_desc', ar ? 'السعر ⬇' : 'Price ↓'),
+    ];
     return Container(
-      margin: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-      padding: const EdgeInsets.all(14),
-      decoration: const BoxDecoration(
-        gradient: UellowColors.heroFlash,
-        borderRadius: BorderRadius.all(Radius.circular(16)),
-        boxShadow: [BoxShadow(color: Color(0x4DC81212), blurRadius: 25, offset: Offset(0, 10))],
-      ),
-      child: Column(children: [
-        Row(children: [
-          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(UellowApi.instance.lang == 'ar' ? '⚡ فلاش المتجر · Uellow' : '⚡ Vendor Flash · Uellow',
-                style: const TextStyle(
-                color: Colors.white, fontSize: 16, fontWeight: FontWeight.w900)),
-            Text(UellowApi.instance.lang == 'ar'
-                ? 'عروض حصرية من هذا المتجر' : 'Exclusive deals from this store',
-                style: const TextStyle(color: Colors.white70, fontSize: 11)),
-          ])),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-            decoration: BoxDecoration(
-              color: Colors.black.withOpacity(.25),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: const Text('02:14:37', style: TextStyle(
-                color: Colors.white, fontFamily: 'monospace',
-                fontWeight: FontWeight.w800, fontSize: 13, letterSpacing: 1)),
-          ),
-        ]),
-        const SizedBox(height: 12),
-        SizedBox(height: 130, child: ListView.separated(
-          scrollDirection: Axis.horizontal,
-          itemCount: 5,
-          separatorBuilder: (_, __) => const SizedBox(width: 8),
-          itemBuilder: (_, i) => Container(
-            width: 120, padding: const EdgeInsets.all(6),
-            decoration: const BoxDecoration(
-              color: Colors.white, borderRadius: BorderRadius.all(Radius.circular(10)),
-            ),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Container(
-                width: double.infinity, height: 70,
-                decoration: BoxDecoration(
-                  color: UellowColors.border, borderRadius: BorderRadius.circular(6),
-                ),
-              ),
-              const Padding(padding: EdgeInsets.only(top: 4), child: Text('14.9',
-                  style: TextStyle(color: UellowColors.danger,
-                      fontWeight: FontWeight.w900, fontSize: 13))),
-              Container(height: 3, margin: const EdgeInsets.only(top: 3),
-                decoration: BoxDecoration(
-                  color: UellowColors.dangerBg, borderRadius: BorderRadius.circular(999),
-                ),
-                child: FractionallySizedBox(
-                  alignment: Alignment.centerLeft, widthFactor: 0.7,
-                  child: const DecoratedBox(decoration: BoxDecoration(
-                    color: UellowColors.danger,
-                    borderRadius: BorderRadius.all(Radius.circular(999)),
-                  )),
-                ),
-              ),
-            ]),
-          ),
-        )),
-      ]),
-    );
-  }
-}
-
-class _ProductsSection extends StatelessWidget {
-  const _ProductsSection({required this.title});
-  final String title;
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
+      transform: Matrix4.translationValues(0, -26, 0),
       color: Colors.white,
-      padding: const EdgeInsets.all(14),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: [
-          Expanded(child: Text(title, style: UT.h3)),
-          Text(UellowApi.instance.lang == 'ar' ? 'عرض الكل ←' : 'See all →',
-              style: const TextStyle(
-              fontSize: 11, fontWeight: FontWeight.w700, color: UellowColors.text)),
-        ]),
-        const SizedBox(height: 12),
-        GridView.builder(
-          shrinkWrap: true, physics: const NeverScrollableScrollPhysics(),
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 2, crossAxisSpacing: 10, mainAxisSpacing: 10, childAspectRatio: 0.65,
-          ),
-          itemCount: 4,
-          itemBuilder: (_, i) => Container(
-            decoration: BoxDecoration(
-              color: Colors.white, border: Border.all(color: UellowColors.border),
-              borderRadius: BorderRadius.circular(12),
+      padding: const EdgeInsets.fromLTRB(14, 0, 14, 10),
+      child: Row(children: [
+        for (final t in tabs) Padding(
+          padding: const EdgeInsetsDirectional.only(end: 6),
+          child: GestureDetector(
+            onTap: () => _changeSort(t.$1),
+            child: Container(
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: _sort == t.$1
+                    ? UellowColors.darkBrown : Colors.white,
+                border: Border.all(color: _sort == t.$1
+                    ? UellowColors.darkBrown : UellowColors.border),
+                borderRadius: BorderRadius.circular(999),
+              ),
+              child: Text(t.$2, style: TextStyle(
+                  fontSize: 11, fontWeight: FontWeight.w800,
+                  color: _sort == t.$1
+                      ? UellowColors.yellowLight : UellowColors.text)),
             ),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              AspectRatio(aspectRatio: 1, child: Container(
-                  decoration: BoxDecoration(
-                    color: UellowColors.border,
-                    borderRadius: BorderRadius.circular(11),
-                  ),
-                  alignment: Alignment.center,
-                  child: const Icon(Icons.image_outlined,
-                      size: 32, color: UellowColors.muted))),
-              const Padding(
-                padding: EdgeInsets.fromLTRB(8, 8, 8, 4),
-                child: Text('Product name', style: TextStyle(
-                    fontSize: 12, color: UellowColors.ink)),
-              ),
-              const Padding(
-                padding: EdgeInsets.fromLTRB(8, 0, 8, 8),
-                child: Text('14.900 KD', style: TextStyle(
-                    fontWeight: FontWeight.w900, fontSize: 15, color: UellowColors.darkBrown)),
-              ),
-            ]),
           ),
         ),
       ]),
     );
+  }
+
+  // ── real product grid ──
+  Widget _productsGrid() {
+    if (_items.isEmpty && !_loading) {
+      final ar = UellowApi.instance.lang == 'ar';
+      return SliverToBoxAdapter(child: Padding(
+        padding: const EdgeInsets.all(40),
+        child: Column(children: [
+          const Icon(Icons.storefront_outlined, size: 56,
+              color: UellowColors.muted),
+          const SizedBox(height: 10),
+          Text(ar ? 'لا توجد منتجات منشورة بعد' : 'No published products yet',
+              style: UT.body),
+        ]),
+      ));
+    }
+    return SliverPadding(
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      sliver: SliverGrid(
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 2, mainAxisSpacing: 8, crossAxisSpacing: 8,
+          childAspectRatio: 0.585,
+        ),
+        delegate: SliverChildBuilderDelegate(
+          (_, i) => ProductCard(rich: true, product: _items[i]),
+          childCount: _items.length,
+        ),
+      ),
+    );
+  }
+}
+
+class _ErrorPane extends StatelessWidget {
+  const _ErrorPane({required this.onRetry});
+  final VoidCallback onRetry;
+  @override
+  Widget build(BuildContext context) {
+    final ar = UellowApi.instance.lang == 'ar';
+    return Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
+      const Icon(Icons.cloud_off_outlined, size: 56, color: UellowColors.muted),
+      const SizedBox(height: 12),
+      Text(ar ? 'تعذّر تحميل المتجر' : 'Could not load this store',
+          style: UT.body),
+      const SizedBox(height: 14),
+      ElevatedButton(onPressed: onRetry,
+          child: Text(ar ? 'إعادة المحاولة' : 'Retry')),
+    ]));
   }
 }

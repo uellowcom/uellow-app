@@ -192,6 +192,7 @@ class _Coupon {
   final Map<String, String> terms; // {en, ar}
   final String category;
   final bool usableNow;
+  final bool isAuto;              // v2.1.56 — true ⇔ auto-applied program
   final String color;             // hex like '#F5C320'
 
   const _Coupon({
@@ -199,7 +200,8 @@ class _Coupon {
     required this.name, required this.discountText,
     required this.minAmount, required this.currency,
     this.expiry, required this.code, required this.terms,
-    required this.category, required this.usableNow, required this.color,
+    required this.category, required this.usableNow,
+    this.isAuto = false, required this.color,
   });
 
   factory _Coupon.fromJson(Map<String, dynamic> j) {
@@ -224,6 +226,7 @@ class _Coupon {
       terms: _bi(j['terms']),
       category: (j['category'] ?? 'general').toString(),
       usableNow: (j['usable_now'] ?? true) as bool,
+      isAuto: (j['is_auto'] ?? false) as bool,
       color: (j['color'] ?? '#F5C320').toString(),
     );
   }
@@ -396,7 +399,10 @@ class _CouponRow extends StatelessWidget {
                             fontWeight: FontWeight.w900, fontSize: 11,
                             color: style.accent, letterSpacing: 1.2)),
                   )),
-                  if (coupon.code.isEmpty) Container(
+                  // v2.1.56 — badge only for genuinely AUTO programs
+                  // (an empty code alone used to mislabel issued-card
+                  // coupons as auto-applied).
+                  if (coupon.code.isEmpty && coupon.isAuto) Container(
                     padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
                     decoration: BoxDecoration(color: UellowColors.successBg,
                         borderRadius: BorderRadius.circular(5)),
