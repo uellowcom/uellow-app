@@ -77,6 +77,8 @@ class _OrderScreenState extends State<OrderScreen> {
               _Header(order: order, ar: ar, refreshing: _refreshing,
                   onRefresh: _refresh),
               if (order.deliveryTracking != null) _EtaCard(tracking: order.deliveryTracking!, ar: ar),
+              if (order.deliveryTracking != null)
+                _JourneyStrip(tracking: order.deliveryTracking!, ar: ar),
               _MapBox(tracking: order.deliveryTracking, ar: ar),
               if (order.timeline.isNotEmpty) _Timeline(timeline: order.timeline, ar: ar),
               // v2.1.42 — cancellation-request banner (paid orders).
@@ -249,7 +251,7 @@ class _EtaCard extends StatelessWidget {
           if (driver.isNotEmpty || distance != null) Padding(
             padding: const EdgeInsets.only(top: 4),
             child: Text([
-              if (driver.isNotEmpty) (ar ? 'السائق: $driver' : 'Driver: $driver'),
+              if (driver.isNotEmpty) (ar ? 'المندوب: $driver' : 'Courier: $driver'),
               if (distance != null) (ar
                   ? 'تبعد ${distance.toStringAsFixed(1)} كم'
                   : '${distance.toStringAsFixed(1)} km away'),
@@ -465,6 +467,126 @@ else if(pts.length==1){map.setView(pts[0],14);}
   }
 }
 
+// ─── Journey strip (v2.1.72) — animated 4-node delivery path ──────────
+// طلبك → شركة الشحن → المندوب → أنت. Small label above each icon, NO
+// background box around icons, an animated pulse ring on the ACTIVE node,
+// arrow connectors, and completed nodes greyed with a ✓.
+class _JourneyStrip extends StatefulWidget {
+  const _JourneyStrip({required this.tracking, required this.ar});
+  final Map<String, dynamic> tracking;
+  final bool ar;
+  @override
+  State<_JourneyStrip> createState() => _JourneyStripState();
+}
+
+class _JourneyStripState extends State<_JourneyStrip>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _pulse = AnimationController(
+      vsync: this, duration: const Duration(milliseconds: 1400))..repeat();
+
+  @override
+  void dispose() { _pulse.dispose(); super.dispose(); }
+
+  // stage → active node index (0..3)
+  int get _activeIndex {
+    switch ((widget.tracking['stage'] as String?) ?? 'placed') {
+      case 'placed':
+      case 'at_warehouse': return 0;
+      case 'at_carrier':   return 1;
+      case 'in_transit':
+      case 'arriving':     return 2;
+      case 'delivered':    return 3;
+      default:             return 0;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ar = widget.ar;
+    final active = _activeIndex;
+    final delivered = ((widget.tracking['stage'] as String?) ?? '') == 'delivered';
+    final nodes = <(IconData, String)>[
+      (Icons.inventory_2_rounded, ar ? 'طلبك' : 'Your order'),
+      (Icons.warehouse_rounded,   ar ? 'شركة الشحن' : 'Carrier'),
+      (Icons.delivery_dining_rounded, ar ? 'المندوب' : 'Courier'),
+      (Icons.person_pin_circle_rounded, ar ? 'أنت' : 'You'),
+    ];
+    return Container(
+      margin: const EdgeInsets.fromLTRB(14, 8, 14, 0),
+      padding: const EdgeInsets.fromLTRB(8, 16, 8, 14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Directionality(
+        textDirection: ar ? TextDirection.rtl : TextDirection.ltr,
+        child: Row(children: [
+          for (var i = 0; i < nodes.length; i++) ...[
+            Expanded(child: _node(nodes[i].$1, nodes[i].$2, i, active, delivered)),
+            if (i < nodes.length - 1) _arrow(i < active),
+          ],
+        ]),
+      ),
+    );
+  }
+
+  Widget _node(IconData icon, String label, int i, int active, bool delivered) {
+    final done = i < active || delivered;
+    final isNow = i == active && !delivered;
+    final color = done
+        ? const Color(0xFFB6B6B6)                  // completed → grey
+        : (isNow ? UellowColors.darkBrown : const Color(0xFFD8D8D8));
+    return Column(mainAxisSize: MainAxisSize.min, children: [
+      // small label ABOVE the icon
+      SizedBox(
+        height: 26,
+        child: Text(label, textAlign: TextAlign.center, maxLines: 2,
+            style: TextStyle(
+                fontSize: 9.5, height: 1.1,
+                fontWeight: isNow ? FontWeight.w900 : FontWeight.w600,
+                color: isNow ? UellowColors.darkBrown
+                             : (done ? const Color(0xFFAAAAAA)
+                                     : const Color(0xFFBDBDBD)))),
+      ),
+      const SizedBox(height: 6),
+      // icon with NO background box; active gets an animated pulse ring
+      SizedBox(
+        width: 44, height: 44,
+        child: Stack(alignment: Alignment.center, children: [
+          if (isNow) AnimatedBuilder(
+            animation: _pulse,
+            builder: (_, __) {
+              final t = _pulse.value;
+              return Container(
+                width: 22 + 22 * t, height: 22 + 22 * t,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: UellowColors.yellow.withValues(alpha: (1 - t) * 0.45),
+                ),
+              );
+            },
+          ),
+          done
+              ? const Icon(Icons.check_circle, size: 26, color: Color(0xFFB6B6B6))
+              : Icon(icon, size: 26, color: color),
+        ]),
+      ),
+    ]);
+  }
+
+  // arrow connector — solid grey once passed, dotted ahead
+  Widget _arrow(bool passed) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 16),
+      child: Icon(
+        widget.ar ? Icons.chevron_left_rounded : Icons.chevron_right_rounded,
+        size: 22,
+        color: passed ? const Color(0xFFB6B6B6) : const Color(0xFFE2E2E2),
+      ),
+    );
+  }
+}
+
 // ─── Timeline (uses backend timeline list) ───────────────────────────
 
 class _Timeline extends StatelessWidget {
@@ -493,37 +615,61 @@ class _Timeline extends StatelessWidget {
     final state = (s['state'] as String?) ?? 'upcoming';
     final code = (s['code'] as String?) ?? '';
     final label = (s['label'] as Map?)?[ar ? 'ar' : 'en'] as String? ?? code;
+    final desc = (s['description'] as Map?)?[ar ? 'ar' : 'en'] as String? ?? '';
+    final dateText = (s['date_text'] as String?) ?? '';
     final icon = {
-      'draft':     Icons.edit_note,
+      'draft':     Icons.receipt_long_outlined,
       'confirmed': Icons.check_circle_outline,
       'preparing': Icons.inventory_2_outlined,
-      'shipping':  Icons.local_shipping_outlined,
+      'shipping':  Icons.delivery_dining_outlined,
       'delivered': Icons.home_outlined,
     }[code] ?? Icons.circle_outlined;
     final isDone = state == 'done';
     final isNow = state == 'current';
-    final iconBg = isDone ? UellowColors.success
-        : (isNow ? UellowColors.yellowLight : UellowColors.border);
-    final iconFg = isDone ? Colors.white
+    // v2.1.72 — done = green check, current = brand highlight + pulse ring
+    // feel, upcoming = light grey. Each row now shows date+time and a short
+    // description under the title.
+    final dotColor = isDone ? UellowColors.success
+        : (isNow ? UellowColors.darkBrown : const Color(0xFFE0E0E0));
+    final dotFg = (isDone || isNow) ? Colors.white : UellowColors.muted;
+    final titleCol = isDone ? UellowColors.ink
         : (isNow ? UellowColors.darkBrown : UellowColors.muted);
-    final titleCol = (isDone || isNow) ? UellowColors.ink : UellowColors.muted;
     return IntrinsicHeight(child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Column(children: [
         Container(
-          width: 28, height: 28,
-          decoration: BoxDecoration(color: iconBg, shape: BoxShape.circle),
-          child: Icon(isDone ? Icons.check : icon, size: 14, color: iconFg),
+          width: 30, height: 30,
+          decoration: BoxDecoration(
+            color: dotColor, shape: BoxShape.circle,
+            boxShadow: isNow ? [BoxShadow(
+                color: UellowColors.darkBrown.withValues(alpha: .25),
+                blurRadius: 6, spreadRadius: 1)] : null,
+          ),
+          child: Icon(isDone ? Icons.check : icon, size: 15, color: dotFg),
         ),
         if (!last) Expanded(child: Container(
-          width: 2, margin: const EdgeInsets.symmetric(vertical: 2),
-          color: isDone ? UellowColors.success : UellowColors.border,
+          width: 2.5, margin: const EdgeInsets.symmetric(vertical: 2),
+          color: isDone ? UellowColors.success : const Color(0xFFEAEAEA),
         )),
       ]),
       const SizedBox(width: 12),
       Expanded(child: Padding(
-        padding: const EdgeInsets.only(bottom: 14, top: 3),
-        child: Text(label, style: TextStyle(
-          fontWeight: FontWeight.w800, fontSize: 13, color: titleCol)),
+        padding: const EdgeInsets.only(bottom: 16, top: 2),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            Expanded(child: Text(label, style: TextStyle(
+                fontWeight: FontWeight.w900, fontSize: 13.5, color: titleCol))),
+            if (dateText.isNotEmpty) Text(dateText, style: const TextStyle(
+                fontSize: 10.5, color: UellowColors.muted,
+                fontWeight: FontWeight.w600)),
+          ]),
+          if (desc.isNotEmpty) Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Text(desc, style: TextStyle(
+                fontSize: 11.5, height: 1.35,
+                color: (isDone || isNow) ? UellowColors.text
+                                         : UellowColors.muted)),
+          ),
+        ]),
       )),
     ]));
   }
