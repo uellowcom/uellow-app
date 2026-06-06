@@ -4797,6 +4797,17 @@ class PromoSectionBlock extends StatelessWidget {
       return b.isNotEmpty ? b : (ar ? defaults[4] : defaults[3]).toString();
     })();
     final cta = _tx('ctaEn', 'ctaAr');
+    // v2.1.91 — SHAPE: 6 selectable layouts per block (builder `shape`).
+    // Falls back to the variant's natural shape when unset.
+    const _shapeForVariant = {
+      'spotlight': 'hero', 'category': 'grid', 'rank': 'leaderboard',
+      'arrivals': 'arrivals', 'mega': 'mega',
+    };
+    final shape = (p['shape'] ?? _shapeForVariant[variant] ?? 'rail').toString();
+    // CTA / "All" button colour (builder `cta_color`, else brand yellow).
+    final ctaColor = _parseColor(p['cta_color']) ?? UellowColors.yellow;
+    // header background style: 'gradient' (default) | 'flat' | 'none'.
+    final headerStyle = (p['header_style'] ?? 'gradient').toString();
     final layout = (p['layout'] ?? (variant == 'category' ? 'grid' : 'rail'))
         .toString();
     final onHeaderTap = () {
@@ -4819,78 +4830,98 @@ class PromoSectionBlock extends StatelessWidget {
       ),
       clipBehavior: Clip.antiAlias,
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        // ── calm, compact header (v2.1.88) — short, clean, professional ──
-        GestureDetector(
-          onTap: onHeaderTap,
-          child: Container(
-            padding: const EdgeInsetsDirectional.fromSTEB(12, 9, 10, 9),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                  begin: Alignment.centerLeft, end: Alignment.centerRight,
-                  colors: [c1, c2]),
-            ),
-            child: Row(children: [
-              Container(width: 30, height: 30, alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.20),
-                  borderRadius: BorderRadius.circular(9)),
-                clipBehavior: Clip.antiAlias,
-                child: logoImg.isNotEmpty
-                    ? CachedNetworkImage(imageUrl: logoImg, width: 30, height: 30,
-                        fit: BoxFit.cover,
-                        errorWidget: (_, __, ___) => Text(logo,
-                            style: const TextStyle(fontSize: 16)))
-                    : Text(logo, style: const TextStyle(fontSize: 16))),
-              const SizedBox(width: 9),
-              Expanded(child: Row(children: [
-                Flexible(child: Text(title.isNotEmpty ? title
-                        : (ar ? 'عرض مميّز' : 'Featured offer'),
-                    maxLines: 1, overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(color: Colors.white, fontSize: 14,
-                        fontWeight: FontWeight.w800))),
-                if (sub.isNotEmpty) ...[
-                  const SizedBox(width: 6),
-                  Container(width: 3, height: 3, decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: Colors.white.withValues(alpha: .6))),
-                  const SizedBox(width: 6),
-                  Flexible(child: Text(sub, maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(color: Colors.white.withValues(alpha: .9),
-                          fontSize: 11))),
-                ],
-              ])),
-              const SizedBox(width: 8),
-              Row(mainAxisSize: MainAxisSize.min, children: [
-                if (cta.isNotEmpty) Text(cta, style: const TextStyle(
-                    color: Colors.white, fontSize: 11.5, fontWeight: FontWeight.w800)),
-                Icon(ar ? Icons.chevron_left : Icons.chevron_right,
-                    color: Colors.white.withValues(alpha: .95), size: 20),
-              ]),
-            ]),
-          ),
-        ),
-        // ── products — each variant has its OWN distinct layout ──
+        // ── minimal header (v2.1.91) — small icon, description UNDER the
+        // title, tiny coloured "All" pill; background gradient / flat / none.
+        _header(context, c1, c2, logo, logoImg, title, sub, cta, ctaColor,
+            headerStyle, onHeaderTap),
+        // ── products — layout chosen by SHAPE (6 selectable) ──
         Padding(
-          padding: const EdgeInsets.fromLTRB(10, 10, 10, 12),
-          child: _body(context, items, c1, c2, badge, layout),
+          padding: const EdgeInsets.fromLTRB(10, 8, 10, 12),
+          child: _bodyForShape(context, shape, items, c1, c2, badge),
         ),
       ]),
     );
   }
 
-  // Per-variant creative layouts (no two alike).
-  Widget _body(BuildContext ctx, List<UellowProductCard> items, Color c1,
-      Color c2, String badge, String layout) {
-    switch (variant) {
-      case 'spotlight': return _spotlightHero(ctx, items, c1, badge);
-      case 'rank':      return _leaderboard(ctx, items, c1, c2);
-      case 'mega':      return _megaGrid(items, c1);
-      case 'arrivals':  return _arrivalsRail(items, c1, badge);
-      case 'category':
-      default:
-        if (layout == 'rail') return _rail(items, c1, badge);
-        return _grid(items, c1, badge);
+  Widget _header(BuildContext ctx, Color c1, Color c2, String logo,
+      String logoImg, String title, String sub, String cta, Color ctaColor,
+      String style, VoidCallback onTap) {
+    final ar = UellowApi.instance.lang.toLowerCase().startsWith('ar');
+    final grad = style == 'gradient';
+    final onColor = grad ? Colors.white : UellowColors.ink;
+    final iconTileBg = grad ? Colors.white.withValues(alpha: 0.20)
+        : c1.withValues(alpha: 0.12);
+    BoxDecoration deco;
+    if (grad) {
+      deco = BoxDecoration(gradient: LinearGradient(
+          begin: Alignment.centerLeft, end: Alignment.centerRight, colors: [c1, c2]));
+    } else if (style == 'flat') {
+      deco = BoxDecoration(color: c1.withValues(alpha: 0.08));
+    } else {
+      deco = const BoxDecoration(color: Colors.white);   // none
+    }
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsetsDirectional.fromSTEB(11, 9, 9, 7),
+        decoration: deco,
+        child: Row(children: [
+          // small icon
+          Container(width: 26, height: 26, alignment: Alignment.center,
+            decoration: BoxDecoration(color: iconTileBg,
+                borderRadius: BorderRadius.circular(8)),
+            clipBehavior: Clip.antiAlias,
+            child: logoImg.isNotEmpty
+                ? CachedNetworkImage(imageUrl: logoImg, width: 26, height: 26,
+                    fit: BoxFit.cover,
+                    errorWidget: (_, __, ___) => Text(logo,
+                        style: const TextStyle(fontSize: 14)))
+                : Text(logo, style: const TextStyle(fontSize: 14))),
+          const SizedBox(width: 8),
+          // title + description UNDERNEATH
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min, children: [
+            Text(title.isNotEmpty ? title : (ar ? 'عرض مميّز' : 'Featured offer'),
+                maxLines: 1, overflow: TextOverflow.ellipsis,
+                style: TextStyle(color: onColor, fontSize: 13.5,
+                    fontWeight: FontWeight.w900)),
+            if (sub.isNotEmpty) Text(sub, maxLines: 1, overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                    color: grad ? Colors.white.withValues(alpha: .85)
+                        : UellowColors.muted,
+                    fontSize: 10.5, height: 1.2)),
+          ])),
+          const SizedBox(width: 8),
+          // tiny coloured "All" pill
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            decoration: BoxDecoration(color: ctaColor,
+                borderRadius: BorderRadius.circular(999)),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              Text(cta.isNotEmpty ? cta : (ar ? 'الكل' : 'All'),
+                  style: const TextStyle(color: UellowColors.darkBrown,
+                      fontSize: 10.5, fontWeight: FontWeight.w900)),
+              Icon(ar ? Icons.chevron_left : Icons.chevron_right,
+                  color: UellowColors.darkBrown, size: 14),
+            ]),
+          ),
+        ]),
+      ),
+    );
+  }
+
+  // 6 selectable shapes (builder `shape`): hero · grid · rail · leaderboard
+  // · mega · arrivals. Block colour (c1/c2) + icon (logo) are customisable.
+  Widget _bodyForShape(BuildContext ctx, String shape,
+      List<UellowProductCard> items, Color c1, Color c2, String badge) {
+    switch (shape) {
+      case 'hero':        return _spotlightHero(ctx, items, c1, badge);
+      case 'leaderboard': return _leaderboard(ctx, items, c1, c2);
+      case 'mega':        return _megaGrid(items, c1);
+      case 'arrivals':    return _arrivalsRail(items, c1, badge);
+      case 'grid':        return _grid(items, c1, badge);
+      case 'rail':
+      default:            return _rail(items, c1, badge);
     }
   }
 
@@ -4936,7 +4967,7 @@ class PromoSectionBlock extends StatelessWidget {
       ),
       if (rest.isNotEmpty) ...[
         const SizedBox(height: 10),
-        SizedBox(height: 246, child: ListView.separated(
+        SizedBox(height: 286, child: ListView.separated(
           scrollDirection: Axis.horizontal, itemCount: rest.length,
           separatorBuilder: (_, __) => const SizedBox(width: 8),
           itemBuilder: (_, i) => SizedBox(width: 150,
@@ -4998,7 +5029,7 @@ class PromoSectionBlock extends StatelessWidget {
       shrinkWrap: true, physics: const NeverScrollableScrollPhysics(),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 2, mainAxisSpacing: 10, crossAxisSpacing: 10,
-        childAspectRatio: 0.64),
+        childAspectRatio: 0.60),
       itemCount: items.length,
       itemBuilder: (_, i) {
         final d = items[i].discountPct;
@@ -5018,7 +5049,7 @@ class PromoSectionBlock extends StatelessWidget {
 
   // ARRIVALS — taller horizontal rail with a corner NEW ribbon.
   Widget _arrivalsRail(List<UellowProductCard> items, Color c1, String badge) {
-    return SizedBox(height: 250, child: ListView.separated(
+    return SizedBox(height: 290, child: ListView.separated(
       scrollDirection: Axis.horizontal, itemCount: items.length,
       separatorBuilder: (_, __) => const SizedBox(width: 8),
       itemBuilder: (_, i) => SizedBox(width: 170, child: Stack(
@@ -5036,7 +5067,7 @@ class PromoSectionBlock extends StatelessWidget {
   }
 
   Widget _rail(List<UellowProductCard> items, Color c1, String badge) =>
-      SizedBox(height: 246, child: ListView.separated(
+      SizedBox(height: 286, child: ListView.separated(
         scrollDirection: Axis.horizontal, itemCount: items.length,
         separatorBuilder: (_, __) => const SizedBox(width: 8),
         itemBuilder: (_, i) => SizedBox(width: 160,
@@ -5048,7 +5079,7 @@ class PromoSectionBlock extends StatelessWidget {
         shrinkWrap: true, physics: const NeverScrollableScrollPhysics(),
         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
           crossAxisCount: 2, mainAxisSpacing: 8, crossAxisSpacing: 8,
-          childAspectRatio: 0.64),
+          childAspectRatio: 0.60),
         itemCount: items.length,
         itemBuilder: (_, i) => ProductCard(rich: true, product: items[i], hideAvail: true),
       );
