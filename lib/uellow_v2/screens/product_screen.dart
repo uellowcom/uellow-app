@@ -1272,7 +1272,7 @@ class _Attributes extends StatelessWidget {
           if (smartFit) Builder(builder: (ctx) {
             final ar = UellowApi.instance.lang == 'ar';
             return GestureDetector(
-              onTap: () => Navigator.pushNamed(ctx, '/tryon',
+              onTap: () => Navigator.pushNamed(ctx, '/smart-fit',
                   arguments: {'id': productId}),
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),

@@ -36,6 +36,7 @@ import '../screens/my_reviews_screen.dart';
 import '../screens/vendor_screen.dart';
 import '../screens/flash_screen.dart';
 import '../screens/tryon_screen.dart';
+import '../screens/smart_fit_screen.dart';
 import '../screens/beena_screen.dart';
 import '../screens/helpdesk_screen.dart';
 import '../screens/dynamic_page_screen.dart';
@@ -63,6 +64,7 @@ class Routes {
   static const product       = '/product';        // arg: productId (int)
   static const vendor        = '/vendor';         // arg: vendorId (int)
   static const tryOn         = '/tryon';          // arg: productId
+  static const smartFit      = '/smart-fit';      // arg: productId (optional)
   static const cart          = '/cart';
   static const checkout      = '/checkout';
   static const order         = '/order';          // arg: orderId
@@ -168,6 +170,12 @@ class UellowRouter {
         return MaterialPageRoute(
           settings: settings,
           builder: (_) => TryOnScreen(productId: id),
+        );
+      case Routes.smartFit:
+        final id = (settings.arguments as Map?)?['id'] as int?;
+        return MaterialPageRoute(
+          settings: settings,
+          builder: (_) => SmartFitScreen(productId: id),
         );
       case Routes.collection:
         final args = (settings.arguments as Map?) ?? const {};
