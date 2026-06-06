@@ -413,6 +413,18 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     return (pm['code'] as String?) ?? 'card';
   }
 
+  // v2.1.77 — does the currently selected carrier's company accept cash?
+  // Drives whether COD is offered in the payment grid.
+  bool _codAllowed(_CheckoutData d) {
+    final m = d.shippingMethods.firstWhere(
+      (e) => (e['id'] is int ? e['id'] as int
+              : int.tryParse('${e['id']}')) == _selectedCarrierId,
+      orElse: () => const {});
+    if (m.isEmpty) return true;
+    final v = m['cod_enabled'];
+    return v == null ? true : v == true;
+  }
+
   @override
   Widget build(BuildContext context) {
     final ar = UellowApi.instance.lang == 'ar';
@@ -556,12 +568,23 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           child: _ShippingMethodList(
             methods: d.shippingMethods,
             selected: _selectedCarrierId,
-            onSelect: (id) => setState(() => _selectedCarrierId = id),
+            onSelect: (id) => setState(() {
+              _selectedCarrierId = id;
+              // Payment derives from the carrier company: if the new carrier
+              // doesn't accept cash and COD was selected, drop the selection.
+              if (!_codAllowed(d) && _paymentCodeOf(d, _selectedPaymentId) == 'cod') {
+                final first = d.paymentMethods.isNotEmpty
+                    ? d.paymentMethods.first['id'] : null;
+                _selectedPaymentId = first is int
+                    ? first : int.tryParse('$first');
+              }
+            }),
           )),
       _section(num: 3, title: UellowApi.instance.lang == 'ar' ? 'طريقة الدفع' : 'PAYMENT METHOD',
           child: _PaymentMethodGrid(
             methods: d.paymentMethods,
             selected: _selectedPaymentId,
+            codAllowed: _codAllowed(d),
             onSelect: (id) => setState(() => _selectedPaymentId = id),
           )),
       _section(num: null,
@@ -1135,10 +1158,14 @@ class _ShippingMethodList extends StatelessWidget {
 class _PaymentMethodGrid extends StatelessWidget {
   const _PaymentMethodGrid({
     required this.methods, required this.selected, required this.onSelect,
+    this.codAllowed = true,
   });
   final List<Map<String, dynamic>> methods;
   final int? selected;
   final ValueChanged<int> onSelect;
+  // v2.1.77 — payment derives from the carrier company: when the chosen
+  // delivery method's company doesn't collect cash, COD is hidden here.
+  final bool codAllowed;
   IconData _iconFor(String code) {
     switch (code) {
       case 'knet':         return Icons.account_balance_outlined;
@@ -1228,11 +1255,16 @@ class _PaymentMethodGrid extends StatelessWidget {
   ];
   @override
   Widget build(BuildContext context) {
-    // Merge: server methods first, then COD (deduped by code)
-    final codes = methods.map((m) => (m['code'] as String?) ?? '').toSet();
+    // Merge: server methods first, then COD (deduped by code). When the
+    // selected carrier's company doesn't accept cash, drop COD entirely.
+    final src = codAllowed
+        ? methods
+        : methods.where((m) => (m['code'] as String?) != 'cod').toList();
+    final codes = src.map((m) => (m['code'] as String?) ?? '').toSet();
     final list = [
-      ...methods,
-      for (final e in _extras) if (!codes.contains(e['code'])) e,
+      ...src,
+      if (codAllowed)
+        for (final e in _extras) if (!codes.contains(e['code'])) e,
     ];
     if (list.isEmpty) {
       return Padding(
