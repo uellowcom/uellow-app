@@ -87,6 +87,32 @@ class ReviewBannerCache {
           'review_banner_dismissed', _dismissed.toList());
     } catch (_) {}
   }
+
+  /// v2.1.97 — "mark ALL read": silences EVERY current request (waiting
+  /// AND answered, shown or not) so the banner stops re-appearing on each
+  /// app open. Future NEW replies still surface normally.
+  Future<void> dismissAll() async {
+    try {
+      final res = await UellowApi.instance
+          .getRaw('/api/mobile/v2/reviewers/my-requests', auth: true);
+      final list = List<Map<String, dynamic>>.from(
+          (res['data']?['items'] as List?) ?? const []);
+      for (final it in list) {
+        _dismissed..add('${it['id']}:completed')..add('${it['id']}:waiting');
+      }
+    } catch (_) {
+      // offline — at least silence what's on screen
+      for (final it in items.value) {
+        _dismissed..add('${it['id']}:completed')..add('${it['id']}:waiting');
+      }
+    }
+    items.value = const [];
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setStringList(
+          'review_banner_dismissed', _dismissed.toList());
+    } catch (_) {}
+  }
 }
 
 class ReviewReplyBanner extends StatefulWidget {
@@ -654,6 +680,35 @@ class _ReviewReplyBannerState extends State<ReviewReplyBanner>
                     ),
                     child: const Icon(Icons.close, size: 14,
                         color: Color(0xFF555555)),
+                  ),
+                ),
+              ),
+              // ── v2.1.97 — "mark ALL read" pill: silences every current
+              // request so the banner stops re-appearing on each open. ──
+              PositionedDirectional(
+                top: -9, end: 34,
+                child: GestureDetector(
+                  onTap: () => ReviewBannerCache.instance.dismissAll(),
+                  child: Container(
+                    height: 22,
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(999),
+                      border: Border.all(color: const Color(0xFFE2E2E2)),
+                      boxShadow: const [BoxShadow(
+                          color: Color(0x33000000), blurRadius: 6)],
+                    ),
+                    child: Row(mainAxisSize: MainAxisSize.min, children: [
+                      const Icon(Icons.done_all, size: 12,
+                          color: Color(0xFF146C36)),
+                      const SizedBox(width: 3),
+                      Text(ar ? 'الكل مقروء' : 'Mark all read',
+                          style: const TextStyle(fontSize: 9,
+                              fontWeight: FontWeight.w800,
+                              color: Color(0xFF146C36))),
+                    ]),
                   ),
                 ),
               ),

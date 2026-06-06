@@ -1140,8 +1140,7 @@ class _ShippingMethodList extends StatelessWidget {
                       child: Icon(Icons.schedule, size: 10,
                           color: UellowColors.muted)),
                   const SizedBox(width: 3),
-                  Expanded(child: Text(
-                      lang == 'ar' ? 'نافذة التوصيل: $window' : 'Delivery window: $window',
+                  Expanded(child: Text(window,   // v2.1.97 — no label prefix
                       softWrap: true,
                       style: const TextStyle(fontSize: 9.5, height: 1.35,
                           color: UellowColors.muted))),
