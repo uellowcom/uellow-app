@@ -719,11 +719,14 @@ class _LineCard extends StatelessWidget {
               ]),
             ),
             const Spacer(),
-            // Line subtotal (qty × price) — updates as qty changes
-            Text(line.subtotal.format(), style: const TextStyle(
-                fontSize: 12, fontWeight: FontWeight.w700,
-                color: UellowColors.muted)),
-            const SizedBox(width: 14),
+            // Line subtotal (qty × price) — only when qty > 1; at qty 1 it
+            // just duplicated the unit price shown above (v2.1.96 fix).
+            if (line.qty > 1) ...[
+              Text(line.subtotal.format(), style: const TextStyle(
+                  fontSize: 12, fontWeight: FontWeight.w700,
+                  color: UellowColors.muted)),
+              const SizedBox(width: 14),
+            ],
             // v2.1.92 — opaque + padded hit area (the bare 11px text was a
             // near-impossible tap target, so the button felt dead).
             GestureDetector(

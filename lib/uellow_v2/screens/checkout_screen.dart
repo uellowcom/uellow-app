@@ -519,9 +519,10 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           if (tot != null) {
             double a(Map? m) => (m?['amount'] as num?)?.toDouble() ?? 0;
             final ship = snap.data != null ? _selectedShipping(snap.data!) : null;
+            // v2.1.96 — the shipping price already includes the cash
+            // surcharge (cash-first); nothing extra to add here.
             final pay = a(tot['subtotal'] as Map?) - a(tot['discount'] as Map?)
-                + a(tot['tax'] as Map?) + a((ship ?? tot['shipping']) as Map?)
-                + (snap.data != null ? _codFee(snap.data!) : 0);
+                + a(tot['tax'] as Map?) + a((ship ?? tot['shipping']) as Map?);
             final tmpl = (tot['subtotal'] ?? tot['total']) as Map?;
             if (tmpl != null) {
               final mm = Map<String, dynamic>.from(tmpl);
@@ -550,18 +551,28 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     return null;
   }
 
-  // v2.1.95 — cash-handling fee of the selected zone, charged ONLY when
-  // the customer picked Cash on Delivery (added as an order line at
-  // confirm by the backend — this is the matching preview).
-  double _codFee(_CheckoutData d) {
-    if (_paymentCodeOf(d, _selectedPaymentId) != 'cod') return 0;
+  // v2.1.96 — cash-first pricing: the server's delivery price ALREADY
+  // includes the zone cash surcharge. This returns that surcharge so the
+  // summary can explain it (and tease the wallet refund for online payers).
+  double _zoneSurcharge(_CheckoutData d) {
     for (final m in d.shippingMethods) {
       if ((m['id'] as int?) == _selectedCarrierId) {
+        if (m['is_free'] == true) return 0;   // free stays free, no surcharge
         return ((m['zone'] as Map?)?['cash_surcharge'] as num?)
                 ?.toDouble() ?? 0;
       }
     }
     return 0;
+  }
+
+  // refund teaser only when the zone + global switches allow it.
+  bool _refundEnabled(_CheckoutData d) {
+    for (final m in d.shippingMethods) {
+      if ((m['id'] as int?) == _selectedCarrierId) {
+        return (m['zone'] as Map?)?['cod_refund_enabled'] != false;
+      }
+    }
+    return true;
   }
 
   Widget _content(_CheckoutData d) {
@@ -607,7 +618,9 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           child: _SumBlock(
             cart: (d.summary?['cart'] as Map?),
             shippingOverride: _selectedShipping(d),
-            codFee: _codFee(d),
+            surcharge: _zoneSurcharge(d),
+            isCod: _paymentCodeOf(d, _selectedPaymentId) == 'cod',
+            refundEnabled: _refundEnabled(d),
           )),
       // No trailing gap — sticky Place Order bar hugs the last block.
     ]);
@@ -1117,15 +1130,21 @@ class _ShippingMethodList extends StatelessWidget {
                 child: Text(lang == 'ar' ? 'اطلب قبل $cutoff' : 'Order before $cutoff',
                     style: const TextStyle(fontSize: 11, color: UellowColors.muted)),
               ),
+              // v2.1.96 — full delivery window, small font, wraps to as
+              // many lines as needed (was ellipsized to one line).
               if (window.isNotEmpty) Padding(
                 padding: const EdgeInsets.only(top: 2),
-                child: Row(mainAxisSize: MainAxisSize.min, children: [
-                  const Icon(Icons.schedule, size: 11, color: UellowColors.muted),
+                child: Row(crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                  const Padding(padding: EdgeInsets.only(top: 1.5),
+                      child: Icon(Icons.schedule, size: 10,
+                          color: UellowColors.muted)),
                   const SizedBox(width: 3),
-                  Flexible(child: Text(
+                  Expanded(child: Text(
                       lang == 'ar' ? 'نافذة التوصيل: $window' : 'Delivery window: $window',
-                      maxLines: 1, overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontSize: 11, color: UellowColors.muted))),
+                      softWrap: true,
+                      style: const TextStyle(fontSize: 9.5, height: 1.35,
+                          color: UellowColors.muted))),
                 ]),
               ),
             ])),
@@ -1358,13 +1377,17 @@ class _PaymentMethodGrid extends StatelessWidget {
 // ─── Summary block ────────────────────────────────────────────────
 
 class _SumBlock extends StatelessWidget {
-  const _SumBlock({this.cart, this.shippingOverride, this.codFee = 0});
+  const _SumBlock({this.cart, this.shippingOverride,
+      this.surcharge = 0, this.isCod = true, this.refundEnabled = true});
   final Map? cart;
   // The selected shipping method's price (the order's amount_delivery is 0
   // until a carrier is applied at confirm, so the preview must use this).
   final Map<String, dynamic>? shippingOverride;
-  // v2.1.95 — zone cash-handling fee (only when COD is selected).
-  final double codFee;
+  // v2.1.96 — cash-first pricing: the surcharge INSIDE the shipping price
+  // (info only) + whether the customer picked cash (refund teaser if not).
+  final double surcharge;
+  final bool isCod;
+  final bool refundEnabled;
   @override
   Widget build(BuildContext context) {
     final totals = cart?['totals'] as Map?;
@@ -1387,13 +1410,22 @@ class _SumBlock extends StatelessWidget {
     final discAmt = amt(totals?['discount'] as Map?);
     final shipMap = shippingOverride ?? (totals?['shipping'] as Map?);
     final shipAmt = amt(shipMap);
-    final payAmt = subAmt - discAmt + taxAmt + shipAmt + codFee;
+    final payAmt = subAmt - discAmt + taxAmt + shipAmt;
     return Column(children: [
       _r(ar ? 'الإجمالي قبل الخصم' : 'Subtotal', moneyOf(totals?['subtotal'] as Map?)),
       _r(ar ? 'الشحن' : 'Delivery',
           shipAmt <= 0 ? (ar ? 'مجاني' : 'Free') : moneyOf(shipMap)),
-      if (codFee > 0)
-        _r(ar ? 'رسوم الدفع نقداً' : 'Cash handling fee', moneyAmt(codFee)),
+      // v2.1.96 — cash-first pricing explainer: cash payers see what's
+      // included; online payers see the wallet refund they'll get.
+      if (surcharge > 0 && shipAmt > 0)
+        if (isCod)
+          _r(ar ? '· شامل رسوم الدفع نقداً' : '· incl. cash handling fee',
+              moneyAmt(surcharge))
+        else if (refundEnabled)
+          _r(ar
+                  ? '🎁 تُسترد رسوم الكاش في محفظتك بعد الدفع'
+                  : '🎁 Cash fee refunded to your wallet after payment',
+              '+ ${moneyAmt(surcharge)}', success: true),
       if (discAmt > 0) ...[
         if (coupons.isNotEmpty)
           for (final code in coupons)
