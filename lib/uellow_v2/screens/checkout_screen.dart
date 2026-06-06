@@ -1063,7 +1063,17 @@ class _ShippingMethodList extends StatelessWidget {
       final availNote = ((m['availability_note'] as Map?)?[lang]
           ?? (m['availability_note'] as Map?)?['en'] ?? '').toString();
       return GestureDetector(
-        onTap: () => onSelect(id),
+        // v2.1.98 — an after-hours method can't be selected (confirming
+        // it would fail); a small toast explains instead.
+        onTap: unavailable
+            ? () => ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                content: Text(availNote.isNotEmpty
+                    ? availNote
+                    : (lang == 'ar'
+                        ? 'وسيلة التوصيل غير متاحة الآن'
+                        : 'This delivery method is unavailable right now')),
+                duration: const Duration(seconds: 2)))
+            : () => onSelect(id),
         child: Opacity(
           opacity: unavailable ? 0.62 : 1.0,
           child: Container(

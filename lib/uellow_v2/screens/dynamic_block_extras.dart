@@ -5011,7 +5011,7 @@ class PromoSectionBlock extends StatelessWidget {
       ),
       if (rest.isNotEmpty) ...[
         const SizedBox(height: 10),
-        SizedBox(height: 276, child: ListView.separated(   // spotlight rail: −1px (v2.1.97)
+        SizedBox(height: 275, child: ListView.separated(   // spotlight rail: −1px (v2.1.98)
           scrollDirection: Axis.horizontal, itemCount: rest.length,
           separatorBuilder: (_, __) => const SizedBox(width: 8),
           itemBuilder: (_, i) => SizedBox(width: 150,
@@ -5073,7 +5073,7 @@ class PromoSectionBlock extends StatelessWidget {
       shrinkWrap: true, physics: const NeverScrollableScrollPhysics(),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 2, mainAxisSpacing: 10, crossAxisSpacing: 10,
-        childAspectRatio: 0.586),  // mega: +1px more (v2.1.97)
+        childAspectRatio: 0.584),  // mega: +1px more (v2.1.98)
       itemCount: items.length,
       itemBuilder: (_, i) {
         final d = items[i].discountPct;
