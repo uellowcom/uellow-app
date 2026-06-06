@@ -257,9 +257,9 @@ class _ReviewReplyBannerState extends State<ReviewReplyBanner>
         ]),
       ),
     ).whenComplete(() {
-      // v2.1.74 — green (answered) banner is read once viewed; a waiting
-      // banner stays until the customer taps its ✕.
-      if (answered) ReviewBannerCache.instance.dismiss([it]);
+      // v2.1.84 — opening the details ALWAYS marks the banner read so it
+      // never lingers after the customer has seen it (answered or waiting).
+      ReviewBannerCache.instance.dismiss([it]);
     });
   }
 

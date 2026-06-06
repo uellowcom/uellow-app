@@ -347,15 +347,23 @@ class _MapBoxState extends State<_MapBox> {
     // everything else (warehouse/hub) is hidden for a clean live view.
     final liveTracking = d != null && d['is_live'] == true &&
         stage != 'delivered';
+    // stage index (mirrors the journey strip) → grey out completed pins.
+    final act = switch (stage) {
+      'placed' || 'at_warehouse' => 0,
+      'at_carrier' => 1,
+      'in_transit' || 'arriving' => 2,
+      'delivered' => 3,
+      _ => 0,
+    };
     if (!liveTracking) {
       if (w != null) {
         markers.add(_mapPin(w['lat'], w['lng'], '#2F6E62', 'inventory_2',
-            ar ? 'طلبك' : 'Your order'));
+            ar ? 'طلبك' : 'Your order', done: act > 0));
         coords.add('[${w['lat']},${w['lng']}]');
       }
       if (c != null) {
         markers.add(_mapPin(c['lat'], c['lng'], '#4C7DAE', 'warehouse',
-            ar ? 'شركة الشحن' : 'Carrier'));
+            ar ? 'شركة الشحن' : 'Carrier', done: act > 1));
         coords.add('[${c['lat']},${c['lng']}]');
       }
     }
@@ -387,17 +395,38 @@ class _MapBoxState extends State<_MapBox> {
 <script src="https://unpkg.com/leaflet\@1.9.4/dist/leaflet.js"></script>
 <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet"/>
 <style>
-.uic{display:flex;flex-direction:column;align-items:center;filter:drop-shadow(0 2px 3px rgba(0,0,0,.25))}
-.uic .mi{font-family:'Material Icons Round';font-size:34px;line-height:1}
-.uic .lbl{margin-top:2px;background:#fff;border-radius:10px;padding:1px 7px;font-size:10px;
-  font-weight:800;color:#233330;white-space:nowrap;box-shadow:0 1px 3px rgba(0,0,0,.2);
+.uic{display:flex;flex-direction:column;align-items:center}
+/* premium 3D teardrop pin: glossy gradient sphere head + tapered tail +
+   soft ground shadow → reads as a real 3D map marker. */
+.pin3d{position:relative;width:46px;height:46px;border-radius:50% 50% 50% 0;
+  transform:rotate(-45deg);
+  background:radial-gradient(circle at 32% 28%, #ffffff55 0 8%, var(--c) 42%, var(--cd) 100%);
+  box-shadow:0 6px 10px rgba(0,0,0,.35), inset 0 -3px 6px rgba(0,0,0,.28),
+    inset 0 3px 6px rgba(255,255,255,.45);}
+.pin3d::before{content:'';position:absolute;top:7px;left:9px;width:14px;height:9px;
+  border-radius:50%;background:rgba(255,255,255,.55);filter:blur(1px);}
+.pin3d .mi{font-family:'Material Icons Round';font-size:22px;color:#fff;
+  position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) rotate(45deg);
+  text-shadow:0 1px 2px rgba(0,0,0,.4);z-index:2;}
+.shadow{width:18px;height:6px;border-radius:50%;background:rgba(0,0,0,.28);
+  filter:blur(2px);margin-top:-3px;}
+.uic .lbl{margin-top:5px;background:#fff;border-radius:10px;padding:2px 8px;font-size:10px;
+  font-weight:800;color:#233330;white-space:nowrap;box-shadow:0 2px 5px rgba(0,0,0,.22);
   font-family:-apple-system,Segoe UI,Tahoma,Arial,sans-serif}
-.carwrap{position:relative;width:44px;height:44px;display:flex;align-items:center;justify-content:center}
-.carwrap .pulse{position:absolute;width:44px;height:44px;border-radius:50%;
-  background:rgba(232,168,23,.45);animation:pz 1.4s ease-out infinite}
-@keyframes pz{0%{transform:scale(.4);opacity:.8}100%{transform:scale(1.4);opacity:0}}
-.carwrap .mi{font-family:'Material Icons Round';font-size:30px;color:#C68C0C;
-  position:relative;z-index:2;filter:drop-shadow(0 2px 3px rgba(0,0,0,.3))}
+/* live courier — 3D glossy disc + sonar pulse */
+.carwrap{position:relative;width:50px;height:50px;display:flex;align-items:center;justify-content:center}
+.carwrap .pulse{position:absolute;width:50px;height:50px;border-radius:50%;
+  background:rgba(232,168,23,.4);animation:pz 1.4s ease-out infinite}
+.carwrap .pulse2{position:absolute;width:50px;height:50px;border-radius:50%;
+  background:rgba(232,168,23,.3);animation:pz 1.4s ease-out .7s infinite}
+@keyframes pz{0%{transform:scale(.4);opacity:.85}100%{transform:scale(1.5);opacity:0}}
+.carwrap .disc{position:relative;z-index:2;width:38px;height:38px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  background:radial-gradient(circle at 32% 28%, #ffe9a8 0 12%, #F5C320 45%, #C68C0C 100%);
+  box-shadow:0 5px 9px rgba(0,0,0,.35), inset 0 -2px 5px rgba(0,0,0,.3),
+    inset 0 2px 5px rgba(255,255,255,.6)}
+.carwrap .disc .mi{font-family:'Material Icons Round';font-size:22px;color:#412402;
+  text-shadow:0 1px 1px rgba(255,255,255,.4)}
 </style>
 <script>
 var map=L.map('m',{zoomControl:true,attributionControl:true,scrollWheelZoom:false});
@@ -413,18 +442,29 @@ else if(pts.length==1){map.setView(pts[0],15);}
 
   // v2.1.74 — clean marker: a coloured Material icon (NO background
   // circle) with a small white label pill underneath.
+  // Darker shade of the pin colour for the 3D gradient bottom.
+  String _darken(String hex) {
+    const m = {'#2F6E62': '#1E4B42', '#4C7DAE': '#2F557C',
+               '#D2604E': '#9E4334', '#2E9E6B': '#1F7A50', '#9AA5A1': '#6E7A75'};
+    return m[hex] ?? hex;
+  }
+
+  // 3D glossy teardrop pin. `done` greys out completed stages.
   String _mapPin(dynamic lat, dynamic lng, String color, String icon,
-      String label) {
-    return "L.marker([$lat,$lng],{icon:L.divIcon({className:'',iconSize:[80,52],iconAnchor:[40,44],"
-        "html:'<div class=\"uic\"><span class=\"mi\" style=\"color:$color\">$icon</span>"
+      String label, {bool done = false}) {
+    final c = done ? '#9AA5A1' : color;
+    final cd = _darken(c);
+    return "L.marker([$lat,$lng],{icon:L.divIcon({className:'',iconSize:[80,72],iconAnchor:[40,60],"
+        "html:'<div class=\"uic\"><div class=\"pin3d\" style=\"--c:$c;--cd:$cd\">"
+        "<span class=\"mi\">$icon</span></div><div class=\"shadow\"></div>"
         "<span class=\"lbl\">${_esc(label)}</span></div>'})}).addTo(map);";
   }
 
-  // the live courier car — animated pulse ring + car icon.
+  // the live courier — 3D glossy disc + double sonar pulse.
   String _carPin(dynamic lat, dynamic lng, String label) {
-    return "L.marker([$lat,$lng],{zIndexOffset:1000,icon:L.divIcon({className:'',iconSize:[80,60],iconAnchor:[40,30],"
+    return "L.marker([$lat,$lng],{zIndexOffset:1000,icon:L.divIcon({className:'',iconSize:[90,68],iconAnchor:[45,34],"
         "html:'<div class=\"uic\"><div class=\"carwrap\"><div class=\"pulse\"></div>"
-        "<span class=\"mi\">directions_car</span></div>"
+        "<div class=\"pulse2\"></div><div class=\"disc\"><span class=\"mi\">directions_car</span></div></div>"
         "<span class=\"lbl\">${_esc(label)}</span></div>'})}).addTo(map);";
   }
 
