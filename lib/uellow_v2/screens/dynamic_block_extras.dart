@@ -248,6 +248,7 @@ class DynSectionHeader extends StatelessWidget {
     required this.fallbackEn,
     this.trailing,
     this.showMore = false,
+    this.moreSort = 'newest',
   });
   final Map<String, dynamic> props;
   final DynTheme theme;
@@ -257,6 +258,10 @@ class DynSectionHeader extends StatelessWidget {
   // v2.1.60 — carousel blocks opt in: renders a quiet «عرض المزيد»
   // beside the title (opens props.link, falls back to the shop).
   final bool showMore;
+  // v2.1.93 — when no explicit link is set, "more" opens a FULL product
+  // list matching the block's SOURCE (category / bestsellers / a sorted
+  // feed). This is the block's natural feed key (e.g. 'discount').
+  final String moreSort;
 
   // v2.1.61 — yellow pill button (Tajawal) per request.
   Widget _moreBtn(BuildContext context) => Material(
@@ -268,8 +273,28 @@ class DynSectionHeader extends StatelessWidget {
             final link = (props['link'] as Map?)?.cast<String, dynamic>();
             if (link != null && (link['type'] ?? 'none') != 'none') {
               openBlockLink(context, link);
+              return;
+            }
+            // v2.1.93 — used to dump the user on the categories page with
+            // no products; now it resolves the block's source.
+            final src = (props['source'] ?? '').toString();
+            final cid = (props['category_id'] as num?)?.toInt() ?? 0;
+            final title = (ar
+                    ? (props['titleAr'] ?? props['titleEn'])
+                    : (props['titleEn'] ?? props['titleAr']))
+                ?.toString() ?? '';
+            if (cid > 0) {
+              Navigator.pushNamed(context, '/collection',
+                  arguments: {'category_id': cid, 'title': title});
+            } else if (src == 'bestsellers') {
+              Navigator.pushNamed(context, '/bestsellers');
             } else {
-              Navigator.pushNamed(context, '/category');
+              final sort = const {
+                'discounted': 'discount', 'newest': 'newest',
+                'popular': 'popular',
+              }[src] ?? moreSort;
+              Navigator.pushNamed(context, '/collection',
+                  arguments: {'sort': sort, 'title': title});
             }
           },
           child: Padding(
@@ -1411,7 +1436,9 @@ class DiscountStripBlock extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         DynSectionHeader(props: p, theme: t, ar: ar,
-            fallbackEn: 'Hot deals', showMore: true),
+            fallbackEn: 'Hot deals', showMore: true,
+            // discount strip → "more" opens the full discounts feed
+            moreSort: 'discount'),
         Padding(padding: EdgeInsets.only(bottom: hasBg ? 10 : 0), child: body),
       ],
     );
