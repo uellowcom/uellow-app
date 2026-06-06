@@ -520,7 +520,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
             double a(Map? m) => (m?['amount'] as num?)?.toDouble() ?? 0;
             final ship = snap.data != null ? _selectedShipping(snap.data!) : null;
             final pay = a(tot['subtotal'] as Map?) - a(tot['discount'] as Map?)
-                + a(tot['tax'] as Map?) + a((ship ?? tot['shipping']) as Map?);
+                + a(tot['tax'] as Map?) + a((ship ?? tot['shipping']) as Map?)
+                + (snap.data != null ? _codFee(snap.data!) : 0);
             final tmpl = (tot['subtotal'] ?? tot['total']) as Map?;
             if (tmpl != null) {
               final mm = Map<String, dynamic>.from(tmpl);
@@ -547,6 +548,20 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       }
     }
     return null;
+  }
+
+  // v2.1.95 — cash-handling fee of the selected zone, charged ONLY when
+  // the customer picked Cash on Delivery (added as an order line at
+  // confirm by the backend — this is the matching preview).
+  double _codFee(_CheckoutData d) {
+    if (_paymentCodeOf(d, _selectedPaymentId) != 'cod') return 0;
+    for (final m in d.shippingMethods) {
+      if ((m['id'] as int?) == _selectedCarrierId) {
+        return ((m['zone'] as Map?)?['cash_surcharge'] as num?)
+                ?.toDouble() ?? 0;
+      }
+    }
+    return 0;
   }
 
   Widget _content(_CheckoutData d) {
@@ -592,6 +607,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           child: _SumBlock(
             cart: (d.summary?['cart'] as Map?),
             shippingOverride: _selectedShipping(d),
+            codFee: _codFee(d),
           )),
       // No trailing gap — sticky Place Order bar hugs the last block.
     ]);
@@ -1342,11 +1358,13 @@ class _PaymentMethodGrid extends StatelessWidget {
 // ─── Summary block ────────────────────────────────────────────────
 
 class _SumBlock extends StatelessWidget {
-  const _SumBlock({this.cart, this.shippingOverride});
+  const _SumBlock({this.cart, this.shippingOverride, this.codFee = 0});
   final Map? cart;
   // The selected shipping method's price (the order's amount_delivery is 0
   // until a carrier is applied at confirm, so the preview must use this).
   final Map<String, dynamic>? shippingOverride;
+  // v2.1.95 — zone cash-handling fee (only when COD is selected).
+  final double codFee;
   @override
   Widget build(BuildContext context) {
     final totals = cart?['totals'] as Map?;
@@ -1369,11 +1387,13 @@ class _SumBlock extends StatelessWidget {
     final discAmt = amt(totals?['discount'] as Map?);
     final shipMap = shippingOverride ?? (totals?['shipping'] as Map?);
     final shipAmt = amt(shipMap);
-    final payAmt = subAmt - discAmt + taxAmt + shipAmt;
+    final payAmt = subAmt - discAmt + taxAmt + shipAmt + codFee;
     return Column(children: [
       _r(ar ? 'الإجمالي قبل الخصم' : 'Subtotal', moneyOf(totals?['subtotal'] as Map?)),
       _r(ar ? 'الشحن' : 'Delivery',
           shipAmt <= 0 ? (ar ? 'مجاني' : 'Free') : moneyOf(shipMap)),
+      if (codFee > 0)
+        _r(ar ? 'رسوم الدفع نقداً' : 'Cash handling fee', moneyAmt(codFee)),
       if (discAmt > 0) ...[
         if (coupons.isNotEmpty)
           for (final code in coupons)

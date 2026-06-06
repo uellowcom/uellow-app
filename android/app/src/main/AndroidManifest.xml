@@ -59,6 +59,18 @@
                 <data android:scheme="uellow"/>
             </intent-filter>
         </activity>
+        <!-- v2.1.95 — Sign in with Apple (Android web flow) return leg:
+             the server callback bounces to signinwithapple://callback. -->
+        <activity
+            android:name="com.aboutyou.dart_packages.sign_in_with_apple.SignInWithAppleCallback"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="signinwithapple" android:host="callback"/>
+            </intent-filter>
+        </activity>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data

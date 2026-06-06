@@ -3,6 +3,7 @@
 // Wires to UellowApi.auth.login / register / google / apple / facebook.
 // =============================================================================
 import 'dart:async';
+import 'dart:io' show Platform;
 
 import 'package:flutter/material.dart';
 
@@ -502,10 +503,24 @@ class _AuthScreenState extends State<AuthScreen> {
     final ar = UellowApi.instance.lang.toLowerCase().startsWith('ar');
     setState(() { _busy = true; _err = null; });
     try {
-      final cred = await SignInWithApple.getAppleIDCredential(scopes: [
-        AppleIDAuthorizationScopes.email,
-        AppleIDAuthorizationScopes.fullName,
-      ]);
+      // v2.1.95 — Android goes through Apple's WEB flow using the
+      // Services ID + the already-registered website callback (which
+      // bounces back into the app via the signinwithapple:// intent).
+      // iOS keeps the fully native sheet.
+      final cred = await SignInWithApple.getAppleIDCredential(
+        scopes: [
+          AppleIDAuthorizationScopes.email,
+          AppleIDAuthorizationScopes.fullName,
+        ],
+        state: 'uellow_app',
+        webAuthenticationOptions: Platform.isIOS
+            ? null
+            : WebAuthenticationOptions(
+                clientId: 'com.uellow.signin',
+                redirectUri:
+                    Uri.parse('https://uellow.com/apple/login/callback'),
+              ),
+      );
       final token = cred.identityToken ?? '';
       if (token.isEmpty) {
         throw UellowApiException(code: 'NO_TOKEN',

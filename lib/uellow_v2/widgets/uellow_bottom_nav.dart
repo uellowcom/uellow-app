@@ -312,40 +312,41 @@ class _UellowBottomNavState extends State<UellowBottomNav> {
     // scaffold background never shows as a frame around the floating
     // banner (the banner appears "alone", merged with the nav).
     return Column(mainAxisSize: MainAxisSize.min, children: [
-      // v2.1.92/94 — the Beena chat bubble floats on a TRANSPARENT backdrop
-      // (page content shows through via extendBody) OUTSIDE the white nav
-      // base — it used to inherit a full-width white strip.
+      // v2.1.92/94/95 — EVERYTHING that floats above the nav (Beena chat
+      // bubble, reviewers banner, announcement strips) sits on a fully
+      // TRANSPARENT backdrop — page content shows through via extendBody.
+      // Only the nav bar itself keeps the white base.
       Material(
         type: MaterialType.transparency,
-        child: ValueListenableBuilder<List<DynNavItem>>(
-          valueListenable: NavBarCache.instance.items,
-          builder: (_, navItems, __) {
-            double? anchor;
-            final i = navItems.indexWhere((it) =>
-                (it.targetValue ?? '').toLowerCase().contains('beena'));
-            if (i >= 0 && navItems.isNotEmpty) {
-              anchor = (i + 0.5) / navItems.length;
-            }
-            return BeenaNudgeStrip(anchorFraction: anchor);
-          },
-        ),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          ValueListenableBuilder<List<DynNavItem>>(
+            valueListenable: NavBarCache.instance.items,
+            builder: (_, navItems, __) {
+              double? anchor;
+              final i = navItems.indexWhere((it) =>
+                  (it.targetValue ?? '').toLowerCase().contains('beena'));
+              if (i >= 0 && navItems.isNotEmpty) {
+                anchor = (i + 0.5) / navItems.length;
+              }
+              return BeenaNudgeStrip(anchorFraction: anchor);
+            },
+          ),
+          const ReviewReplyBanner(),
+          AnnouncementStrip(screen: _stripScreen()),
+        ]),
       ),
       Material(
         color: Colors.white,
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          const ReviewReplyBanner(),
-          AnnouncementStrip(screen: _stripScreen()),
-          ValueListenableBuilder<List<DynNavItem>>(
-            valueListenable: NavBarCache.instance.items,
-            builder: (_, items, __) {
-              if (items.isNotEmpty) return _buildDynamic(context, items);
-              // v2.1.69 — the OLD hardcoded tabs are gone for good: until
-              // the designed nav loads (first-ever launch only, thanks to
-              // the snapshot), a neutral placeholder bar holds the space.
-              return _buildPlaceholder();
-            },
-          ),
-        ]),
+        child: ValueListenableBuilder<List<DynNavItem>>(
+          valueListenable: NavBarCache.instance.items,
+          builder: (_, items, __) {
+            if (items.isNotEmpty) return _buildDynamic(context, items);
+            // v2.1.69 — the OLD hardcoded tabs are gone for good: until
+            // the designed nav loads (first-ever launch only, thanks to
+            // the snapshot), a neutral placeholder bar holds the space.
+            return _buildPlaceholder();
+          },
+        ),
       ),
     ]);
   }
