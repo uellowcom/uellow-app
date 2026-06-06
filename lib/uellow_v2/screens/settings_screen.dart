@@ -15,6 +15,9 @@ import '../../api/uellow_api.dart';
 import '../../api/uellow_endpoints.dart';
 import '../services/fcm_service.dart';
 import '../theme/uellow_theme.dart';
+import '../widgets/uellow_bottom_nav.dart';
+import '../widgets/review_requests_strip.dart';
+import '../widgets/beena_nudge_strip.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key, this.onRestart});
@@ -198,11 +201,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
     // Re-register the FCM token so the server's push_lang follows the
     // new language instantly (push notifications arrive in this language).
     unawaited(FcmService.instance.register());
+    // v2.1.88 — country switch must REFRESH everything (prices/products are
+    // per-website). Reset the cached singletons, then cold-restart the UI via
+    // the splash route so every screen re-fetches with the new website_id.
+    try {
+      NavBarCache.instance.refresh();
+      ReviewBannerCache.instance.load(force: true);
+      BeenaNudgeCache.instance.load(force: true);
+    } catch (_) {}
     if (!mounted) return;
     setState(() => _dirty = false);
-    // If a baseUrl swap happened, push back to home so all FutureBuilders
-    // re-fetch from the new country's API.
-    Navigator.of(context).pushNamedAndRemoveUntil('/home', (_) => false);
+    Navigator.of(context).pushNamedAndRemoveUntil('/', (_) => false);
   }
 
   @override

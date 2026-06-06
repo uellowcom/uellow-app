@@ -357,12 +357,12 @@ class _MapBoxState extends State<_MapBox> {
     };
     if (!liveTracking) {
       if (w != null) {
-        markers.add(_mapPin(w['lat'], w['lng'], '#2F6E62', 'inventory_2',
+        markers.add(_mapPin(w['lat'], w['lng'], '#FF7A18', 'shopping_bag',
             ar ? 'طلبك' : 'Your order', done: act > 0));
         coords.add('[${w['lat']},${w['lng']}]');
       }
       if (c != null) {
-        markers.add(_mapPin(c['lat'], c['lng'], '#4C7DAE', 'warehouse',
+        markers.add(_mapPin(c['lat'], c['lng'], '#2D7DF6', 'local_shipping',
             ar ? 'شركة الشحن' : 'Carrier', done: act > 1));
         coords.add('[${c['lat']},${c['lng']}]');
       }
@@ -375,8 +375,8 @@ class _MapBoxState extends State<_MapBox> {
     if (u != null) {
       final isDelivered = stage == 'delivered';
       markers.add(_mapPin(u['lat'], u['lng'],
-          isDelivered ? '#2E9E6B' : '#D2604E',
-          isDelivered ? 'check_circle' : 'person_pin_circle',
+          isDelivered ? '#16C172' : '#FF3D6E',
+          isDelivered ? 'check_circle' : 'location_on',
           ar ? 'أنت' : 'You'));
       coords.add('[${u['lat']},${u['lng']}]');
     }
@@ -396,20 +396,16 @@ class _MapBoxState extends State<_MapBox> {
 <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet"/>
 <style>
 .uic{display:flex;flex-direction:column;align-items:center}
-/* premium 3D teardrop pin: glossy gradient sphere head + tapered tail +
-   soft ground shadow → reads as a real 3D map marker. */
-.pin3d{position:relative;width:46px;height:46px;border-radius:50% 50% 50% 0;
-  transform:rotate(-45deg);
-  background:radial-gradient(circle at 32% 28%, #ffffff55 0 8%, var(--c) 42%, var(--cd) 100%);
-  box-shadow:0 6px 10px rgba(0,0,0,.35), inset 0 -3px 6px rgba(0,0,0,.28),
-    inset 0 3px 6px rgba(255,255,255,.45);}
-.pin3d::before{content:'';position:absolute;top:7px;left:9px;width:14px;height:9px;
-  border-radius:50%;background:rgba(255,255,255,.55);filter:blur(1px);}
-.pin3d .mi{font-family:'Material Icons Round';font-size:22px;color:#fff;
-  position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) rotate(45deg);
-  text-shadow:0 1px 2px rgba(0,0,0,.4);z-index:2;}
-.shadow{width:18px;height:6px;border-radius:50%;background:rgba(0,0,0,.28);
-  filter:blur(2px);margin-top:-3px;}
+/* vivid ROUND icon badge (no teardrop) — bright gradient circle, crisp white
+   ring, big clear icon, soft shadow. Clean and modern. */
+.rico{width:44px;height:44px;border-radius:50%;display:flex;align-items:center;
+  justify-content:center;border:3px solid #fff;
+  background:radial-gradient(circle at 34% 30%, #ffffff66 0 10%, var(--c) 46%, var(--cd) 100%);
+  box-shadow:0 4px 9px rgba(0,0,0,.30);}
+.rico .mi{font-family:'Material Icons Round';font-size:23px;color:#fff;
+  text-shadow:0 1px 2px rgba(0,0,0,.35);}
+.shadow{width:16px;height:5px;border-radius:50%;background:rgba(0,0,0,.22);
+  filter:blur(2px);margin-top:1px;}
 .uic .lbl{margin-top:5px;background:#fff;border-radius:10px;padding:2px 8px;font-size:10px;
   font-weight:800;color:#233330;white-space:nowrap;box-shadow:0 2px 5px rgba(0,0,0,.22);
   font-family:-apple-system,Segoe UI,Tahoma,Arial,sans-serif}
@@ -444,18 +440,20 @@ else if(pts.length==1){map.setView(pts[0],15);}
   // circle) with a small white label pill underneath.
   // Darker shade of the pin colour for the 3D gradient bottom.
   String _darken(String hex) {
-    const m = {'#2F6E62': '#1E4B42', '#4C7DAE': '#2F557C',
-               '#D2604E': '#9E4334', '#2E9E6B': '#1F7A50', '#9AA5A1': '#6E7A75'};
+    const m = {'#FF7A18': '#D85E00', '#2D7DF6': '#1A57C2',
+               '#FF3D6E': '#C71E4C', '#16C172': '#0E8F53', '#AEB6B2': '#7E8884',
+               // legacy
+               '#2F6E62': '#1E4B42', '#4C7DAE': '#2F557C'};
     return m[hex] ?? hex;
   }
 
-  // 3D glossy teardrop pin. `done` greys out completed stages.
+  // Vivid round icon badge (no teardrop). `done` greys completed stages.
   String _mapPin(dynamic lat, dynamic lng, String color, String icon,
       String label, {bool done = false}) {
-    final c = done ? '#9AA5A1' : color;
+    final c = done ? '#AEB6B2' : color;
     final cd = _darken(c);
-    return "L.marker([$lat,$lng],{icon:L.divIcon({className:'',iconSize:[80,72],iconAnchor:[40,60],"
-        "html:'<div class=\"uic\"><div class=\"pin3d\" style=\"--c:$c;--cd:$cd\">"
+    return "L.marker([$lat,$lng],{icon:L.divIcon({className:'',iconSize:[80,70],iconAnchor:[40,40],"
+        "html:'<div class=\"uic\"><div class=\"rico\" style=\"--c:$c;--cd:$cd\">"
         "<span class=\"mi\">$icon</span></div><div class=\"shadow\"></div>"
         "<span class=\"lbl\">${_esc(label)}</span></div>'})}).addTo(map);";
   }

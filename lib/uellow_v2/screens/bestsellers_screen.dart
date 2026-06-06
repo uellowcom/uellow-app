@@ -26,11 +26,16 @@ class _BestsellersScreenState extends State<BestsellersScreen> {
   bool _loading = false;
   bool _hasMore = true;
   int _page = 1;
+  int _catId = 0;                          // 0 = all
+  List<UellowCategory> _cats = const [];
 
   @override
   void initState() {
     super.initState();
     _load();
+    UellowApi.instance.categories.tree().then((c) {
+      if (mounted) setState(() => _cats = c.take(14).toList());
+    }).catchError((_) {});
     _scroll.addListener(() {
       if (_scroll.position.pixels >
               _scroll.position.maxScrollExtent - 400 &&
@@ -38,6 +43,15 @@ class _BestsellersScreenState extends State<BestsellersScreen> {
         _load();
       }
     });
+  }
+
+  void _selectCat(int id) {
+    if (id == _catId) return;
+    setState(() {
+      _catId = id; _page = 1; _hasMore = true;
+      _items.clear(); _ranks.clear();
+    });
+    _load();
   }
 
   @override
@@ -52,7 +66,8 @@ class _BestsellersScreenState extends State<BestsellersScreen> {
     try {
       final res = await UellowApi.instance.getRaw(
           '/api/mobile/v2/products/bestsellers',
-          query: {'page': _page, 'per_page': 20});
+          query: {'page': _page, 'per_page': 20,
+            if (_catId > 0) 'category_id': _catId});
       final data = (res['data'] as Map?)?.cast<String, dynamic>() ?? res;
       final list = (data['items'] as List?) ?? const [];
       for (final j in list) {
@@ -80,6 +95,7 @@ class _BestsellersScreenState extends State<BestsellersScreen> {
           foregroundColor: Colors.white,
           title: Text(ar ? '👑 الأفضل مبيعاً' : '👑 Bestsellers',
               style: const TextStyle(
+                  color: UellowColors.yellow,
                   fontWeight: FontWeight.w900, fontSize: 16)),
         ),
         body: _items.isEmpty && _loading
@@ -105,6 +121,40 @@ class _BestsellersScreenState extends State<BestsellersScreen> {
                             fontSize: 11.5,
                             fontWeight: FontWeight.w700))),
                   ]),
+                )),
+                // category filter chips (header)
+                if (_cats.isNotEmpty) SliverToBoxAdapter(child: Container(
+                  color: const Color(0xFF1F1A10),
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: SizedBox(height: 34, child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    itemCount: _cats.length + 1,
+                    separatorBuilder: (_, __) => const SizedBox(width: 6),
+                    itemBuilder: (_, i) {
+                      final id = i == 0 ? 0 : _cats[i - 1].id;
+                      final label = i == 0
+                          ? (ar ? 'الكل' : 'All')
+                          : _cats[i - 1].name.current(ar ? 'ar' : 'en');
+                      final on = id == _catId;
+                      return GestureDetector(
+                        onTap: () => _selectCat(id),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: on ? UellowColors.yellow : Colors.white.withValues(alpha: 0.10),
+                            borderRadius: BorderRadius.circular(999),
+                            border: Border.all(color: on ? UellowColors.yellow
+                                : Colors.white.withValues(alpha: 0.20)),
+                          ),
+                          alignment: Alignment.center,
+                          child: Text(label, style: TextStyle(
+                              color: on ? const Color(0xFF1F1A10) : Colors.white,
+                              fontSize: 12, fontWeight: FontWeight.w800)),
+                        ),
+                      );
+                    },
+                  )),
                 )),
                 SliverPadding(
                   padding: const EdgeInsets.fromLTRB(10, 10, 10, 24),

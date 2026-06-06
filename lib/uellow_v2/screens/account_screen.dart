@@ -897,21 +897,41 @@ class _OrdersGrid extends StatelessWidget {
       ),
       itemCount: _icons.length,
       itemBuilder: (_, i) {
+        final counts = (stats['status_counts'] as Map?) ?? const {};
+        final n = (counts[_filters[i]] as num?)?.toInt() ?? 0;
         return InkWell(
           onTap: () => Navigator.pushNamed(context,
               isGuest ? '/auth' : '/orders',
               arguments: isGuest ? null : {'filter': _filters[i]}),
           child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-            // v2.1.35 — bigger status icons per request (38/15 → 48/22).
-            Container(
-              width: 48, height: 48,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                border: Border.all(color: UellowColors.border, width: 1),
-                borderRadius: BorderRadius.circular(13),
+            // icon + count badge
+            Stack(clipBehavior: Clip.none, children: [
+              Container(
+                width: 48, height: 48,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  border: Border.all(color: UellowColors.border, width: 1),
+                  borderRadius: BorderRadius.circular(13),
+                ),
+                child: Icon(_icons[i], size: 22, color: UellowColors.darkBrown),
               ),
-              child: Icon(_icons[i], size: 22, color: UellowColors.darkBrown),
-            ),
+              if (n > 0) PositionedDirectional(
+                top: -5, end: -5,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                  constraints: const BoxConstraints(minWidth: 18),
+                  decoration: BoxDecoration(
+                    color: UellowColors.yellow,
+                    borderRadius: BorderRadius.circular(999),
+                    border: Border.all(color: Colors.white, width: 1.5),
+                  ),
+                  alignment: Alignment.center,
+                  child: Text('$n', style: const TextStyle(
+                      color: UellowColors.darkBrown, fontSize: 9.5,
+                      fontWeight: FontWeight.w900)),
+                ),
+              ),
+            ]),
             const SizedBox(height: 6),
             Text(labels[i], textAlign: TextAlign.center,
                 style: const TextStyle(
