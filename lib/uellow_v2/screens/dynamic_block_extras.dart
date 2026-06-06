@@ -4810,23 +4810,40 @@ class PromoSectionBlock extends StatelessWidget {
     final headerStyle = (p['header_style'] ?? 'gradient').toString();
     final layout = (p['layout'] ?? (variant == 'category' ? 'grid' : 'rail'))
         .toString();
+    // v2.1.92 — "All" button ALWAYS lands on a full product list. With a
+    // category → that category; otherwise a feed keyed to the block variant
+    // (mega→discounts, arrivals→newest, rank→bestsellers, else→newest).
     final onHeaderTap = () {
       final cid = (p['category_id'] as num?)?.toInt() ?? 0;
       if (cid > 0) {
         Navigator.pushNamed(context, '/collection',
-            arguments: {'category_id': cid});
-      } else if (variant == 'rank') {
-        Navigator.pushNamed(context, '/bestsellers');
+            arguments: {'category_id': cid, 'title': title});
+        return;
       }
+      if (variant == 'rank') {
+        Navigator.pushNamed(context, '/bestsellers');
+        return;
+      }
+      final feed = {'mega': 'discount', 'arrivals': 'newest'}[variant] ?? 'newest';
+      final ft = title.isNotEmpty
+          ? title
+          : (variant == 'mega'
+              ? (ar ? 'عروض وتخفيضات' : 'Offers & deals')
+              : variant == 'arrivals'
+                  ? (ar ? 'وصل حديثاً' : 'New arrivals')
+                  : (ar ? 'منتجات مختارة' : 'Featured'));
+      Navigator.pushNamed(context, '/collection',
+          arguments: {'sort': feed, 'title': ft});
     };
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 10),
+      // v2.1.92 — NO shadow around the block (per ali@uellow): clean flat
+      // card with a hairline border only.
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(18),
-        boxShadow: [BoxShadow(color: c1.withValues(alpha: 0.18),
-            blurRadius: 14, offset: const Offset(0, 6))],
+        border: Border.all(color: const Color(0xFFEDEDED)),
       ),
       clipBehavior: Clip.antiAlias,
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -4967,7 +4984,7 @@ class PromoSectionBlock extends StatelessWidget {
       ),
       if (rest.isNotEmpty) ...[
         const SizedBox(height: 10),
-        SizedBox(height: 286, child: ListView.separated(
+        SizedBox(height: 278, child: ListView.separated(   // spotlight rail: shorter (v2.1.92)
           scrollDirection: Axis.horizontal, itemCount: rest.length,
           separatorBuilder: (_, __) => const SizedBox(width: 8),
           itemBuilder: (_, i) => SizedBox(width: 150,
@@ -5029,7 +5046,7 @@ class PromoSectionBlock extends StatelessWidget {
       shrinkWrap: true, physics: const NeverScrollableScrollPhysics(),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 2, mainAxisSpacing: 10, crossAxisSpacing: 10,
-        childAspectRatio: 0.60),
+        childAspectRatio: 0.59),   // mega: +3px taller (v2.1.92)
       itemCount: items.length,
       itemBuilder: (_, i) {
         final d = items[i].discountPct;
@@ -5049,7 +5066,7 @@ class PromoSectionBlock extends StatelessWidget {
 
   // ARRIVALS — taller horizontal rail with a corner NEW ribbon.
   Widget _arrivalsRail(List<UellowProductCard> items, Color c1, String badge) {
-    return SizedBox(height: 290, child: ListView.separated(
+    return SizedBox(height: 284, child: ListView.separated(   // arrivals: slightly shorter (v2.1.92)
       scrollDirection: Axis.horizontal, itemCount: items.length,
       separatorBuilder: (_, __) => const SizedBox(width: 8),
       itemBuilder: (_, i) => SizedBox(width: 170, child: Stack(
@@ -5079,7 +5096,7 @@ class PromoSectionBlock extends StatelessWidget {
         shrinkWrap: true, physics: const NeverScrollableScrollPhysics(),
         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
           crossAxisCount: 2, mainAxisSpacing: 8, crossAxisSpacing: 8,
-          childAspectRatio: 0.60),
+          childAspectRatio: 0.59),   // category: +3px taller (v2.1.92)
         itemCount: items.length,
         itemBuilder: (_, i) => ProductCard(rich: true, product: items[i], hideAvail: true),
       );

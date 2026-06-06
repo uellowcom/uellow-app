@@ -52,8 +52,20 @@ class _CartScreenState extends State<CartScreen> {
   }
 
   Future<void> _remove(int lineId) async {
-    final c = await UellowApi.instance.cart.remove(lineId);
-    setState(() => _future = Future.value(c));
+    // v2.1.92 — surfaced failures (was silent: an error made the button
+    // look dead) + always refresh even if the response cart is stale.
+    try {
+      final c = await UellowApi.instance.cart.remove(lineId);
+      if (mounted) setState(() => _future = Future.value(c));
+    } catch (e) {
+      if (!mounted) return;
+      _snack(e is UellowApiException
+          ? e.message
+          : (UellowApi.instance.lang == 'ar'
+              ? 'تعذرت إزالة المنتج — حاول مجددًا'
+              : 'Could not remove the item — try again'));
+      setState(() => _future = UellowApi.instance.cart.get());
+    }
   }
 
   Future<void> _applyCoupon() async {
@@ -712,11 +724,23 @@ class _LineCard extends StatelessWidget {
                 fontSize: 12, fontWeight: FontWeight.w700,
                 color: UellowColors.muted)),
             const SizedBox(width: 14),
+            // v2.1.92 — opaque + padded hit area (the bare 11px text was a
+            // near-impossible tap target, so the button felt dead).
             GestureDetector(
+              behavior: HitTestBehavior.opaque,
               onTap: () => onRemove(line.id),
-              child: Text(UellowApi.instance.lang == 'ar' ? 'إزالة' : 'Remove',
-                  style: const TextStyle(
-                  fontSize: 11, color: UellowColors.danger, fontWeight: FontWeight.w700)),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  const Icon(Icons.delete_outline, size: 13,
+                      color: UellowColors.danger),
+                  const SizedBox(width: 3),
+                  Text(UellowApi.instance.lang == 'ar' ? 'إزالة' : 'Remove',
+                      style: const TextStyle(fontSize: 11,
+                          color: UellowColors.danger,
+                          fontWeight: FontWeight.w700)),
+                ]),
+              ),
             ),
           ]),
         ])),

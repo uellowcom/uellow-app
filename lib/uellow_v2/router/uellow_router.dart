@@ -195,6 +195,8 @@ class UellowRouter {
             searchQuery: args['search'] as String?,
             brandValueId: args['brand_value_id'] as int?,
             brandName: args['brand_name'] as String?,
+            feedSort: args['sort'] as String?,
+            feedTitle: args['title'] as String?,
           ),
         );
       case Routes.orderConfirm:

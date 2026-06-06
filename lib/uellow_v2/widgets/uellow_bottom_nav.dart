@@ -315,7 +315,20 @@ class _UellowBottomNavState extends State<UellowBottomNav> {
       color: Colors.white,
       child: Column(mainAxisSize: MainAxisSize.min, children: [
         const ReviewReplyBanner(),
-        const BeenaNudgeStrip(),
+        // v2.1.92 — the nudge is now a small chat bubble anchored over the
+        // Beena tab (its tail points at the icon) and auto-dismisses.
+        ValueListenableBuilder<List<DynNavItem>>(
+          valueListenable: NavBarCache.instance.items,
+          builder: (_, navItems, __) {
+            double? anchor;
+            final i = navItems.indexWhere((it) =>
+                (it.targetValue ?? '').toLowerCase().contains('beena'));
+            if (i >= 0 && navItems.isNotEmpty) {
+              anchor = (i + 0.5) / navItems.length;
+            }
+            return BeenaNudgeStrip(anchorFraction: anchor);
+          },
+        ),
         AnnouncementStrip(screen: _stripScreen()),
         ValueListenableBuilder<List<DynNavItem>>(
           valueListenable: NavBarCache.instance.items,

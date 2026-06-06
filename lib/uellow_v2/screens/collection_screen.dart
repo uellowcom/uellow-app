@@ -28,12 +28,16 @@ import '../widgets/product_card.dart';
 class CollectionScreen extends StatefulWidget {
   const CollectionScreen({
     super.key, this.categoryId, this.searchQuery,
-    this.brandValueId, this.brandName,
+    this.brandValueId, this.brandName, this.feedSort, this.feedTitle,
   });
   final int? categoryId;
   final String? searchQuery;
   final int? brandValueId;
   final String? brandName;
+  // v2.1.92 — feed mode (promo block "All" button): a sort key
+  // (newest/discount/popular…) + a header title, no category needed.
+  final String? feedSort;
+  final String? feedTitle;
   @override
   State<CollectionScreen> createState() => _CollectionScreenState();
 }
@@ -61,6 +65,9 @@ class _CollectionScreenState extends State<CollectionScreen> {
   @override
   void initState() {
     super.initState();
+    if (widget.feedSort != null && widget.feedSort!.isNotEmpty) {
+      _sort = widget.feedSort!;
+    }
     _loadFilterSpec();
     _scroll.addListener(_onScroll);
     _bootstrap();
@@ -253,7 +260,9 @@ class _CollectionScreenState extends State<CollectionScreen> {
         ? (ar ? 'نتائج "${widget.searchQuery}"' : 'Results for "${widget.searchQuery}"')
         : widget.brandName != null && widget.brandName!.isNotEmpty
           ? widget.brandName!
-          : (_category?.name.current(lang) ?? (ar ? 'منتجات' : 'Products'));
+          : (widget.feedTitle != null && widget.feedTitle!.isNotEmpty
+              ? widget.feedTitle!
+              : (_category?.name.current(lang) ?? (ar ? 'منتجات' : 'Products')));
     final subs = _category?.children ?? const <UellowCategory>[];
     return Scaffold(
       backgroundColor: UellowColors.bg,
