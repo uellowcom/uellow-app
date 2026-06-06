@@ -18,6 +18,7 @@ import '../theme/uellow_theme.dart';
 import '../widgets/uellow_bottom_nav.dart';
 import '../widgets/review_requests_strip.dart';
 import '../widgets/beena_nudge_strip.dart';
+import 'splash_screen.dart' show showComingSoonDialog;
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key, this.onRestart});
@@ -121,21 +122,36 @@ class _SettingsScreenState extends State<SettingsScreen> {
   // ── Pickers ────────────────────────────────────────────────
 
   Future<void> _pickCountry() async {
+    final ar = UellowApi.instance.lang == 'ar';
     final picked = await showModalBottomSheet<String>(
       context: context, isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (_) => _SearchPickerSheet(
-        title: UellowApi.instance.lang == 'ar' ? 'اختر دولة' : 'Select country',
+        title: ar ? 'اختر دولة' : 'Select country',
         items: _countries.map((c) => _PickerItem(
           id:    (c['country']?['code'] as String?) ?? '',
           label: (c['country']?['name']?['en'] as String?) ?? '',
-          subtitle: (c['currency'] as String?) ?? '',
+          // v2.2.00 — gated countries show "coming soon" as subtitle.
+          subtitle: c['available'] == false
+              ? (ar ? '🚀 قريباً' : '🚀 Coming soon')
+              : ((c['currency'] as String?) ?? ''),
           leadingEmoji: _flag((c['country']?['code'] as String?) ?? ''),
         )).toList(),
         currentId: _countryCode,
       ),
     );
     if (picked != null && picked != _countryCode) {
+      // v2.2.00 — block gated countries with the professional dialog.
+      Map<String, dynamic>? m;
+      for (final c in _countries) {
+        if ((c['country']?['code'] as String?) == picked) { m = c; break; }
+      }
+      if (m != null && m['available'] == false) {
+        if (mounted) {
+          showComingSoonDialog(context, m, UellowApi.instance.lang);
+        }
+        return;
+      }
       setState(() { _countryCode = picked; _dirty = true; });
     }
   }

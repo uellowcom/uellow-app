@@ -33,19 +33,46 @@ class _AccountScreenState extends State<AccountScreen> {
     _future = _fetch();
   }
 
+  // v2.2.00 — a TRANSIENT failure (timeout/5xx/slow network) used to
+  // return null, which rendered the GUEST layout for a signed-in user
+  // ("حسابي يقول إني غير مسجل وبعد الرفرش يرجع"). Now: retry once →
+  // fall back to the last cached overview → only an explicit
+  // AUTH_REQUIRED (dead token) means guest.
   Future<Map<String, dynamic>?> _fetch() async {
     final token = await UellowApi.instance.tokenStore.readToken();
-    if (token == null || token.isEmpty) return null;
+    if (token == null || token.isEmpty) return null;     // true guest
+    final uri = Uri.parse(
+        '${UellowApi.instance.baseUrl}/api/mobile/v2/account/overview');
+    for (var attempt = 0; attempt < 2; attempt++) {
+      try {
+        final r = await http.get(uri, headers: {
+          'Accept': 'application/json',
+          'Authorization': 'Bearer $token',
+        }).timeout(const Duration(seconds: 10));
+        final body =
+            jsonDecode(utf8.decode(r.bodyBytes)) as Map<String, dynamic>;
+        if (body['success'] == true) {
+          final data = body['data'] as Map<String, dynamic>;
+          try {
+            final sp = await SharedPreferences.getInstance();
+            await sp.setString('account_overview_cache_v1', jsonEncode(data));
+          } catch (_) {}
+          return data;
+        }
+        final code = ((body['error'] as Map?)?['code'] ?? body['code'] ?? '')
+            .toString();
+        if (code == 'AUTH_REQUIRED' || r.statusCode == 401) return null;
+      } catch (_) {/* transient — retry / fall through to cache */}
+    }
     try {
-      final uri = Uri.parse('${UellowApi.instance.baseUrl}/api/mobile/v2/account/overview');
-      final r = await http.get(uri, headers: {
-        'Accept': 'application/json',
-        'Authorization': 'Bearer $token',
-      });
-      final body = jsonDecode(utf8.decode(r.bodyBytes)) as Map<String, dynamic>;
-      if (body['success'] == true) return body['data'] as Map<String, dynamic>;
+      final sp = await SharedPreferences.getInstance();
+      final raw = sp.getString('account_overview_cache_v1');
+      if (raw != null && raw.isNotEmpty) {
+        return (jsonDecode(raw) as Map).cast<String, dynamic>();
+      }
     } catch (_) {}
-    return null;
+    // no cache yet — surface a retry state instead of fake "guest".
+    throw Exception('overview-unreachable');
   }
 
   @override
@@ -58,6 +85,26 @@ class _AccountScreenState extends State<AccountScreen> {
         builder: (_, snap) {
           if (snap.connectionState != ConnectionState.done) {
             return const Center(child: CircularProgressIndicator(color: UellowColors.darkBrown));
+          }
+          // v2.2.00 — a signed-in user whose overview couldn't load gets a
+          // RETRY state (never the misleading guest layout).
+          if (snap.hasError) {
+            final ar = UellowApi.instance.lang == 'ar';
+            return Center(child: Column(mainAxisSize: MainAxisSize.min,
+                children: [
+              const Icon(Icons.wifi_off_rounded, size: 34,
+                  color: UellowColors.muted),
+              const SizedBox(height: 10),
+              Text(ar ? 'تعذر تحميل حسابك — تحقق من الاتصال'
+                      : 'Couldn\'t load your account — check your connection',
+                  style: UT.subtitle),
+              const SizedBox(height: 12),
+              ElevatedButton.icon(
+                onPressed: () => setState(() => _future = _fetch()),
+                icon: const Icon(Icons.refresh, size: 16),
+                label: Text(ar ? 'إعادة المحاولة' : 'Retry'),
+              ),
+            ]));
           }
           // Render the full layout for both authenticated users and
           // guests. When `data` is null the user isn't signed in — every

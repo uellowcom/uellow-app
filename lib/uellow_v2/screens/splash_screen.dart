@@ -260,11 +260,17 @@ class _SplashScreenState extends State<SplashScreen> {
                 const SizedBox(height: 30),
                 _logo(),
                 const SizedBox(height: 24),
-                Text(T.t('splash.tagline'),
+                // v2.2.00 — the headings follow the PICKED language
+                // instantly (keyed to the local _lang, not the global).
+                Text(_lang == 'ar'
+                        ? 'متجرك الموثوق في الشرق الأوسط'
+                        : 'Your trusted marketplace in the Middle East',
                     textAlign: TextAlign.center,
                     style: const TextStyle(fontSize: 14, color: Color(0xFF5B3C00))),
                 const SizedBox(height: 6),
-                Text(T.t('splash.title'),
+                Text(_lang == 'ar'
+                        ? 'اختر بلد التسوق'
+                        : 'Choose where you\'re shopping from',
                     textAlign: TextAlign.center,
                     style: const TextStyle(fontSize: 16, color: UellowColors.darkBrown,
                         fontWeight: FontWeight.w900)),
@@ -287,7 +293,7 @@ class _SplashScreenState extends State<SplashScreen> {
                     shape: const RoundedRectangleBorder(
                       borderRadius: BorderRadius.all(Radius.circular(16))),
                   ),
-                  child: Text(T.t('action.continue'),
+                  child: Text(_lang == 'ar' ? 'متابعة  ←' : 'Continue  →',
                       style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
                 )),
                 const SizedBox(height: 10),
@@ -424,23 +430,47 @@ class _SplashScreenState extends State<SplashScreen> {
                   final other = (cn?['name']?[_lang == 'ar' ? 'en' : 'ar']
                       ?? '').toString();
                   final cur = c['currency'] as String? ?? '';
-                  return ListTile(
-                    leading: Text(flag, style: const TextStyle(fontSize: 22)),
-                    title: Text(name,
-                        style: const TextStyle(fontWeight: FontWeight.w700)),
-                    subtitle: Text(other,
-                        style: const TextStyle(fontSize: 11)),
-                    trailing: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-                      decoration: const BoxDecoration(
-                        color: UellowColors.yellow,
-                        borderRadius: BorderRadius.all(Radius.circular(999)),
+                  // v2.2.00 — gated countries: visible but dimmed with a
+                  // "Coming soon" ribbon; tapping shows the configured
+                  // professional message instead of selecting.
+                  final available = c['available'] != false;
+                  return Opacity(
+                    opacity: available ? 1 : 0.55,
+                    child: ListTile(
+                      leading: Text(flag, style: const TextStyle(fontSize: 22)),
+                      title: Text(name,
+                          style: const TextStyle(fontWeight: FontWeight.w700)),
+                      subtitle: Text(other,
+                          style: const TextStyle(fontSize: 11)),
+                      trailing: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: available
+                              ? UellowColors.yellow
+                              : const Color(0xFFEFEFEF),
+                          borderRadius:
+                              const BorderRadius.all(Radius.circular(999)),
+                        ),
+                        child: Text(
+                            available
+                                ? cur
+                                : (_lang == 'ar' ? '🚀 قريباً' : '🚀 Soon'),
+                            style: TextStyle(
+                                color: available
+                                    ? UellowColors.darkBrown
+                                    : UellowColors.muted,
+                                fontWeight: FontWeight.w800, fontSize: 11)),
                       ),
-                      child: Text(cur,
-                          style: const TextStyle(color: UellowColors.darkBrown,
-                              fontWeight: FontWeight.w800, fontSize: 11)),
+                      onTap: () {
+                        if (!available) {
+                          showComingSoonDialog(context, c, _lang);
+                          return;
+                        }
+                        setState(() => _picked = c);
+                        Navigator.pop(context);
+                      },
                     ),
-                    onTap: () { setState(() => _picked = c); Navigator.pop(context); },
                   );
                 },
               ),
@@ -582,4 +612,57 @@ class _SplashScreenState extends State<SplashScreen> {
       ),
     );
   }
+}
+
+/// v2.2.00 — professional "coming soon" dialog for gated countries.
+/// Title + message come from the backend mapping (per-country, bilingual,
+/// optional launch ETA) so marketing can change the copy without an app
+/// release.
+void showComingSoonDialog(
+    BuildContext context, Map<String, dynamic> mapping, String lang) {
+  final ar = lang == 'ar';
+  final country = (mapping['country'] as Map?)?.cast<String, dynamic>();
+  final flag = country?['flag'] as String? ?? '🌍';
+  final cname = (country?['name']?[ar ? 'ar' : 'en']
+      ?? country?['name']?['en'] ?? '').toString();
+  final title = ((mapping['unavailable_title'] as Map?)?[ar ? 'ar' : 'en']
+      ?? (ar ? 'قريباً! 🚀' : 'Coming soon! 🚀')).toString();
+  final msg = ((mapping['unavailable_message'] as Map?)?[ar ? 'ar' : 'en']
+      ?? '').toString();
+  showDialog(
+    context: context,
+    builder: (ctx) => Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(22, 24, 22, 18),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Text(flag, style: const TextStyle(fontSize: 44)),
+          const SizedBox(height: 8),
+          Text(cname, style: const TextStyle(fontSize: 13,
+              fontWeight: FontWeight.w700, color: UellowColors.muted)),
+          const SizedBox(height: 4),
+          Text(title, textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w900,
+                  color: UellowColors.darkBrown)),
+          const SizedBox(height: 10),
+          Text(msg, textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 13, height: 1.5,
+                  color: UellowColors.text)),
+          const SizedBox(height: 18),
+          SizedBox(width: double.infinity, child: ElevatedButton(
+            onPressed: () => Navigator.pop(ctx),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: UellowColors.yellow,
+              foregroundColor: UellowColors.darkBrown,
+              padding: const EdgeInsets.symmetric(vertical: 13),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14)),
+            ),
+            child: Text(ar ? 'حسناً، بانتظاركم!' : 'OK, can\'t wait!',
+                style: const TextStyle(fontWeight: FontWeight.w900)),
+          )),
+        ]),
+      ),
+    ),
+  );
 }

@@ -458,6 +458,13 @@ class _AddressFormState extends State<_AddressForm> {
         'street2': street2x,
         'city': _city.text.trim(),
         'state': _governorate.text.trim(),
+        // v2.2.00 — discrete fields too: the backend mirrors them into
+        // structured columns on the partner (Uellow Address tab + map).
+        'area': _area.text.trim(),
+        'block': _block.text.trim(),
+        'building': _building.text.trim(),
+        'floor': _floor.text.trim(),
+        'apartment': _apt.text.trim(),
         'country_code': _countryCode(_country.text.trim()),
         'type': 'delivery',
         'address_label': _label.text.trim(),

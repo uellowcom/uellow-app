@@ -565,14 +565,24 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     return 0;
   }
 
-  // refund teaser only when the zone + global switches allow it.
+  // refund teaser only when the zone + global + display switches allow it.
   bool _refundEnabled(_CheckoutData d) {
     for (final m in d.shippingMethods) {
       if ((m['id'] as int?) == _selectedCarrierId) {
-        return (m['zone'] as Map?)?['cod_refund_enabled'] != false;
+        return (m['zone'] as Map?)?['cod_refund_enabled'] == true;
       }
     }
-    return true;
+    return false;
+  }
+
+  // v2.2.00 — the grey "incl. cash fee" line is per-website opt-in too.
+  bool _feeNoteEnabled(_CheckoutData d) {
+    for (final m in d.shippingMethods) {
+      if ((m['id'] as int?) == _selectedCarrierId) {
+        return (m['zone'] as Map?)?['cod_fee_note_enabled'] == true;
+      }
+    }
+    return false;
   }
 
   Widget _content(_CheckoutData d) {
@@ -621,6 +631,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
             surcharge: _zoneSurcharge(d),
             isCod: _paymentCodeOf(d, _selectedPaymentId) == 'cod',
             refundEnabled: _refundEnabled(d),
+            feeNoteEnabled: _feeNoteEnabled(d),
           )),
       // No trailing gap — sticky Place Order bar hugs the last block.
     ]);
@@ -1102,29 +1113,12 @@ class _ShippingMethodList extends StatelessWidget {
             const SizedBox(width: 12),
             Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               // v2.1.15 — smaller label per request (long names were loud).
-              Row(children: [
-                Flexible(child: Text(name, style: const TextStyle(
-                    fontSize: 12, fontWeight: FontWeight.w800,
-                    color: UellowColors.ink))),
-                // v2.1.98 — the chip sits at the END of the line.
-                if (unavailable) ...[
-                  const Spacer(),
-                  Container(
-                    margin: const EdgeInsetsDirectional.only(start: 6),
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 6, vertical: 1.5),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFFFF1F0),
-                      border: Border.all(color: const Color(0xFFFFC9C5)),
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                    child: Text(lang == 'ar' ? '⏰ غير متاح الآن' : '⏰ Unavailable now',
-                        style: const TextStyle(fontSize: 8.5,
-                            fontWeight: FontWeight.w900,
-                            color: Color(0xFFB91C1C))),
-                  ),
-                ],
-              ]),
+              // v2.2.00 — the unavailable chip moved OUT of the name row
+              // (it crowded long names) into the trailing price column.
+              Text(name, maxLines: 1, overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                      fontSize: 12, fontWeight: FontWeight.w800,
+                      color: UellowColors.ink)),
               if (unavailable && availNote.isNotEmpty) Padding(
                 padding: const EdgeInsets.only(top: 2),
                 child: Text(availNote, maxLines: 1,
@@ -1163,6 +1157,9 @@ class _ShippingMethodList extends StatelessWidget {
             ])),
             // v2.1.51 — free shipping (flags / threshold / coupon) shows
             // a clear green "FREE SHIPPING" instead of 0.000.
+            // v2.2.00 — trailing column also hosts the unavailable chip.
+            Column(crossAxisAlignment: CrossAxisAlignment.end,
+                mainAxisSize: MainAxisSize.min, children: [
             m['is_free'] == true
                 ? Column(crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
@@ -1193,6 +1190,23 @@ class _ShippingMethodList extends StatelessWidget {
                 : Text(price?.format() ?? '—', style: const TextStyle(
                     fontSize: 14, fontWeight: FontWeight.w900,
                     color: UellowColors.darkBrown)),
+            if (unavailable) Padding(
+              padding: const EdgeInsets.only(top: 3),
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 6, vertical: 1.5),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFF1F0),
+                  border: Border.all(color: const Color(0xFFFFC9C5)),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text(lang == 'ar' ? '⏰ غير متاح الآن' : '⏰ Unavailable',
+                    style: const TextStyle(fontSize: 8.5,
+                        fontWeight: FontWeight.w900,
+                        color: Color(0xFFB91C1C))),
+              ),
+            ),
+            ]),
           ]),
         ),
         ),
@@ -1391,7 +1405,8 @@ class _PaymentMethodGrid extends StatelessWidget {
 
 class _SumBlock extends StatelessWidget {
   const _SumBlock({this.cart, this.shippingOverride,
-      this.surcharge = 0, this.isCod = true, this.refundEnabled = true});
+      this.surcharge = 0, this.isCod = true, this.refundEnabled = false,
+      this.feeNoteEnabled = false});
   final Map? cart;
   // The selected shipping method's price (the order's amount_delivery is 0
   // until a carrier is applied at confirm, so the preview must use this).
@@ -1401,6 +1416,7 @@ class _SumBlock extends StatelessWidget {
   final double surcharge;
   final bool isCod;
   final bool refundEnabled;
+  final bool feeNoteEnabled;
   @override
   Widget build(BuildContext context) {
     final totals = cart?['totals'] as Map?;
@@ -1430,11 +1446,13 @@ class _SumBlock extends StatelessWidget {
           shipAmt <= 0 ? (ar ? 'مجاني' : 'Free') : moneyOf(shipMap)),
       // v2.1.96 — cash-first pricing explainer: cash payers see what's
       // included; online payers see the wallet refund they'll get.
+      // v2.2.00 — BOTH explainer lines are hidden by default and each is
+      // a per-website backend switch (Mobile App Settings).
       if (surcharge > 0 && shipAmt > 0)
-        if (isCod)
+        if (isCod && feeNoteEnabled)
           _r(ar ? '· شامل رسوم الدفع نقداً' : '· incl. cash handling fee',
               moneyAmt(surcharge))
-        else if (refundEnabled)
+        else if (!isCod && refundEnabled)
           _r(ar
                   ? '🎁 تُسترد رسوم الكاش في محفظتك بعد الدفع'
                   : '🎁 Cash fee refunded to your wallet after payment',
