@@ -484,23 +484,25 @@ class _ReviewReplyBannerState extends State<ReviewReplyBanner>
         return Directionality(
           textDirection: ar ? TextDirection.rtl : TextDirection.ltr,
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(10, 12, 10, 8),
+            // v2.1.90 — tighter framing + soft neutral shadow (no coloured
+            // glow halo that read as a "background" around the banner).
+            padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
             child: Stack(clipBehavior: Clip.none, children: [
               // ── the banner card ──
               GestureDetector(
                 onTap: () => many ? _openAll(all) : _open(it),
                 child: Container(
                   width: double.infinity,
-                  padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+                  padding: const EdgeInsets.fromLTRB(12, 11, 12, 11),
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
                         begin: AlignmentDirectional.centerStart,
                         end: AlignmentDirectional.centerEnd,
                         colors: [g1, g2]),
-                    borderRadius: BorderRadius.circular(16),
-                    boxShadow: [BoxShadow(
-                        color: g2.withValues(alpha: .45),
-                        blurRadius: 14, offset: const Offset(0, 4))],
+                    borderRadius: BorderRadius.circular(14),
+                    boxShadow: const [BoxShadow(
+                        color: Color(0x1A000000),
+                        blurRadius: 6, offset: Offset(0, 2))],
                   ),
                   child: Row(children: [
                     // product thumb — single ring, or an overlapping
