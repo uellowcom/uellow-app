@@ -115,9 +115,14 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         ? ''
         : '${guestQ.isEmpty ? '?' : '&'}line_ids=$selCsv';
     final shipSel = selCsv.isEmpty ? '' : '?line_ids=$selCsv';
+    // v2.2.04 — rate shipping against the PICKED address so zone prices
+    // update the moment the customer switches address.
+    final addrQ = _selectedAddressId == null
+        ? ''
+        : '${shipSel.isEmpty ? '?' : '&'}address_id=$_selectedAddressId';
     final results = await Future.wait([
       safeGet('$base/api/mobile/v2/orders/checkout/summary$guestQ$sumSel', needAuth: true),
-      safeGet('$base/api/mobile/v2/orders/shipping-methods$shipSel', needAuth: false),
+      safeGet('$base/api/mobile/v2/orders/shipping-methods$shipSel$addrQ', needAuth: true),
       safeGet(pmUrl, needAuth: false),
       safeGet('$base/api/mobile/v2/orders/checkout/geoip', needAuth: true),
     ]);
@@ -596,7 +601,11 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         geoCity: geoCity,
         guestMode: _guestMode,
         onSelect: (id) {
-          setState(() => _selectedAddressId = id);
+          // v2.2.04 — refetch shipping rates for the new address.
+          setState(() {
+            _selectedAddressId = id;
+            _data = _bootstrap();
+          });
           UellowApi.instance.tokenStore.writeAddressId(id);
         },
       )),
