@@ -294,20 +294,19 @@ class _ProfileHeaderState extends State<_ProfileHeader> {
   Uint8List? _avatarBytes;     // raw bytes — instant render after upload
   bool _busy = false;
 
-  String? _guestCountry;
+  String? _appCountry;
   @override
   void initState() {
     super.initState();
-    // Pull the saved country code for guests so the flag chip still
-    // shows — they may not have a profile country yet.
-    if (widget.isGuest) {
-      SharedPreferences.getInstance().then((p) {
-        final c = p.getString('uellow_country_code_v1');
-        if (c != null && c.isNotEmpty && mounted) {
-          setState(() => _guestCountry = c.toUpperCase());
-        }
-      });
-    }
+    // v2.2.03 — the flag chip ALWAYS follows the APP's selected country
+    // (the shopping context), never the profile country: a Google signup
+    // geo-tagged "Egypt" was showing 🇪🇬/EGP on a Kuwait-configured app.
+    SharedPreferences.getInstance().then((p) {
+      final c = p.getString('uellow_country_code_v1');
+      if (c != null && c.isNotEmpty && mounted) {
+        setState(() => _appCountry = c.toUpperCase());
+      }
+    });
   }
 
   @override
@@ -316,8 +315,8 @@ class _ProfileHeaderState extends State<_ProfileHeader> {
     final name = widget.isGuest
         ? (ar ? 'ضيف' : 'Guest')
         : ((widget.user['name'] as String?) ?? (ar ? 'عميل' : 'Customer'));
-    final country = (widget.user['country'] as String?)
-        ?? _guestCountry
+    final country = _appCountry
+        ?? (widget.user['country'] as String?)
         ?? 'KW';
     // Live avatar — listens to the global notifier so any upload (here or
     // on the profile screen) immediately re-paints this header.
