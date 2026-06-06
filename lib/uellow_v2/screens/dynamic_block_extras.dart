@@ -4869,33 +4869,188 @@ class PromoSectionBlock extends StatelessWidget {
             ]),
           ),
         ),
-        // ── products ──
+        // ── products — each variant has its OWN distinct layout ──
         Padding(
           padding: const EdgeInsets.fromLTRB(10, 10, 10, 12),
-          child: layout == 'grid'
-              ? GridView.builder(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  gridDelegate:
-                      const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 2, mainAxisSpacing: 8, crossAxisSpacing: 8,
-                    childAspectRatio: 0.60,
-                  ),
-                  itemCount: items.length,
-                  itemBuilder: (_, i) => _card(items[i], i, c1, badge),
-                )
-              : SizedBox(height: 288, child: ListView.separated(
-                  scrollDirection: Axis.horizontal,
-                  itemCount: items.length,
-                  separatorBuilder: (_, __) => const SizedBox(width: 8),
-                  itemBuilder: (_, i) => SizedBox(
-                      width: variant == 'spotlight' && i == 0 ? 210 : 168,
-                      child: _card(items[i], i, c1, badge)),
-                )),
+          child: _body(context, items, c1, c2, badge, layout),
         ),
       ]),
     );
   }
+
+  // Per-variant creative layouts (no two alike).
+  Widget _body(BuildContext ctx, List<UellowProductCard> items, Color c1,
+      Color c2, String badge, String layout) {
+    switch (variant) {
+      case 'spotlight': return _spotlightHero(ctx, items, c1, badge);
+      case 'rank':      return _leaderboard(ctx, items, c1, c2);
+      case 'mega':      return _megaGrid(items, c1);
+      case 'arrivals':  return _arrivalsRail(items, c1, badge);
+      case 'category':
+      default:
+        if (layout == 'rail') return _rail(items, c1, badge);
+        return _grid(items, c1, badge);
+    }
+  }
+
+  // SPOTLIGHT — one big hero (image left / details right) + a small rail.
+  Widget _spotlightHero(BuildContext ctx, List<UellowProductCard> items,
+      Color c1, String badge) {
+    final hero = items.first;
+    final rest = items.skip(1).toList();
+    return Column(children: [
+      GestureDetector(
+        onTap: () => UellowRouter.goProduct(ctx, hero.id),
+        child: Container(
+          decoration: BoxDecoration(
+            color: c1.withValues(alpha: 0.06),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: c1.withValues(alpha: 0.18)),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: Row(children: [
+            Expanded(flex: 5, child: AspectRatio(aspectRatio: 1,
+              child: CachedNetworkImage(imageUrl: hero.image, fit: BoxFit.cover,
+                  errorWidget: (_, __, ___) => const ColoredBox(color: Color(0xFFF4F4F4))))),
+            Expanded(flex: 6, child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min, children: [
+                Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(color: c1, borderRadius: BorderRadius.circular(999)),
+                  child: Text(badge, style: const TextStyle(color: Colors.white,
+                      fontSize: 9.5, fontWeight: FontWeight.w900))),
+                const SizedBox(height: 8),
+                Text(hero.name.current(ar ? 'ar' : 'en'), maxLines: 2,
+                    overflow: TextOverflow.ellipsis, style: const TextStyle(
+                        fontSize: 13.5, fontWeight: FontWeight.w800,
+                        color: UellowColors.ink, height: 1.3)),
+                const SizedBox(height: 6),
+                Text(hero.price.formatLocalized(ar ? 'ar' : 'en'),
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: c1)),
+              ]),
+            )),
+          ]),
+        ),
+      ),
+      if (rest.isNotEmpty) ...[
+        const SizedBox(height: 10),
+        SizedBox(height: 250, child: ListView.separated(
+          scrollDirection: Axis.horizontal, itemCount: rest.length,
+          separatorBuilder: (_, __) => const SizedBox(width: 8),
+          itemBuilder: (_, i) => SizedBox(width: 150,
+              child: ProductCard(rich: true, product: rest[i], hideAvail: true)),
+        )),
+      ],
+    ]);
+  }
+
+  // RANK — a vertical leaderboard: medal #n + thumb + name + price.
+  Widget _leaderboard(BuildContext ctx, List<UellowProductCard> items,
+      Color c1, Color c2) {
+    const medals = ['🥇', '🥈', '🥉'];
+    return Column(children: [
+      for (var i = 0; i < items.length && i < 6; i++)
+        GestureDetector(
+          onTap: () => UellowRouter.goProduct(ctx, items[i].id),
+          child: Container(
+            margin: const EdgeInsets.only(bottom: 8),
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: i < 3 ? c2.withValues(alpha: 0.10) : const Color(0xFFF8F8F8),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: i < 3 ? c2.withValues(alpha: 0.30)
+                  : UellowColors.border),
+            ),
+            child: Row(children: [
+              SizedBox(width: 30, child: Text(
+                  i < 3 ? medals[i] : '#${i + 1}',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: i < 3 ? 20 : 13,
+                      fontWeight: FontWeight.w900, color: c1))),
+              ClipRRect(borderRadius: BorderRadius.circular(8),
+                child: CachedNetworkImage(imageUrl: items[i].image,
+                    width: 52, height: 52, fit: BoxFit.cover,
+                    errorWidget: (_, __, ___) => const ColoredBox(color: Color(0xFFF4F4F4),
+                        child: SizedBox(width: 52, height: 52)))),
+              const SizedBox(width: 10),
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min, children: [
+                Text(items[i].name.current(ar ? 'ar' : 'en'), maxLines: 2,
+                    overflow: TextOverflow.ellipsis, style: const TextStyle(
+                        fontSize: 12.5, fontWeight: FontWeight.w700, color: UellowColors.ink)),
+                const SizedBox(height: 3),
+                Text(items[i].price.formatLocalized(ar ? 'ar' : 'en'),
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w900, color: c1)),
+              ])),
+              Icon(ar ? Icons.chevron_left : Icons.chevron_right,
+                  color: UellowColors.muted, size: 20),
+            ]),
+          ),
+        ),
+    ]);
+  }
+
+  // MEGA — bold 2-col grid with a big diagonal -% OFF ribbon.
+  Widget _megaGrid(List<UellowProductCard> items, Color c1) {
+    return GridView.builder(
+      shrinkWrap: true, physics: const NeverScrollableScrollPhysics(),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2, mainAxisSpacing: 10, crossAxisSpacing: 10,
+        childAspectRatio: 0.62),
+      itemCount: items.length,
+      itemBuilder: (_, i) {
+        final d = items[i].discountPct;
+        return Stack(clipBehavior: Clip.none, children: [
+          ProductCard(rich: true, product: items[i], hideAvail: true),
+          if (d > 0) PositionedDirectional(top: 8, start: -2, child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: const BoxDecoration(color: Color(0xFFE63946),
+              borderRadius: BorderRadius.only(topRight: Radius.circular(2),
+                  bottomRight: Radius.circular(9), bottomLeft: Radius.circular(9))),
+            child: Text('-$d%', style: const TextStyle(color: Colors.white,
+                fontSize: 13, fontWeight: FontWeight.w900)))),
+        ]);
+      },
+    );
+  }
+
+  // ARRIVALS — taller horizontal rail with a corner NEW ribbon.
+  Widget _arrivalsRail(List<UellowProductCard> items, Color c1, String badge) {
+    return SizedBox(height: 270, child: ListView.separated(
+      scrollDirection: Axis.horizontal, itemCount: items.length,
+      separatorBuilder: (_, __) => const SizedBox(width: 8),
+      itemBuilder: (_, i) => SizedBox(width: 170, child: Stack(
+          clipBehavior: Clip.none, children: [
+        ProductCard(rich: true, product: items[i], hideAvail: true),
+        PositionedDirectional(top: 0, end: 0, child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+          decoration: BoxDecoration(color: c1, borderRadius:
+              const BorderRadius.only(topRight: Radius.circular(10),
+                  bottomLeft: Radius.circular(10))),
+          child: Text(ar ? 'جديد' : 'NEW', style: const TextStyle(color: Colors.white,
+              fontSize: 9.5, fontWeight: FontWeight.w900)))),
+      ])),
+    ));
+  }
+
+  Widget _rail(List<UellowProductCard> items, Color c1, String badge) =>
+      SizedBox(height: 260, child: ListView.separated(
+        scrollDirection: Axis.horizontal, itemCount: items.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 8),
+        itemBuilder: (_, i) => SizedBox(width: 160,
+            child: ProductCard(rich: true, product: items[i], hideAvail: true)),
+      ));
+
+  Widget _grid(List<UellowProductCard> items, Color c1, String badge) =>
+      GridView.builder(
+        shrinkWrap: true, physics: const NeverScrollableScrollPhysics(),
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 2, mainAxisSpacing: 8, crossAxisSpacing: 8,
+          childAspectRatio: 0.60),
+        itemCount: items.length,
+        itemBuilder: (_, i) => ProductCard(rich: true, product: items[i], hideAvail: true),
+      );
 
   Widget _card(UellowProductCard prod, int i, Color accent, String badge) {
     Widget card = ProductCard(rich: true, product: prod, hideAvail: true);
