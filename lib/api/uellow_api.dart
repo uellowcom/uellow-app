@@ -1308,12 +1308,16 @@ class _BeenaApi {
 
   Future<Map<String, dynamic>> chat({
     required String message, List<Map<String, dynamic>>? history,
-    int? productId, int? categoryId,
+    int? productId, int? categoryId, String? sessionId,
   }) async {
     // v2.1.55 — Claude calls can take 20-40s; the default 25s timeout
     // was a major source of "sorry, error" replies.
+    // v2.1.80 — session_id is THE conversation memory: the backend keeps
+    // history server-side keyed by session_id (same as the website). Without
+    // it every turn was a fresh session → Beena greeted/forgot context.
     final res = await _c._post(EP.beenaChat, body: {
       'message': message,
+      if (sessionId  != null) 'session_id': sessionId,
       if (history    != null) 'history': history,
       if (productId  != null) 'product_id': productId,
       if (categoryId != null) 'category_id': categoryId,

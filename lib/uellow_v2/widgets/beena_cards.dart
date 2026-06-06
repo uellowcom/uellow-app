@@ -66,6 +66,9 @@ Future<void> showBeenaProductDialog(BuildContext context,
   final id = _int(p['id']);
   final name = _locName(p['name'], ar);
   var img = (p['image_url'] ?? p['image'] ?? '').toString();
+  // The chat payload carries the 128px thumbnail — too low-res for the large
+  // dialog image. Upgrade Odoo /web/image .../image_128 → image_1024.
+  img = img.replaceFirst(RegExp(r'/image_\d+'), '/image_1024');
   img = _abs(img);
   final price = _dbl(p['price']);
   final inStock = p['in_stock'] != false;

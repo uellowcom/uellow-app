@@ -33,6 +33,7 @@ import '../widgets/beena_cards.dart';
 import '../widgets/uellow_bottom_nav.dart';
 
 const _kThreadKey = 'beena_thread_v2';
+const _kSessionKey = 'beena_session_v1';
 
 class BeenaScreen extends StatefulWidget {
   const BeenaScreen({super.key, this.productId, this.categoryId});
@@ -53,6 +54,7 @@ class _BeenaScreenState extends State<BeenaScreen> {
   bool _recording = false;
   bool _restored = false;
   int? _activeProductId;       // the product the conversation is locked onto
+  String? _sessionId;          // server-side conversation memory key
   late final List<_Msg> _msgs;
 
   bool get _ar => UellowApi.instance.lang.toLowerCase().startsWith('ar');
@@ -78,6 +80,7 @@ class _BeenaScreenState extends State<BeenaScreen> {
   Future<void> _restore() async {
     try {
       final sp = await SharedPreferences.getInstance();
+      _sessionId = sp.getString(_kSessionKey);
       final raw = sp.getString(_kThreadKey);
       if (raw != null && raw.isNotEmpty) {
         final list = (jsonDecode(raw) as List).cast<Map<String, dynamic>>();
@@ -112,7 +115,9 @@ class _BeenaScreenState extends State<BeenaScreen> {
     try {
       final sp = await SharedPreferences.getInstance();
       await sp.remove(_kThreadKey);
+      await sp.remove(_kSessionKey);   // start a fresh server-side memory too
     } catch (_) {}
+    _sessionId = null;
     setState(() {
       _msgs
         ..clear()
@@ -148,7 +153,16 @@ class _BeenaScreenState extends State<BeenaScreen> {
     try {
       final res = await UellowApi.instance.beena.chat(
           message: text, history: _historyPayload(),
-          productId: _activeProductId, categoryId: widget.categoryId);
+          productId: _activeProductId, categoryId: widget.categoryId,
+          sessionId: _sessionId);
+      // Capture & persist the server session id → conversation memory.
+      final sid = (res['session_id'] ?? '').toString();
+      if (sid.isNotEmpty && sid != _sessionId) {
+        _sessionId = sid;
+        try {
+          (await SharedPreferences.getInstance()).setString(_kSessionKey, sid);
+        } catch (_) {}
+      }
       final reply = (res['reply'] ?? res['text'] ?? '').toString();
       final extra = (res['extra'] as Map?)?.cast<String, dynamic>() ?? {};
       final products = ((extra['products'] as List?) ?? const [])
