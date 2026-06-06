@@ -26,7 +26,10 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.uellow.uellow"
+        // v2.2.01 — unified on the Play Store package (per ali@uellow):
+        // GitHub APKs and the Play listing are now the SAME app.
+        // (namespace stays com.uellow.uellow — internal code path only.)
+        applicationId = "com.uellow.app"
         minSdk = 23   // record_android (voice) requires API 23+ (Android 6.0)
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
