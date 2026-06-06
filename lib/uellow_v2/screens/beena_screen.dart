@@ -30,6 +30,7 @@ import '../../api/uellow_api.dart';
 import '../router/uellow_router.dart';
 import '../theme/uellow_theme.dart';
 import '../widgets/beena_cards.dart';
+import '../widgets/beena_nudge_strip.dart';
 import '../widgets/uellow_bottom_nav.dart';
 
 const _kThreadKey = 'beena_thread_v2';
@@ -69,6 +70,10 @@ class _BeenaScreenState extends State<BeenaScreen> {
     _player.onPlayerComplete.listen((_) {
       if (mounted) setState(() => _playingKey = null);
     });
+    // Opening Beena = the customer has now seen her nudges → clear the badge.
+    BeenaNudgeCache.instance.markAllSeen();
+    BeenaNudgeCache.instance.load(force: true)
+        .then((_) => BeenaNudgeCache.instance.markAllSeen());
     _restore();
   }
 

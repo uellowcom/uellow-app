@@ -79,6 +79,7 @@ class EP {
   // ── Beena AI
   static const beenaConfig = '/api/mobile/v2/beena/config';
   static const beenaChat   = '/api/mobile/v2/beena/chat';
+  static const beenaNudges = '/api/mobile/v2/beena/nudges';
 
   // ── App settings
   static const appSettings       = '/api/mobile/v2/app/settings';

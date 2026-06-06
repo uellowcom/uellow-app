@@ -22,6 +22,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../api/uellow_api.dart';
 import '../router/uellow_router.dart';
 import 'announcement_strip.dart';
+import 'beena_nudge_strip.dart';
 import 'review_requests_strip.dart';
 import '../screens/dynamic_page_screen.dart';
 import '../theme/uellow_l10n.dart';
@@ -206,10 +207,14 @@ class _UellowBottomNavState extends State<UellowBottomNav> {
     // Kick off (or reuse) the dynamic nav fetch — the build() below
     // re-renders automatically when items load via ValueListenableBuilder.
     NavBarCache.instance.ensure();
+    // Beena proactive nudges → count badge on the Beena tab.
+    BeenaNudgeCache.instance.unread.addListener(_syncCount);
+    BeenaNudgeCache.instance.load();
   }
   @override
   void dispose() {
     UellowApi.instance.cart.count.removeListener(_syncCount);
+    BeenaNudgeCache.instance.unread.removeListener(_syncCount);
     super.dispose();
   }
   void _syncCount() {
@@ -310,6 +315,7 @@ class _UellowBottomNavState extends State<UellowBottomNav> {
       color: Colors.white,
       child: Column(mainAxisSize: MainAxisSize.min, children: [
         const ReviewReplyBanner(),
+        const BeenaNudgeStrip(),
         AnnouncementStrip(screen: _stripScreen()),
         ValueListenableBuilder<List<DynNavItem>>(
           valueListenable: NavBarCache.instance.items,
@@ -367,6 +373,10 @@ class _UellowBottomNavState extends State<UellowBottomNav> {
             final on = it.targetValue == active;
             int badge = 0;
             if (it.badge == 'cart_count') badge = cartBadge;
+            // Beena tab → unread proactive-nudge count.
+            if ((it.targetValue ?? '').toLowerCase().contains('beena')) {
+              badge = BeenaNudgeCache.instance.unread.value;
+            }
             return Expanded(child: InkWell(
               onTap: () => _gotoDyn(context, it),
               child: Stack(alignment: Alignment.center, children: [

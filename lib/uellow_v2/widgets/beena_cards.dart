@@ -57,6 +57,111 @@ Color _fitColor(String c) {
   return UellowColors.muted;
 }
 
+/// ── Beena unified dialog rule ───────────────────────────────────────────────
+/// EVERYTHING inside Beena opens in a branded sheet/dialog — never a page
+/// navigation — so the chat is never lost. Informational content gets a
+/// single "حسناً / OK" button; anything needing approval gets explicit
+/// ACTION buttons (Sign in, Checkout, Pay…) that only then navigate.
+Future<void> showBeenaSheet(BuildContext context, {
+  required bool ar,
+  required String title,
+  IconData icon = Icons.auto_awesome,
+  Color accent = const Color(0xFF2F6E62),
+  required Widget child,
+  List<BeenaSheetAction> actions = const [],
+}) {
+  return showModalBottomSheet(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    builder: (ctx) => Directionality(
+      textDirection: ar ? TextDirection.rtl : TextDirection.ltr,
+      child: Container(
+        constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(ctx).size.height * 0.82),
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+        ),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          const SizedBox(height: 10),
+          Container(width: 42, height: 4, decoration: BoxDecoration(
+              color: const Color(0xFFE2E2E2),
+              borderRadius: BorderRadius.circular(99))),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(18, 14, 18, 6),
+            child: Row(children: [
+              Container(width: 36, height: 36,
+                decoration: const BoxDecoration(shape: BoxShape.circle,
+                  gradient: RadialGradient(center: Alignment(-0.3, -0.4),
+                    colors: [Color(0xFFFFE45E), UellowColors.yellow, Color(0xFFC99000)])),
+                alignment: Alignment.center,
+                child: Icon(icon, size: 18, color: UellowColors.darkBrown)),
+              const SizedBox(width: 10),
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                const Text('Beena 🐝', style: TextStyle(fontSize: 10.5,
+                    fontWeight: FontWeight.w900, color: UellowColors.muted)),
+                Text(title, style: const TextStyle(fontSize: 15,
+                    fontWeight: FontWeight.w900, color: UellowColors.ink)),
+              ])),
+              GestureDetector(onTap: () => Navigator.pop(ctx),
+                child: Container(width: 30, height: 30,
+                  decoration: const BoxDecoration(color: Color(0xFFF4F4F4),
+                      shape: BoxShape.circle),
+                  child: const Icon(Icons.close, size: 17, color: UellowColors.ink))),
+            ]),
+          ),
+          const Divider(height: 16),
+          Flexible(child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(18, 4, 18, 8),
+            child: child)),
+          SafeArea(top: false, child: Padding(
+            padding: const EdgeInsets.fromLTRB(18, 6, 18, 14),
+            child: Row(children: [
+              for (var i = 0; i < actions.length; i++) ...[
+                if (i > 0) const SizedBox(width: 10),
+                Expanded(child: ElevatedButton.icon(
+                  onPressed: () { Navigator.pop(ctx); actions[i].onTap(); },
+                  icon: Icon(actions[i].icon, size: 16),
+                  label: Text(actions[i].label, style: const TextStyle(
+                      fontWeight: FontWeight.w900, fontSize: 13)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: actions[i].primary
+                        ? UellowColors.yellow : Colors.white,
+                    foregroundColor: UellowColors.darkBrown,
+                    elevation: 0,
+                    side: actions[i].primary ? null
+                        : const BorderSide(color: UellowColors.border),
+                    padding: const EdgeInsets.symmetric(vertical: 12)),
+                )),
+              ],
+              if (actions.isEmpty)
+                Expanded(child: ElevatedButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: UellowColors.yellow,
+                    foregroundColor: UellowColors.darkBrown, elevation: 0,
+                    padding: const EdgeInsets.symmetric(vertical: 12)),
+                  child: Text(ar ? 'حسناً' : 'OK', style: const TextStyle(
+                      fontWeight: FontWeight.w900, fontSize: 13.5)),
+                )),
+            ]),
+          )),
+        ]),
+      ),
+    ),
+  );
+}
+
+class BeenaSheetAction {
+  const BeenaSheetAction({required this.label, required this.icon,
+      required this.onTap, this.primary = true});
+  final String label;
+  final IconData icon;
+  final VoidCallback onTap;
+  final bool primary;
+}
+
 /// Lightweight markdown renderer for Beena replies — supports **bold**,
 /// "- "/"• "/"* " bullets, "1." numbered lines, and blank-line spacing.
 /// Keeps the chat clean and organized without a heavy markdown dependency.
@@ -232,7 +337,8 @@ List<Widget> buildBeenaCards(BuildContext context, Map<String, dynamic>? extra,
   }
   if (extra['orders_list'] is List && (extra['orders_list'] as List).isNotEmpty) {
     add(_OrdersListCard(items: (extra['orders_list'] as List)
-        .whereType<Map>().map((e) => e.cast<String, dynamic>()).toList(), ar: ar));
+        .whereType<Map>().map((e) => e.cast<String, dynamic>()).toList(),
+        ar: ar, onSend: onSend));
   }
   if (extra['tryon'] is Map) {
     add(_TryOnCard(d: (extra['tryon'] as Map).cast<String, dynamic>(), ar: ar));
@@ -353,10 +459,70 @@ class _OrderStatusCard extends StatelessWidget {
   const _OrderStatusCard({required this.d, required this.ar});
   final Map<String, dynamic> d;
   final bool ar;
+
+  // Dialog rule: tracking detail opens in a Beena SHEET, never a page.
+  void _openTrackingSheet(BuildContext context) {
+    final phone = (d['driver_phone'] ?? '').toString();
+    showBeenaSheet(context, ar: ar,
+      title: '${ar ? 'تتبع الطلب' : 'Tracking'} ${d['order_name'] ?? ''}',
+      icon: Icons.local_shipping_outlined,
+      accent: d['is_failed'] == true ? UellowColors.danger : const Color(0xFF2F6E62),
+      child: _trackingBody(big: true),
+      actions: phone.isNotEmpty
+          ? [BeenaSheetAction(label: ar ? 'اتصل بالمندوب' : 'Call courier',
+              icon: Icons.call, onTap: () => _launch('tel:$phone'))]
+          : const [],
+    );
+  }
+
+  Widget _trackingBody({bool big = false}) {
+    final timeline = (d['timeline'] as List?)?.whereType<Map>().toList() ?? const [];
+    final failed = d['is_failed'] == true;
+    final accent = failed ? UellowColors.danger : const Color(0xFF2F6E62);
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(color: accent.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(999)),
+        child: Text((d['delivery_status'] ?? d['state'] ?? '').toString(),
+            style: TextStyle(fontSize: big ? 13 : 11.5,
+                fontWeight: FontWeight.w900, color: accent)),
+      ),
+      SizedBox(height: big ? 12 : 8),
+      for (final t in timeline)
+        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Padding(padding: const EdgeInsets.only(top: 2),
+            child: Icon(
+                t['status'] == 'done' ? Icons.check_circle
+                    : t['status'] == 'current' ? Icons.radio_button_checked
+                    : t['status'] == 'failed' ? Icons.cancel
+                    : Icons.radio_button_unchecked,
+                size: big ? 17 : 14,
+                color: t['status'] == 'done' ? const Color(0xFF2E9E6B)
+                    : t['status'] == 'current' ? accent
+                    : t['status'] == 'failed' ? UellowColors.danger
+                    : UellowColors.border)),
+          const SizedBox(width: 8),
+          Expanded(child: Padding(
+            padding: EdgeInsets.only(bottom: big ? 8 : 5),
+            child: Text((t['label'] ?? '').toString(), style: TextStyle(
+                fontSize: big ? 13 : 11.5,
+                fontWeight: t['status'] == 'current' ? FontWeight.w800 : FontWeight.w500,
+                color: t['status'] == 'pending' ? UellowColors.muted : UellowColors.ink)))),
+        ]),
+      const SizedBox(height: 4),
+      if ((d['driver'] ?? '').toString().isNotEmpty)
+        _kv(ar ? 'المندوب:' : 'Courier:', d['driver'].toString()),
+      if ((d['eta'] ?? '').toString().isNotEmpty)
+        _kv(ar ? 'الوصول المتوقع:' : 'ETA:', d['eta'].toString()),
+      if ((d['tracking_number'] ?? '').toString().isNotEmpty)
+        _kv(ar ? 'رقم التتبع:' : 'Tracking:', d['tracking_number'].toString()),
+      _kv(ar ? 'الإجمالي:' : 'Total:', _kd(_dbl(d['amount']), ar)),
+    ]);
+  }
+
   @override
   Widget build(BuildContext context) {
-    final timeline = (d['timeline'] as List?)?.whereType<Map>().toList() ?? const [];
-    final orderId = _int(d['order_id']);
     final failed = d['is_failed'] == true;
     final accent = failed ? UellowColors.danger : const Color(0xFF2F6E62);
     return _Shell(
@@ -365,68 +531,20 @@ class _OrderStatusCard extends StatelessWidget {
       title: '${ar ? 'حالة الطلب' : 'Order'} ${d['order_name'] ?? ''}',
       cta: ar ? 'تتبع الطلب' : 'Track order',
       ctaIcon: Icons.map_outlined,
-      onCta: orderId > 0
-          ? () => Navigator.pushNamed(context, Routes.order, arguments: {'id': orderId})
-          : null,
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        // status pill
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-          decoration: BoxDecoration(
-            color: accent.withValues(alpha: 0.12),
-            borderRadius: BorderRadius.circular(999),
-          ),
-          child: Text((d['delivery_status'] ?? d['state'] ?? '').toString(),
-              style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w900, color: accent)),
-        ),
-        const SizedBox(height: 8),
-        // mini timeline
-        for (final t in timeline)
-          Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Padding(
-              padding: const EdgeInsets.only(top: 2),
-              child: Icon(
-                  t['status'] == 'done' ? Icons.check_circle
-                      : t['status'] == 'current' ? Icons.radio_button_checked
-                      : t['status'] == 'failed' ? Icons.cancel
-                      : Icons.radio_button_unchecked,
-                  size: 14,
-                  color: t['status'] == 'done' ? const Color(0xFF2E9E6B)
-                      : t['status'] == 'current' ? accent
-                      : t['status'] == 'failed' ? UellowColors.danger
-                      : UellowColors.border),
-            ),
-            const SizedBox(width: 8),
-            Expanded(child: Padding(
-              padding: const EdgeInsets.only(bottom: 5),
-              child: Text((t['label'] ?? '').toString(), style: TextStyle(
-                  fontSize: 11.5,
-                  fontWeight: t['status'] == 'current' ? FontWeight.w800 : FontWeight.w500,
-                  color: t['status'] == 'pending' ? UellowColors.muted : UellowColors.ink)),
-            )),
-          ]),
-        const SizedBox(height: 4),
-        if ((d['driver'] ?? '').toString().isNotEmpty)
-          _kv(ar ? 'المندوب:' : 'Courier:', d['driver'].toString()),
-        if ((d['driver_phone'] ?? '').toString().isNotEmpty)
-          InkWell(
-            onTap: () => _launch('tel:${d['driver_phone']}'),
-            child: _kv(ar ? 'الهاتف:' : 'Phone:', d['driver_phone'].toString()),
-          ),
-        if ((d['eta'] ?? '').toString().isNotEmpty)
-          _kv(ar ? 'الوصول المتوقع:' : 'ETA:', d['eta'].toString()),
-        if ((d['tracking_number'] ?? '').toString().isNotEmpty)
-          _kv(ar ? 'رقم التتبع:' : 'Tracking:', d['tracking_number'].toString()),
-        _kv(ar ? 'الإجمالي:' : 'Total:', _kd(_dbl(d['amount']), ar)),
-      ]),
+      onCta: () => _openTrackingSheet(context),
+      child: _trackingBody(),
     );
   }
 }
 
 class _OrdersListCard extends StatelessWidget {
-  const _OrdersListCard({required this.items, required this.ar});
+  const _OrdersListCard({required this.items, required this.ar,
+      required this.onSend});
   final List<Map<String, dynamic>> items;
   final bool ar;
+  // Dialog rule: Track asks Beena in-chat → renders the rich tracking card
+  // right inside the conversation. No page navigation.
+  final void Function(String) onSend;
   @override
   Widget build(BuildContext context) {
     Color dColor(String k) {
@@ -441,8 +559,8 @@ class _OrdersListCard extends StatelessWidget {
       accent: const Color(0xFF2F6E62),
       icon: Icons.receipt_long_outlined,
       title: ar ? 'طلباتي' : 'My orders',
-      cta: ar ? 'كل الطلبات' : 'All orders',
-      onCta: () => Navigator.pushNamed(context, Routes.orders),
+      // No page navigation (dialog rule) — every order has its own
+      // in-chat Track action below.
       child: Column(children: [
         for (final o in items.take(6))
           Container(
@@ -470,11 +588,9 @@ class _OrdersListCard extends StatelessWidget {
                       fontSize: 10.5, color: UellowColors.muted))),
                 const Spacer(),
                 GestureDetector(
-                  onTap: () {
-                    final id = _int(o['id']);
-                    if (id > 0) Navigator.pushNamed(context, Routes.order,
-                        arguments: {'id': id});
-                  },
+                  onTap: () => onSend(ar
+                      ? 'وش حالة طلبي ${o['name']}؟'
+                      : 'What is the status of my order ${o['name']}?'),
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                     decoration: BoxDecoration(color: UellowColors.yellow,
@@ -676,8 +792,35 @@ class _LoyaltyCard extends StatelessWidget {
     return _Shell(
       accent: UellowColors.darkBrown, icon: Icons.card_giftcard,
       title: ar ? 'نقاط الولاء' : 'Loyalty points',
-      cta: ar ? 'محفظة نقاطي' : 'My points',
-      onCta: () => Navigator.pushNamed(context, Routes.loyalty),
+      cta: ar ? 'تفاصيل نقاطي' : 'Points details',
+      // Dialog rule: details open in a Beena sheet; the wallet page only
+      // via its explicit approval action inside the sheet.
+      onCta: () => showBeenaSheet(context, ar: ar,
+        title: ar ? 'نقاط الولاء' : 'Loyalty points',
+        icon: Icons.card_giftcard, accent: UellowColors.darkBrown,
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          _kv(ar ? 'رصيدك:' : 'Balance:',
+              '${_int(d['points'])} ${ar ? 'نقطة' : 'pts'}'),
+          if ((d['level_label'] ?? d['level'] ?? '').toString().isNotEmpty)
+            _kv(ar ? 'المستوى:' : 'Tier:',
+                (d['level_label'] ?? d['level']).toString()),
+          _kv(ar ? 'القيمة:' : 'Worth:',
+              (d['kd_value_text'] ?? _kd(_dbl(d['kd_value']), ar)).toString()),
+          if (_int(d['to_next']) > 0)
+            _kv(ar ? 'للمستوى التالي:' : 'To next tier:',
+                '${_int(d['to_next'])} ${ar ? 'نقطة' : 'pts'}'),
+          const SizedBox(height: 6),
+          Text(ar
+              ? 'تقدر تستبدل نقاطك بخصومات مباشرة عند الدفع 💛'
+              : 'Redeem your points for instant discounts at checkout 💛',
+              style: const TextStyle(fontSize: 12, height: 1.5,
+                  color: UellowColors.muted)),
+        ]),
+        actions: [BeenaSheetAction(
+            label: ar ? 'فتح محفظة النقاط' : 'Open points wallet',
+            icon: Icons.account_balance_wallet_outlined,
+            onTap: () => Navigator.pushNamed(context, Routes.loyalty))],
+      ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
           Text('${_int(d['points'])}', style: const TextStyle(

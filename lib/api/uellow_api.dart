@@ -1306,6 +1306,13 @@ class _BeenaApi {
     return res['data'] as Map<String, dynamic>;
   }
 
+  /// Proactive nudges (abandoned cart, order on the way, redeemable points).
+  Future<List<Map<String, dynamic>>> nudges() async {
+    final res = await _c._get(EP.beenaNudges);
+    final list = (res['data']?['nudges'] as List?) ?? const [];
+    return list.whereType<Map>().map((m) => m.cast<String, dynamic>()).toList();
+  }
+
   Future<Map<String, dynamic>> chat({
     required String message, List<Map<String, dynamic>>? history,
     int? productId, int? categoryId, String? sessionId,
