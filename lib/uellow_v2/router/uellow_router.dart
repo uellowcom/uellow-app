@@ -130,7 +130,7 @@ class UellowRouter {
     Routes.bestsellers:   (ctx) => const BestsellersScreen(),
     Routes.myReviews:     (ctx) => const MyReviewsScreen(),
     Routes.flash:         (ctx) => const FlashScreen(),
-    Routes.beena:         (ctx) => const BeenaScreen(),
+    // Routes.beena handled in generate() to accept product/category context.
     Routes.settings:      (ctx) => const SettingsScreen(),
     Routes.profile:       (ctx) => const ProfileScreen(),
     Routes.addresses:     (ctx) => const AddressesScreen(),
@@ -176,6 +176,15 @@ class UellowRouter {
         return MaterialPageRoute(
           settings: settings,
           builder: (_) => SmartFitScreen(productId: id),
+        );
+      case Routes.beena:
+        final a = (settings.arguments as Map?) ?? const {};
+        return MaterialPageRoute(
+          settings: settings,
+          builder: (_) => BeenaScreen(
+            productId: a['product_id'] as int?,
+            categoryId: a['category_id'] as int?,
+          ),
         );
       case Routes.collection:
         final args = (settings.arguments as Map?) ?? const {};

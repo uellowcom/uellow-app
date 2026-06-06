@@ -1308,14 +1308,15 @@ class _BeenaApi {
 
   Future<Map<String, dynamic>> chat({
     required String message, List<Map<String, dynamic>>? history,
-    int? productId,
+    int? productId, int? categoryId,
   }) async {
     // v2.1.55 — Claude calls can take 20-40s; the default 25s timeout
     // was a major source of "sorry, error" replies.
     final res = await _c._post(EP.beenaChat, body: {
       'message': message,
-      if (history   != null) 'history': history,
-      if (productId != null) 'product_id': productId,
+      if (history    != null) 'history': history,
+      if (productId  != null) 'product_id': productId,
+      if (categoryId != null) 'category_id': categoryId,
     }, timeout: const Duration(seconds: 70));
     return res['data'] as Map<String, dynamic>;
   }

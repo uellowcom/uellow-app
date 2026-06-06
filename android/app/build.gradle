@@ -27,7 +27,7 @@ android {
 
     defaultConfig {
         applicationId = "com.uellow.uellow"
-        minSdk = 21
+        minSdk = 23   // record_android (voice) requires API 23+ (Android 6.0)
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName

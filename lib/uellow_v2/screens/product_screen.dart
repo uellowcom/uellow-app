@@ -3820,7 +3820,8 @@ class _CtaBar extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 4),
       child: Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
         // ── Beena bee with floating red "Any help?" pill ──────────
-        _BeenaHelpButton(onTap: () => Navigator.pushNamed(context, '/beena'),
+        _BeenaHelpButton(onTap: () => Navigator.pushNamed(context, '/beena',
+                arguments: {'product_id': p.id}),
             label: ar ? 'مساعدة؟' : 'Any help?'),
         const SizedBox(width: 8),
         // ── Yellow Add to cart — 2/3 of the row (wider than Buy now) ─

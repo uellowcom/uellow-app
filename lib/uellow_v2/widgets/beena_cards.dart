@@ -57,6 +57,100 @@ Color _fitColor(String c) {
   return UellowColors.muted;
 }
 
+/// Product quick-view dialog with Add-to-cart (opened when a chat product is
+/// tapped). On successful add, calls [onAdded] with the product name so Beena
+/// can continue the flow. [onView] opens the full product page.
+Future<void> showBeenaProductDialog(BuildContext context,
+    Map<String, dynamic> p, {required bool ar,
+    required VoidCallback onView, required void Function(String) onAdded}) {
+  final id = _int(p['id']);
+  final name = _locName(p['name'], ar);
+  var img = (p['image_url'] ?? p['image'] ?? '').toString();
+  img = _abs(img);
+  final price = _dbl(p['price']);
+  final inStock = p['in_stock'] != false;
+  return showDialog(
+    context: context,
+    builder: (ctx) {
+      var adding = false;
+      return StatefulBuilder(builder: (ctx, setS) => Dialog(
+        insetPadding: const EdgeInsets.symmetric(horizontal: 28, vertical: 40),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        clipBehavior: Clip.antiAlias,
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Stack(children: [
+            AspectRatio(aspectRatio: 1.3, child: CachedNetworkImage(
+                imageUrl: img, fit: BoxFit.cover,
+                placeholder: (_, __) => const ColoredBox(color: Color(0xFFF4F4F4)),
+                errorWidget: (_, __, ___) => const ColoredBox(color: Color(0xFFF4F4F4),
+                    child: Icon(Icons.image_outlined, color: UellowColors.muted)))),
+            Positioned(top: 8, right: 8, child: GestureDetector(
+              onTap: () => Navigator.pop(ctx),
+              child: Container(width: 30, height: 30,
+                decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle,
+                    boxShadow: [BoxShadow(color: Color(0x22000000), blurRadius: 4)]),
+                child: const Icon(Icons.close, size: 18, color: UellowColors.ink)))),
+          ]),
+          Padding(padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(name, style: const TextStyle(fontSize: 14.5,
+                  fontWeight: FontWeight.w900, color: UellowColors.ink)),
+              const SizedBox(height: 6),
+              Row(children: [
+                Text('${price.toStringAsFixed(3)} ${ar ? 'د.ك' : 'KD'}',
+                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900,
+                        color: UellowColors.darkBrown)),
+                const Spacer(),
+                _chip(inStock ? (ar ? 'متوفر' : 'In stock') : (ar ? 'نفد' : 'Out'),
+                    inStock ? const Color(0xFF2E9E6B) : UellowColors.danger),
+              ]),
+              const SizedBox(height: 14),
+              Row(children: [
+                Expanded(child: OutlinedButton.icon(
+                  onPressed: onView,
+                  icon: const Icon(Icons.open_in_new, size: 16),
+                  label: Text(ar ? 'عرض المنتج' : 'View',
+                      style: const TextStyle(fontWeight: FontWeight.w800)),
+                  style: OutlinedButton.styleFrom(foregroundColor: UellowColors.darkBrown,
+                      side: const BorderSide(color: UellowColors.border),
+                      padding: const EdgeInsets.symmetric(vertical: 12)),
+                )),
+                const SizedBox(width: 10),
+                Expanded(flex: 2, child: ElevatedButton.icon(
+                  onPressed: (adding || !inStock || id <= 0) ? null : () async {
+                    setS(() => adding = true);
+                    try {
+                      await UellowApi.instance.cart.add(productId: id, qty: 1);
+                      if (ctx.mounted) Navigator.pop(ctx);
+                      onAdded(name);
+                    } catch (e) {
+                      setS(() => adding = false);
+                      if (ctx.mounted) {
+                        ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(
+                            content: Text(ar ? 'تعذرت الإضافة — سجّل الدخول أولاً'
+                                : 'Could not add — please sign in first'),
+                            behavior: SnackBarBehavior.floating));
+                      }
+                    }
+                  },
+                  icon: adding
+                      ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(
+                          strokeWidth: 2, color: UellowColors.darkBrown))
+                      : const Icon(Icons.add_shopping_cart, size: 16),
+                  label: Text(ar ? 'أضف للسلة' : 'Add to cart',
+                      style: const TextStyle(fontWeight: FontWeight.w900)),
+                  style: ElevatedButton.styleFrom(backgroundColor: UellowColors.yellow,
+                      foregroundColor: UellowColors.darkBrown, elevation: 0,
+                      padding: const EdgeInsets.symmetric(vertical: 12)),
+                )),
+              ]),
+            ])),
+        ]),
+      ));
+    },
+  );
+}
+
 /// Build the list of rich cards for one AI turn's `extra`.
 List<Widget> buildBeenaCards(BuildContext context, Map<String, dynamic>? extra,
     bool ar, void Function(String) onSend) {

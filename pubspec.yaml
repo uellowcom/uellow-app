@@ -1,7 +1,7 @@
 name: uellow
 description: Uellow Marketplace — v2 mobile app
 publish_to: 'none'
-version: 2.1.78+178
+version: 2.1.79+179
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
@@ -34,6 +34,8 @@ dependencies:
   flutter_svg: ^2.0.10
   # v2.0.83 — Reels tab (TikTok-style vertical video feed)
   video_player: ^2.9.2
+  record: ^6.2.1
+  audioplayers: ^6.6.0
 
 dev_dependencies:
   flutter_test:
