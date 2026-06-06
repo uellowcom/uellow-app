@@ -4819,53 +4819,89 @@ class PromoSectionBlock extends StatelessWidget {
       ),
       clipBehavior: Clip.antiAlias,
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        // ── gradient header band ──
+        // ── premium gradient header band (v2.1.87) ──
         GestureDetector(
           onTap: onHeaderTap,
           child: Container(
-            padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
+            padding: const EdgeInsets.fromLTRB(15, 15, 13, 15),
             decoration: BoxDecoration(
               gradient: LinearGradient(
                   begin: Alignment.topLeft, end: Alignment.bottomRight,
                   colors: [c1, c2]),
             ),
-            child: Row(children: [
-              // logo bubble
-              Container(
-                width: 38, height: 38, alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.22),
-                  borderRadius: BorderRadius.circular(11),
+            child: Stack(clipBehavior: Clip.hardEdge, children: [
+              // soft decorative glow circles for depth
+              Positioned(right: -24, top: -30, child: Container(width: 90,
+                height: 90, decoration: BoxDecoration(shape: BoxShape.circle,
+                    color: Colors.white.withValues(alpha: 0.10)))),
+              Positioned(right: 26, bottom: -34, child: Container(width: 64,
+                height: 64, decoration: BoxDecoration(shape: BoxShape.circle,
+                    color: Colors.white.withValues(alpha: 0.06)))),
+              Row(children: [
+                // glass logo tile
+                Container(
+                  width: 46, height: 46, alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.20),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: Colors.white.withValues(alpha: 0.35)),
+                    boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.12),
+                        blurRadius: 6, offset: const Offset(0, 2))],
+                  ),
+                  clipBehavior: Clip.antiAlias,
+                  child: logoImg.isNotEmpty
+                      ? CachedNetworkImage(imageUrl: logoImg,
+                          width: 46, height: 46, fit: BoxFit.cover,
+                          errorWidget: (_, __, ___) =>
+                              Text(logo, style: const TextStyle(fontSize: 22)))
+                      : Text(logo, style: const TextStyle(fontSize: 22)),
                 ),
-                clipBehavior: Clip.antiAlias,
-                child: logoImg.isNotEmpty
-                    ? CachedNetworkImage(imageUrl: logoImg,
-                        width: 38, height: 38, fit: BoxFit.cover,
-                        errorWidget: (_, __, ___) =>
-                            Text(logo, style: const TextStyle(fontSize: 20)))
-                    : Text(logo, style: const TextStyle(fontSize: 20)),
-              ),
-              const SizedBox(width: 10),
-              Expanded(child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(title.isNotEmpty ? title
-                        : (ar ? 'عرض مميّز' : 'Featured offer'),
-                    maxLines: 1, overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(color: Colors.white, fontSize: 15.5,
-                        fontWeight: FontWeight.w900)),
-                if (sub.isNotEmpty) Text(sub,
-                    maxLines: 1, overflow: TextOverflow.ellipsis,
-                    style: TextStyle(color: Colors.white.withValues(alpha: .92),
-                        fontSize: 11)),
-              ])),
-              if (cta.isNotEmpty) Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-                decoration: BoxDecoration(color: Colors.white,
-                    borderRadius: BorderRadius.circular(999)),
-                child: Text(cta, style: TextStyle(color: c1,
-                    fontSize: 12, fontWeight: FontWeight.w900)),
-              ) else Icon(ar ? Icons.chevron_left : Icons.chevron_right,
-                  color: Colors.white.withValues(alpha: .9), size: 22),
+                const SizedBox(width: 11),
+                Expanded(child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min, children: [
+                  // small badge chip above the title
+                  Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.22),
+                        borderRadius: BorderRadius.circular(999)),
+                    child: Text(badge.toUpperCase(), style: TextStyle(
+                        color: Colors.white, fontSize: 8.5, letterSpacing: 0.6,
+                        fontWeight: FontWeight.w900))),
+                  const SizedBox(height: 5),
+                  Text(title.isNotEmpty ? title
+                          : (ar ? 'عرض مميّز' : 'Featured offer'),
+                      maxLines: 1, overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(color: Colors.white, fontSize: 16.5,
+                          fontWeight: FontWeight.w900, height: 1.15,
+                          shadows: [Shadow(color: Color(0x33000000),
+                              blurRadius: 3, offset: Offset(0, 1))])),
+                  if (sub.isNotEmpty) Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Text(sub, maxLines: 1, overflow: TextOverflow.ellipsis,
+                        style: TextStyle(color: Colors.white.withValues(alpha: .92),
+                            fontSize: 11.5))),
+                ])),
+                const SizedBox(width: 8),
+                Container(
+                  padding: cta.isNotEmpty
+                      ? const EdgeInsets.symmetric(horizontal: 14, vertical: 8)
+                      : const EdgeInsets.all(7),
+                  decoration: BoxDecoration(color: Colors.white,
+                      borderRadius: BorderRadius.circular(999),
+                      boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.10),
+                          blurRadius: 5, offset: const Offset(0, 2))]),
+                  child: cta.isNotEmpty
+                      ? Row(mainAxisSize: MainAxisSize.min, children: [
+                          Text(cta, style: TextStyle(color: c1, fontSize: 12,
+                              fontWeight: FontWeight.w900)),
+                          const SizedBox(width: 3),
+                          Icon(ar ? Icons.arrow_back_ios_new : Icons.arrow_forward_ios,
+                              color: c1, size: 10),
+                        ])
+                      : Icon(ar ? Icons.chevron_left : Icons.chevron_right,
+                          color: c1, size: 20),
+                ),
+              ]),
             ]),
           ),
         ),
@@ -4935,7 +4971,7 @@ class PromoSectionBlock extends StatelessWidget {
       ),
       if (rest.isNotEmpty) ...[
         const SizedBox(height: 10),
-        SizedBox(height: 250, child: ListView.separated(
+        SizedBox(height: 300, child: ListView.separated(
           scrollDirection: Axis.horizontal, itemCount: rest.length,
           separatorBuilder: (_, __) => const SizedBox(width: 8),
           itemBuilder: (_, i) => SizedBox(width: 150,
@@ -4997,7 +5033,7 @@ class PromoSectionBlock extends StatelessWidget {
       shrinkWrap: true, physics: const NeverScrollableScrollPhysics(),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 2, mainAxisSpacing: 10, crossAxisSpacing: 10,
-        childAspectRatio: 0.62),
+        childAspectRatio: 0.56),
       itemCount: items.length,
       itemBuilder: (_, i) {
         final d = items[i].discountPct;
@@ -5017,7 +5053,7 @@ class PromoSectionBlock extends StatelessWidget {
 
   // ARRIVALS — taller horizontal rail with a corner NEW ribbon.
   Widget _arrivalsRail(List<UellowProductCard> items, Color c1, String badge) {
-    return SizedBox(height: 270, child: ListView.separated(
+    return SizedBox(height: 304, child: ListView.separated(
       scrollDirection: Axis.horizontal, itemCount: items.length,
       separatorBuilder: (_, __) => const SizedBox(width: 8),
       itemBuilder: (_, i) => SizedBox(width: 170, child: Stack(
@@ -5035,7 +5071,7 @@ class PromoSectionBlock extends StatelessWidget {
   }
 
   Widget _rail(List<UellowProductCard> items, Color c1, String badge) =>
-      SizedBox(height: 260, child: ListView.separated(
+      SizedBox(height: 296, child: ListView.separated(
         scrollDirection: Axis.horizontal, itemCount: items.length,
         separatorBuilder: (_, __) => const SizedBox(width: 8),
         itemBuilder: (_, i) => SizedBox(width: 160,
@@ -5047,7 +5083,7 @@ class PromoSectionBlock extends StatelessWidget {
         shrinkWrap: true, physics: const NeverScrollableScrollPhysics(),
         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
           crossAxisCount: 2, mainAxisSpacing: 8, crossAxisSpacing: 8,
-          childAspectRatio: 0.60),
+          childAspectRatio: 0.56),
         itemCount: items.length,
         itemBuilder: (_, i) => ProductCard(rich: true, product: items[i], hideAvail: true),
       );

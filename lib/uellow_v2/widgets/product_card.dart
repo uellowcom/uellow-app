@@ -235,8 +235,15 @@ class _StdLayout extends StatelessWidget {
               // Current price + currency, then (if discounted) compare price
               // with the -X% pill IMMEDIATELY adjacent — the user reads
               // "old price ̶7̶ -28%" together.
-              Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
-                Text(product.price.amount.toStringAsFixed(3),
+              // v2.1.87 — the whole price line auto-shrinks to fit the card
+              // width (big-number currencies like EGP no longer overlap),
+              // and amounts use the currency's own decimals (not hard 3).
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: AlignmentDirectional.centerStart,
+                child: Row(crossAxisAlignment: CrossAxisAlignment.center,
+                    mainAxisSize: MainAxisSize.min, children: [
+                Text(product.price.displayAmount(),
                     style: TextStyle(
                       fontSize: priceFs, fontWeight: FontWeight.w900,
                       color: UellowColors.ink, letterSpacing: -0.3,
@@ -249,9 +256,9 @@ class _StdLayout extends StatelessWidget {
                     )),
                 if (hasDiscount) ...[
                   const SizedBox(width: 5),
-                  Flexible(child: MidStrikePrice(
-                      text: product.comparePrice!.amount.toStringAsFixed(3),
-                      fontSize: cmpFs, color: Colors.black87)),
+                  MidStrikePrice(
+                      text: product.comparePrice!.displayAmount(),
+                      fontSize: cmpFs, color: Colors.black87),
                   const SizedBox(width: 4),
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1.5),
@@ -266,7 +273,7 @@ class _StdLayout extends StatelessWidget {
                         )),
                   ),
                 ],
-              ]),
+              ])),
               // v2.1.25 — price-intelligence indicator (drop / lowest-90d).
               if (product.priceTrend != null) Padding(
                 padding: const EdgeInsets.only(top: 2),
