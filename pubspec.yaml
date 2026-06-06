@@ -1,7 +1,7 @@
 name: uellow
 description: Uellow Marketplace — v2 mobile app
 publish_to: 'none'
-version: 2.1.88+188
+version: 2.1.89+189
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
@@ -36,6 +36,7 @@ dependencies:
   video_player: ^2.9.2
   record: ^6.2.1
   audioplayers: ^6.6.0
+  sign_in_with_apple: ^7.0.1
 
 dev_dependencies:
   flutter_test:

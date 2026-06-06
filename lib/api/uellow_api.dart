@@ -447,6 +447,18 @@ class _AuthApi {
     return _saveAuth(res);
   }
 
+  // v2.1.89 — Apple sign-in: the app gets an identity token from
+  // sign_in_with_apple; the server verifies it against Apple's keys.
+  Future<UellowAuthResult> appleSignIn(String identityToken,
+      {String? email, String? name}) async {
+    final res = await _c._post('/api/mobile/v2/auth/social/apple', body: {
+      'id_token': identityToken,
+      if (email != null && email.isNotEmpty) 'email': email,
+      if (name != null && name.isNotEmpty) 'name': name,
+    });
+    return _saveAuth(res);
+  }
+
   // v2.1.16 — email OTP (no SMS provider needed): request a 6-digit
   // code, then verify it. Verify returns the same auth payload as login.
   Future<String> otpEmailRequest(String emailOrPhone) async {

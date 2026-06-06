@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 
 import '../services/fcm_service.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 
 import '../../api/uellow_api.dart';
 import '../theme/uellow_l10n.dart';
@@ -227,7 +228,7 @@ class _AuthScreenState extends State<AuthScreen> {
               _googleFlow)),
           const SizedBox(width: 8),
           Expanded(child: _socialBtn('Apple', Icons.apple, Colors.black,
-              () => _socialPending('Apple'))),
+              _appleFlow)),
         ]),
         const SizedBox(height: 8),
         SizedBox(width: double.infinity, child: _socialBtn(
@@ -497,6 +498,44 @@ class _AuthScreenState extends State<AuthScreen> {
     }
   }
 
+  Future<void> _appleFlow() async {
+    final ar = UellowApi.instance.lang.toLowerCase().startsWith('ar');
+    setState(() { _busy = true; _err = null; });
+    try {
+      final cred = await SignInWithApple.getAppleIDCredential(scopes: [
+        AppleIDAuthorizationScopes.email,
+        AppleIDAuthorizationScopes.fullName,
+      ]);
+      final token = cred.identityToken ?? '';
+      if (token.isEmpty) {
+        throw UellowApiException(code: 'NO_TOKEN',
+            message: ar ? 'تعذر الحصول على توكن أبل' : 'No Apple token',
+            statusCode: 400);
+      }
+      final name = [cred.givenName, cred.familyName]
+          .where((e) => (e ?? '').isNotEmpty).join(' ');
+      await UellowApi.instance.auth.appleSignIn(token,
+          email: cred.email, name: name);
+      if (!mounted) return;
+      if (widget.asSheet) {
+        Navigator.of(context).pop(true);
+      } else {
+        Navigator.of(context).pushReplacementNamed('/home');
+      }
+    } on SignInWithAppleAuthorizationException {
+      if (mounted) setState(() => _busy = false);   // user cancelled
+      return;
+    } on UellowApiException catch (e) {
+      if (mounted) setState(() => _err = e.message);
+    } catch (e) {
+      if (mounted) setState(() => _err = ar
+          ? 'فشل تسجيل أبل — حاول مرة أخرى' : 'Apple sign-in failed');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  // ignore: unused_element
   void _socialPending(String name) {
     // v2.0.79 — bilingual placeholder until each provider's SDK is wired
     // (Apple/Google/Etisalat need separate auth-flow integrations).
