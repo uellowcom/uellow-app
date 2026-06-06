@@ -59,6 +59,7 @@ class _AuthScreenState extends State<AuthScreen> {
           name: _name.text, email: _email.text,
           password: _password.text, phone: _phone.text,
         );
+        unawaited(FcmService.instance.register());  // v2.2.02 — push link
       }
       if (!mounted) return;
       if (widget.asSheet) {
@@ -482,6 +483,9 @@ class _AuthScreenState extends State<AuthScreen> {
             statusCode: 400);
       }
       await UellowApi.instance.auth.googleSignIn(idToken);
+      // v2.2.02 — link the FCM token to the customer (was email-login
+      // only, so Google sign-ins got NO push notifications).
+      unawaited(FcmService.instance.register());
       if (!mounted) return;
       if (widget.asSheet) {
         Navigator.of(context).pop(true);
@@ -531,6 +535,7 @@ class _AuthScreenState extends State<AuthScreen> {
           .where((e) => (e ?? '').isNotEmpty).join(' ');
       await UellowApi.instance.auth.appleSignIn(token,
           email: cred.email, name: name);
+      unawaited(FcmService.instance.register());   // v2.2.02 — push link
       if (!mounted) return;
       if (widget.asSheet) {
         Navigator.of(context).pop(true);
