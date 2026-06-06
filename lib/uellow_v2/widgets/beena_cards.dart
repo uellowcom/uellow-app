@@ -57,6 +57,67 @@ Color _fitColor(String c) {
   return UellowColors.muted;
 }
 
+/// Lightweight markdown renderer for Beena replies — supports **bold**,
+/// "- "/"• "/"* " bullets, "1." numbered lines, and blank-line spacing.
+/// Keeps the chat clean and organized without a heavy markdown dependency.
+class BeenaRichText extends StatelessWidget {
+  const BeenaRichText(this.text, {super.key, this.color});
+  final String text;
+  final Color? color;
+
+  List<InlineSpan> _inline(String s, TextStyle base) {
+    final spans = <InlineSpan>[];
+    final re = RegExp(r'\*\*(.+?)\*\*|__(.+?)__');
+    int i = 0;
+    for (final m in re.allMatches(s)) {
+      if (m.start > i) spans.add(TextSpan(text: s.substring(i, m.start), style: base));
+      spans.add(TextSpan(text: m.group(1) ?? m.group(2) ?? '',
+          style: base.copyWith(fontWeight: FontWeight.w900)));
+      i = m.end;
+    }
+    if (i < s.length) spans.add(TextSpan(text: s.substring(i), style: base));
+    if (spans.isEmpty) spans.add(TextSpan(text: s, style: base));
+    return spans;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final base = TextStyle(fontSize: 13.5, height: 1.5,
+        color: color ?? UellowColors.ink);
+    final lines = text.split('\n');
+    final rows = <Widget>[];
+    for (var raw in lines) {
+      final line = raw.trimRight();
+      if (line.trim().isEmpty) { rows.add(const SizedBox(height: 6)); continue; }
+      final t = line.trimLeft();
+      final bullet = t.startsWith('- ') || t.startsWith('• ') || t.startsWith('* ');
+      if (bullet) {
+        final content = t.substring(2);
+        rows.add(Padding(padding: const EdgeInsets.only(bottom: 3, top: 1),
+          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Padding(padding: const EdgeInsets.only(top: 1, left: 2, right: 6),
+              child: Text('•', style: base.copyWith(
+                  fontWeight: FontWeight.w900, color: UellowColors.yellow))),
+            Expanded(child: RichText(text: TextSpan(children: _inline(content, base)))),
+          ])));
+      } else {
+        // strip leading "## " heading markers → bold line
+        final heading = RegExp(r'^#{1,3}\s+');
+        if (heading.hasMatch(t)) {
+          rows.add(Padding(padding: const EdgeInsets.only(top: 4, bottom: 2),
+            child: RichText(text: TextSpan(children:
+                _inline(t.replaceFirst(heading, ''), base.copyWith(fontWeight: FontWeight.w900))))));
+        } else {
+          rows.add(Padding(padding: const EdgeInsets.only(bottom: 2),
+            child: RichText(text: TextSpan(children: _inline(t, base)))));
+        }
+      }
+    }
+    return Column(crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min, children: rows);
+  }
+}
+
 /// Product quick-view dialog with Add-to-cart (opened when a chat product is
 /// tapped). On successful add, calls [onAdded] with the product name so Beena
 /// can continue the flow. [onView] opens the full product page.
@@ -368,6 +429,14 @@ class _OrdersListCard extends StatelessWidget {
   final bool ar;
   @override
   Widget build(BuildContext context) {
+    Color dColor(String k) {
+      switch (k) {
+        case 'delivered': return const Color(0xFF2E9E6B);
+        case 'out_for_delivery': case 'assigned': return const Color(0xFF2F6E62);
+        case 'failed': case 'failed_returned': return UellowColors.danger;
+      }
+      return const Color(0xFFC99000);
+    }
     return _Shell(
       accent: const Color(0xFF2F6E62),
       icon: Icons.receipt_long_outlined,
@@ -375,19 +444,52 @@ class _OrdersListCard extends StatelessWidget {
       cta: ar ? 'كل الطلبات' : 'All orders',
       onCta: () => Navigator.pushNamed(context, Routes.orders),
       child: Column(children: [
-        for (final o in items.take(5))
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 3),
-            child: Row(children: [
-              Expanded(child: Text((o['name'] ?? '').toString(),
-                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700,
-                      color: UellowColors.ink))),
-              if ((o['state'] ?? '').toString().isNotEmpty)
-                Padding(padding: const EdgeInsets.symmetric(horizontal: 6),
-                  child: Text((o['state']).toString(),
-                      style: const TextStyle(fontSize: 10.5, color: UellowColors.muted))),
-              Text(_kd(_dbl(o['amount']), ar), style: const TextStyle(
-                  fontSize: 12, fontWeight: FontWeight.w900, color: UellowColors.darkBrown)),
+        for (final o in items.take(6))
+          Container(
+            margin: const EdgeInsets.only(bottom: 8),
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(color: const Color(0xFFF8FAF9),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: UellowColors.border)),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: [
+                Expanded(child: Text((o['name'] ?? '').toString(),
+                    style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w900,
+                        color: UellowColors.ink))),
+                Text(_kd(_dbl(o['amount']), ar), style: const TextStyle(
+                    fontSize: 12.5, fontWeight: FontWeight.w900, color: UellowColors.darkBrown)),
+              ]),
+              const SizedBox(height: 6),
+              Row(children: [
+                if ((o['delivery_status'] ?? '').toString().isNotEmpty)
+                  _chip(o['delivery_status'].toString(),
+                      dColor((o['delivery_key'] ?? '').toString())),
+                if ((o['date'] ?? '').toString().isNotEmpty) Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 6),
+                  child: Text(o['date'].toString(), style: const TextStyle(
+                      fontSize: 10.5, color: UellowColors.muted))),
+                const Spacer(),
+                GestureDetector(
+                  onTap: () {
+                    final id = _int(o['id']);
+                    if (id > 0) Navigator.pushNamed(context, Routes.order,
+                        arguments: {'id': id});
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(color: UellowColors.yellow,
+                        borderRadius: BorderRadius.circular(8)),
+                    child: Row(mainAxisSize: MainAxisSize.min, children: [
+                      const Icon(Icons.local_shipping_outlined, size: 13,
+                          color: UellowColors.darkBrown),
+                      const SizedBox(width: 4),
+                      Text(ar ? 'تتبع' : 'Track', style: const TextStyle(
+                          fontSize: 11, fontWeight: FontWeight.w900,
+                          color: UellowColors.darkBrown)),
+                    ]),
+                  ),
+                ),
+              ]),
             ]),
           ),
       ]),

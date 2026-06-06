@@ -55,6 +55,8 @@ class _BeenaScreenState extends State<BeenaScreen> {
   bool _restored = false;
   int? _activeProductId;       // the product the conversation is locked onto
   String? _sessionId;          // server-side conversation memory key
+  String? _playingKey;         // text of the reply currently being spoken
+  String? _welcome;            // playful welcome-back label (auto-hides)
   late final List<_Msg> _msgs;
 
   bool get _ar => UellowApi.instance.lang.toLowerCase().startsWith('ar');
@@ -64,6 +66,9 @@ class _BeenaScreenState extends State<BeenaScreen> {
     super.initState();
     _activeProductId = widget.productId;
     _msgs = [];
+    _player.onPlayerComplete.listen((_) {
+      if (mounted) setState(() => _playingKey = null);
+    });
     _restore();
   }
 
@@ -92,7 +97,21 @@ class _BeenaScreenState extends State<BeenaScreen> {
           ? 'أهلاً! أنا بينا، مساعدتك الذكية من يلو 🐝\nأقدر أساعدك تلاقي منتجات، تتبع طلباتك، تستخدم نقاطك، تجرّب اللبس، أو أجاوب على أي سؤال.'
           : "Hi! I'm Beena, your Uellow AI assistant 🐝\nI can help you find products, track orders, use your points, try things on, or answer anything."));
     }
+    // Playful welcome label every time Beena opens.
+    final hadHistory = _msgs.length > 1;
+    final ar = _ar;
+    final back = ar
+        ? ['🌟 نوّرت الدنيا!', '🐝 وحشتنا.. وينك؟', '💛 يا هلا بعودتك', '✨ يا هلا والله']
+        : ['🌟 You lit up the place!', '🐝 Missed you!', '💛 Welcome back', '✨ Great to see you'];
+    final fresh = ar
+        ? ['🐝 أهلاً! أنا بينا', '✨ يا هلا، كيف أساعدك؟']
+        : ['🐝 Hi! I\'m Beena', '✨ Hey there, how can I help?'];
+    final pool = hadHistory ? back : fresh;
+    _welcome = pool[_msgs.length % pool.length];
     if (mounted) setState(() => _restored = true);
+    Future.delayed(const Duration(seconds: 4), () {
+      if (mounted) setState(() => _welcome = null);
+    });
     // If opened from a product page, greet about it.
     if (widget.productId != null && _msgs.length <= 1) {
       _send(_ar ? 'حدثني عن هذا المنتج' : 'Tell me about this product',
@@ -238,8 +257,15 @@ class _BeenaScreenState extends State<BeenaScreen> {
     }
   }
 
+  // Listen ⇄ Pause: tapping while this reply is playing stops it.
   Future<void> _speak(String text) async {
     if (text.trim().isEmpty) return;
+    if (_playingKey == text) {            // currently playing → pause
+      try { await _player.stop(); } catch (_) {}
+      if (mounted) setState(() => _playingKey = null);
+      return;
+    }
+    setState(() => _playingKey = text);
     try {
       final r = await http.post(
         Uri.parse('${UellowApi.instance.baseUrl}/ai/tts'),
@@ -254,8 +280,12 @@ class _BeenaScreenState extends State<BeenaScreen> {
       if (result['success'] == true && audio.isNotEmpty) {
         await _player.stop();
         await _player.play(BytesSource(base64Decode(audio)));
+      } else {
+        if (mounted) setState(() => _playingKey = null);
       }
-    } catch (_) {}
+    } catch (_) {
+      if (mounted) setState(() => _playingKey = null);
+    }
   }
 
   void _snack(String m) {
@@ -374,6 +404,18 @@ class _BeenaScreenState extends State<BeenaScreen> {
         body: SafeArea(child: Column(children: [
           _Header(ar: ar, onArchive: _openArchive),
           _ChipsBar(ar: ar, onTap: _onChip),
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 300),
+            child: _welcome == null ? const SizedBox.shrink() : Container(
+              key: ValueKey(_welcome),
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              color: UellowColors.yellowSoft,
+              child: Text(_welcome!, textAlign: TextAlign.center,
+                  style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800,
+                      color: UellowColors.darkBrown)),
+            ),
+          ),
           Expanded(child: !_restored
               ? const Center(child: CircularProgressIndicator(
                   color: UellowColors.darkBrown))
@@ -385,7 +427,8 @@ class _BeenaScreenState extends State<BeenaScreen> {
                     if (_typing && i == _msgs.length) return const _TypingBubble();
                     return _MsgBubble(msg: _msgs[i], ar: ar,
                         onRetry: (t) => _send(t), onSend: (t) => _send(t),
-                        onProduct: _openProduct, onSpeak: _speak);
+                        onProduct: _openProduct, onSpeak: _speak,
+                        playing: _playingKey != null && _playingKey == _msgs[i].text);
                   },
                 )),
           _InputBar(ctrl: _ctrl, ar: ar, recording: _recording,
@@ -508,13 +551,14 @@ class _ChipsBar extends StatelessWidget {
 
 class _MsgBubble extends StatelessWidget {
   const _MsgBubble({required this.msg, required this.ar, this.onRetry,
-      this.onSend, this.onProduct, this.onSpeak});
+      this.onSend, this.onProduct, this.onSpeak, this.playing = false});
   final _Msg msg;
   final bool ar;
   final ValueChanged<String>? onRetry;
   final ValueChanged<String>? onSend;
   final void Function(Map<String, dynamic>)? onProduct;
   final ValueChanged<String>? onSpeak;
+  final bool playing;
   @override
   Widget build(BuildContext context) {
     final rich = msg.products != null || msg.extra != null;
@@ -550,21 +594,28 @@ class _MsgBubble extends StatelessWidget {
                         child: Image.file(File(msg.localImagePath!),
                             width: 140, height: 140, fit: BoxFit.cover)),
                     ),
-                    Text(msg.text, style: TextStyle(
-                      color: msg.isUser ? UellowColors.yellowLight
-                          : msg.isError ? const Color(0xFF9A3324) : UellowColors.ink,
-                      fontSize: 13.5, height: 1.5)),
+                    if (msg.isUser || msg.isError)
+                      Text(msg.text, style: TextStyle(
+                        color: msg.isUser ? UellowColors.yellowLight
+                            : const Color(0xFF9A3324),
+                        fontSize: 13.5, height: 1.5))
+                    else
+                      BeenaRichText(msg.text),   // formatted markdown
                     if (!msg.isUser && !msg.isError && msg.text.isNotEmpty)
                       GestureDetector(
                         onTap: () => onSpeak?.call(msg.text),
                         child: Padding(padding: const EdgeInsets.only(top: 6),
                           child: Row(mainAxisSize: MainAxisSize.min, children: [
-                            const Icon(Icons.volume_up_outlined, size: 14,
-                                color: UellowColors.muted),
+                            Icon(playing ? Icons.pause_circle_outline
+                                    : Icons.volume_up_outlined,
+                                size: 15, color: playing
+                                    ? UellowColors.darkBrown : UellowColors.muted),
                             const SizedBox(width: 4),
-                            Text(ar ? 'استمع' : 'Listen', style: const TextStyle(
-                                fontSize: 10.5, color: UellowColors.muted,
-                                fontWeight: FontWeight.w700)),
+                            Text(playing ? (ar ? 'إيقاف' : 'Pause')
+                                    : (ar ? 'استمع' : 'Listen'),
+                                style: TextStyle(fontSize: 10.5,
+                                    color: playing ? UellowColors.darkBrown : UellowColors.muted,
+                                    fontWeight: FontWeight.w700)),
                           ])),
                       ),
                   ]),
