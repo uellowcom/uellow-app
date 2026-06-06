@@ -958,18 +958,19 @@ class _ActionTilesState extends State<_ActionTiles> {
                       'Wallet','Smart Fit','Tracking','My Reviews'];
   static const _ar = ['المفضلة','التنبيهات','الكوبونات','الولاء',
                       'المحفظة','مقاسي','التتبع','آراء المختصين'];
-  // Public tiles (Smart Fit) work for guests too — the rest
-  // need a session, so guests get bounced to /auth.
-  static const _public = {Routes.smartFit};
+  // Public tiles work for guests too — the rest need a session, so guests
+  // get bounced to /auth.
+  static const _public = {Routes.tryOn};
   static const _tiles = [
     (Icons.favorite_border, Routes.wishlist),
     (Icons.notifications_outlined, Routes.notifications),
     (Icons.card_giftcard, Routes.coupons),
     (Icons.local_offer_outlined, Routes.loyalty),
     (Icons.account_balance_wallet_outlined, Routes.wallet),
-    // v2.1.77 — Smart Fit tile now opens the interactive body-figure screen.
-    (Icons.straighten, Routes.smartFit),
-    (Icons.local_shipping_outlined, Routes.order),
+    // v2.1.84 — restored: 'مقاسي' opens Virtual Try-On (was Smart Fit).
+    (Icons.checkroom_outlined, Routes.tryOn),
+    // Tracking → the orders list (non-cancelled), not a single auto-track.
+    (Icons.local_shipping_outlined, Routes.orders),
     // v2.1.62 — specialist-review history (product + the review itself).
     (Icons.rate_review_outlined, Routes.myReviews),
   ];

@@ -128,7 +128,7 @@ class _WishlistScreenState extends State<WishlistScreen> {
                 crossAxisCount: 2, crossAxisSpacing: 10, mainAxisSpacing: 10, childAspectRatio: 0.6,
               ),
               itemCount: items.length,
-              itemBuilder: (_, i) => _WishCard(p: items[i], alertIdx: i),
+              itemBuilder: (_, i) => _WishCard(p: items[i]),
             );
           },
         )),
@@ -157,18 +157,31 @@ class _WishlistScreenState extends State<WishlistScreen> {
 }
 
 class _WishCard extends StatelessWidget {
-  const _WishCard({required this.p, required this.alertIdx});
+  const _WishCard({required this.p});
   final UellowProductCard p;
-  final int alertIdx;
   @override
   Widget build(BuildContext context) {
     final lang = UellowApi.instance.lang;
+    final ar = lang.toLowerCase().startsWith('ar');
+    // REAL alerts derived from product data (no more index-based fakes).
     Widget? alert;
-    if (alertIdx == 0) alert = _alert('⬇  Price dropped 12% since added', UellowColors.successBg, UellowColors.successDk);
-    if (alertIdx == 1) alert = _alert('⚠  Only 3 left in stock', UellowColors.warnBg, UellowColors.warn);
-    if (alertIdx == 2) alert = _alert('⚡  On flash sale now', UellowColors.danger, Colors.white);
+    final onSale = p.comparePrice != null && p.comparePrice!.amount > p.price.amount;
+    final priceDown = p.priceTrend?['direction'] == 'down'
+        || p.priceTrend?['is_lowest'] == true;
+    if (!p.inStock) {
+      alert = _alert(ar ? '⚠ غير متوفر حالياً' : '⚠ Out of stock',
+          UellowColors.warnBg, UellowColors.warn);
+    } else if (priceDown) {
+      alert = _alert(ar ? '⬇ انخفض السعر' : '⬇ Price dropped',
+          UellowColors.successBg, UellowColors.successDk);
+    } else if (onSale) {
+      alert = _alert(ar ? '⚡ عليه تخفيض الآن' : '⚡ On sale now',
+          UellowColors.danger, Colors.white);
+    }
 
-    return Container(
+    return GestureDetector(
+      onTap: () => UellowRouter.goProduct(context, p.id),
+      child: Container(
       decoration: const BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.all(Radius.circular(14)),
@@ -203,6 +216,7 @@ class _WishCard extends StatelessWidget {
           ]),
         ),
       ]),
+    ),
     );
   }
 
