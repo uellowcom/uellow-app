@@ -19,6 +19,7 @@ import 'package:image_picker/image_picker.dart';
 import '../../api/uellow_api.dart';
 import '../router/uellow_router.dart';
 import '../theme/uellow_theme.dart';
+import '../widgets/beena_cards.dart';
 import '../widgets/uellow_bottom_nav.dart';
 
 class BeenaScreen extends StatefulWidget {
@@ -81,7 +82,8 @@ class _BeenaScreenState extends State<BeenaScreen> {
             text: reply.isEmpty
                 ? (_ar ? 'تم!' : 'Got it!')
                 : reply,
-            products: products.isEmpty ? null : products));
+            products: products.isEmpty ? null : products,
+            extra: extra.isEmpty ? null : extra));
         _typing = false;
       });
     } catch (_) {
@@ -142,8 +144,9 @@ class _BeenaScreenState extends State<BeenaScreen> {
       final j = jsonDecode(utf8.decode(r.bodyBytes)) as Map<String, dynamic>;
       final result = (j['result'] as Map?)?.cast<String, dynamic>() ?? {};
       final reply = (result['reply'] ?? '').toString();
+      final vExtra = (result['extra'] as Map?)?.cast<String, dynamic>() ?? {};
       final products = ((result['products'] as List?)
-              ?? ((result['extra'] as Map?)?['products'] as List?)
+              ?? (vExtra['products'] as List?)
               ?? const [])
           .whereType<Map>()
           .map((m) => m.cast<String, dynamic>())
@@ -154,7 +157,8 @@ class _BeenaScreenState extends State<BeenaScreen> {
             text: reply.isNotEmpty
                 ? reply
                 : (_ar ? 'هذا ما وجدته مشابهاً لصورتك:' : 'Here is what I found:'),
-            products: products.isEmpty ? null : products));
+            products: products.isEmpty ? null : products,
+            extra: vExtra.isEmpty ? null : vExtra));
         _typing = false;
       });
     } catch (_) {
@@ -249,7 +253,7 @@ class _BeenaScreenState extends State<BeenaScreen> {
             itemBuilder: (_, i) {
               if (_typing && i == _msgs.length) return const _TypingBubble();
               return _MsgBubble(msg: _msgs[i], ar: ar,
-                  onRetry: (t) => _send(t));
+                  onRetry: (t) => _send(t), onSend: (t) => _send(t));
             },
           )),
           _InputBar(ctrl: _ctrl, ar: ar,
@@ -262,10 +266,13 @@ class _BeenaScreenState extends State<BeenaScreen> {
 
 class _Msg {
   _Msg({required this.isUser, required this.text, this.products,
-      this.isError = false, this.retryText, this.localImage});
+      this.extra, this.isError = false, this.retryText, this.localImage});
   final bool isUser;
   final String text;
   final List<Map<String, dynamic>>? products;
+  // v2.1.78 — full structured tool results (loyalty, order_status, tryon,
+  // fit_check, cart, reviewers, location…) rendered as rich cards.
+  final Map<String, dynamic>? extra;
   final bool isError;
   final String? retryText;
   final File? localImage;
@@ -361,10 +368,11 @@ class _ChipsBar extends StatelessWidget {
 }
 
 class _MsgBubble extends StatelessWidget {
-  const _MsgBubble({required this.msg, required this.ar, this.onRetry});
+  const _MsgBubble({required this.msg, required this.ar, this.onRetry, this.onSend});
   final _Msg msg;
   final bool ar;
   final ValueChanged<String>? onRetry;
+  final ValueChanged<String>? onSend;
   @override
   Widget build(BuildContext context) {
     return Padding(
@@ -376,7 +384,8 @@ class _MsgBubble extends StatelessWidget {
           if (!msg.isUser) _avatar(),
           if (!msg.isUser) const SizedBox(width: 10),
           ConstrainedBox(
-            constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.78),
+            constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width *
+                ((msg.products != null || msg.extra != null) ? 0.86 : 0.78)),
             child: Column(
               crossAxisAlignment: msg.isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
               children: [
@@ -428,6 +437,10 @@ class _MsgBubble extends StatelessWidget {
                 ),
                 if (msg.products != null) _ProductsRail(
                     products: msg.products!, ar: ar),
+                // v2.1.78 — rich structured cards (loyalty, order status,
+                // try-on, fit, cart, reviewers, location, payment…).
+                ...buildBeenaCards(context, msg.extra, ar,
+                    (t) => onSend?.call(t)),
               ],
             ),
           ),
