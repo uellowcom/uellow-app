@@ -184,7 +184,42 @@ class _OrderConfirmationScreenState extends State<OrderConfirmationScreen>
         ]),
       ),
       const SizedBox(height: 30),
-      _ctaRow(context),
+      // v2.2.05 — SUCCESS gets its own CTAs (track + keep shopping); the
+      // retry-payment/back-to-cart row belongs to the FAILURE screen only.
+      _successCtaRow(context),
+    ]);
+  }
+
+  Widget _successCtaRow(BuildContext context) {
+    final ar = UellowApi.instance.lang == 'ar';
+    return Column(children: [
+      if (widget.args.orderId != null)
+        SizedBox(width: double.infinity, child: ElevatedButton.icon(
+          onPressed: () => Navigator.of(context).pushReplacementNamed(
+              '/order', arguments: {'id': widget.args.orderId}),
+          icon: const Icon(Icons.local_shipping_outlined, size: 16),
+          label: Text(ar ? 'تتبع طلبك' : 'Track your order',
+              style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 15)),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: UellowColors.yellow,
+            foregroundColor: UellowColors.darkBrown,
+            padding: const EdgeInsets.symmetric(vertical: 16),
+          ),
+        )),
+      const SizedBox(height: 10),
+      SizedBox(width: double.infinity, child: OutlinedButton.icon(
+        onPressed: () => Navigator.of(context)
+            .pushNamedAndRemoveUntil('/home', (_) => false),
+        icon: const Icon(Icons.storefront_outlined, size: 16,
+            color: UellowColors.darkBrown),
+        label: Text(ar ? 'متابعة التسوق' : 'Continue shopping',
+            style: const TextStyle(color: UellowColors.ink,
+                fontWeight: FontWeight.w800)),
+        style: OutlinedButton.styleFrom(
+          padding: const EdgeInsets.symmetric(vertical: 14),
+          side: const BorderSide(color: UellowColors.border, width: 1.5),
+        ),
+      )),
     ]);
   }
 
