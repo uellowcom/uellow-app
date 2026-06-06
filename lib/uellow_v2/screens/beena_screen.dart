@@ -262,9 +262,23 @@ class _BeenaScreenState extends State<BeenaScreen> {
     }
   }
 
+  /// Strip URLs / markdown / table pipes so the VOICE reads natural prose
+  /// only — never "h t t p s slash slash…".
+  String _speakable(String t) => t
+      .replaceAll(RegExp(r'https?://\S+'), '')
+      .replaceAll(RegExp(r'(?<![\w])/(?:shop|loyalty|tryon|web|smart-fit)\S*'), '')
+      .replaceAll(RegExp(r'\*\*|__|`'), '')
+      .replaceAll(RegExp(r'^\s*\|.*\|\s*$', multiLine: true), '')
+      .replaceAll(RegExp(r'^#{1,3}\s+', multiLine: true), '')
+      .replaceAll(RegExp(r'\n{2,}'), '\n')
+      .trim();
+
   // Listen ⇄ Pause: tapping while this reply is playing stops it.
+  // NOTE: the play-state KEY stays the RAW bubble text (what the UI compares
+  // against); only the text sent to TTS is cleaned.
   Future<void> _speak(String text) async {
-    if (text.trim().isEmpty) return;
+    final clean = _speakable(text);
+    if (clean.isEmpty) return;
     if (_playingKey == text) {            // currently playing → pause
       try { await _player.stop(); } catch (_) {}
       if (mounted) setState(() => _playingKey = null);
@@ -276,7 +290,7 @@ class _BeenaScreenState extends State<BeenaScreen> {
         Uri.parse('${UellowApi.instance.baseUrl}/ai/tts'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'jsonrpc': '2.0', 'params': {
-          'text': text, 'lang': UellowApi.instance.lang,
+          'text': clean, 'lang': UellowApi.instance.lang,
         }}),
       ).timeout(const Duration(seconds: 40));
       final j = jsonDecode(utf8.decode(r.bodyBytes)) as Map<String, dynamic>;

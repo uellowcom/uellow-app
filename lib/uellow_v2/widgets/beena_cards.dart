@@ -170,6 +170,9 @@ class BeenaRichText extends StatelessWidget {
   final String text;
   final Color? color;
 
+  static final _urlRe = RegExp(
+      r'(https?://[^\s)\]»،]+|(?<![\w/])/(?:shop|loyalty|tryon|web|smart-fit)[^\s)\]»،]*)');
+
   List<InlineSpan> _inline(String s, TextStyle base) {
     final spans = <InlineSpan>[];
     final re = RegExp(r'\*\*(.+?)\*\*|__(.+?)__');
@@ -185,8 +188,86 @@ class BeenaRichText extends StatelessWidget {
     return spans;
   }
 
+  // ── Links: never dead text. Internal paths route to their screen
+  // (explicit tap = approval); anything else opens safely outside.
+  void _openLink(BuildContext context, String url) {
+    var path = url;
+    final m = RegExp(r'^https?://[^/]+(/.*)$').firstMatch(url);
+    if (m != null && url.contains('uellow')) path = m.group(1)!;
+    final pid = RegExp(r'(?:/shop/(?:product/)?[\w-]*?)(\d+)(?:\?|$|#)')
+        .firstMatch(path)?.group(1);
+    if (pid != null && path.contains('/shop/')) {
+      UellowRouter.goProduct(context, int.parse(pid));
+    } else if (path.startsWith('/shop/cart')) {
+      Navigator.pushNamed(context, Routes.cart);
+    } else if (path.startsWith('/loyalty')) {
+      Navigator.pushNamed(context, Routes.loyalty);
+    } else if (path.startsWith('/smart-fit')) {
+      Navigator.pushNamed(context, Routes.smartFit);
+    } else if (path.startsWith('/tryon')) {
+      Navigator.pushNamed(context, Routes.tryOn);
+    } else if (url.startsWith('http')) {
+      _launch(url);
+    } else {
+      Navigator.pushNamed(context, Routes.webview, arguments: {
+        'url': _abs(path), 'title': 'Beena'});
+    }
+  }
+
+  Widget _linkChip(BuildContext context, String url, bool ar) {
+    var label = url.replaceFirst(RegExp(r'^https?://[^/]+'), '');
+    if (label.length > 34) label = '${label.substring(0, 32)}…';
+    if (label.isEmpty) label = url;
+    return GestureDetector(
+      onTap: () => _openLink(context, url),
+      child: Container(
+        margin: const EdgeInsets.only(top: 3, bottom: 2),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF2F7F6),
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: const Color(0xFFB9D6D0)),
+        ),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          const Icon(Icons.link, size: 13, color: Color(0xFF2F6E62)),
+          const SizedBox(width: 5),
+          Flexible(child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w800,
+                  color: Color(0xFF2F6E62)))),
+        ]),
+      ),
+    );
+  }
+
+  // Markdown table row "| a | b | c |" → clean cells row. Separator rows
+  // ("|---|---|") are skipped entirely.
+  Widget? _tableRow(String t, TextStyle base) {
+    if (!t.startsWith('|')) return null;
+    if (RegExp(r'^\|[\s:\-|]+\|?$').hasMatch(t)) return const SizedBox.shrink();
+    final cells = t.split('|')
+        .map((c) => c.trim())
+        .where((c) => c.isNotEmpty)
+        .toList();
+    if (cells.isEmpty) return const SizedBox.shrink();
+    return Container(
+      margin: const EdgeInsets.only(bottom: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      decoration: BoxDecoration(color: const Color(0xFFF8FAF9),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: UellowColors.border)),
+      child: Row(children: [
+        Expanded(child: RichText(text: TextSpan(children: _inline(cells.first, base
+            .copyWith(fontWeight: FontWeight.w800))))),
+        for (final c in cells.skip(1)) Padding(
+          padding: const EdgeInsets.only(left: 8),
+          child: RichText(text: TextSpan(children: _inline(c, base)))),
+      ]),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final ar = UellowApi.instance.lang.toLowerCase().startsWith('ar');
     final base = TextStyle(fontSize: 13.5, height: 1.5,
         color: color ?? UellowColors.ink);
     final lines = text.split('\n');
@@ -194,28 +275,51 @@ class BeenaRichText extends StatelessWidget {
     for (var raw in lines) {
       final line = raw.trimRight();
       if (line.trim().isEmpty) { rows.add(const SizedBox(height: 6)); continue; }
-      final t = line.trimLeft();
+      var t = line.trimLeft();
+
+      // extract links → chips appended after the line
+      final links = _urlRe.allMatches(t).map((m) => m.group(0)!).toList();
+      for (final u in links) {
+        t = t.replaceFirst(u, '').trim();
+      }
+
+      final table = _tableRow(t, base);
+      final numbered = RegExp(r'^(\d{1,2})[\.\)]\s+(.*)$').firstMatch(t);
       final bullet = t.startsWith('- ') || t.startsWith('• ') || t.startsWith('* ');
-      if (bullet) {
-        final content = t.substring(2);
+      final heading = RegExp(r'^#{1,3}\s+');
+
+      if (table != null) {
+        rows.add(table);
+      } else if (bullet) {
         rows.add(Padding(padding: const EdgeInsets.only(bottom: 3, top: 1),
           child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Padding(padding: const EdgeInsets.only(top: 1, left: 2, right: 6),
               child: Text('•', style: base.copyWith(
                   fontWeight: FontWeight.w900, color: UellowColors.yellow))),
-            Expanded(child: RichText(text: TextSpan(children: _inline(content, base)))),
+            Expanded(child: RichText(text: TextSpan(children: _inline(t.substring(2), base)))),
           ])));
-      } else {
-        // strip leading "## " heading markers → bold line
-        final heading = RegExp(r'^#{1,3}\s+');
-        if (heading.hasMatch(t)) {
-          rows.add(Padding(padding: const EdgeInsets.only(top: 4, bottom: 2),
-            child: RichText(text: TextSpan(children:
-                _inline(t.replaceFirst(heading, ''), base.copyWith(fontWeight: FontWeight.w900))))));
-        } else {
-          rows.add(Padding(padding: const EdgeInsets.only(bottom: 2),
-            child: RichText(text: TextSpan(children: _inline(t, base)))));
-        }
+      } else if (numbered != null) {
+        rows.add(Padding(padding: const EdgeInsets.only(bottom: 3, top: 1),
+          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Padding(padding: const EdgeInsets.only(top: 1, left: 2, right: 6),
+              child: Text('${numbered.group(1)}.', style: base.copyWith(
+                  fontWeight: FontWeight.w900, color: const Color(0xFFC99000)))),
+            Expanded(child: RichText(text: TextSpan(
+                children: _inline(numbered.group(2)!, base)))),
+          ])));
+      } else if (heading.hasMatch(t)) {
+        rows.add(Padding(padding: const EdgeInsets.only(top: 4, bottom: 2),
+          child: RichText(text: TextSpan(children:
+              _inline(t.replaceFirst(heading, ''), base.copyWith(fontWeight: FontWeight.w900))))));
+      } else if (t.isNotEmpty) {
+        rows.add(Padding(padding: const EdgeInsets.only(bottom: 2),
+          child: RichText(text: TextSpan(children: _inline(t, base)))));
+      }
+      // link chips under the line they came from
+      if (links.isNotEmpty) {
+        rows.add(Wrap(spacing: 6, children: [
+          for (final u in links) _linkChip(context, u, ar),
+        ]));
       }
     }
     return Column(crossAxisAlignment: CrossAxisAlignment.start,
