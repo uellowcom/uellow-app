@@ -966,6 +966,9 @@ class _OrdersGrid extends StatelessWidget {
     final labels = ar ? _ar : _en;
     return GridView.builder(
       shrinkWrap: true,
+      // v2.2.07 — explicit zero padding: with extendBody the inherited
+      // MediaQuery bottom inset injected a phantom gap below the grid.
+      padding: EdgeInsets.zero,
       physics: const NeverScrollableScrollPhysics(),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 5, crossAxisSpacing: 6, mainAxisSpacing: 6, childAspectRatio: 0.75,
@@ -1074,6 +1077,9 @@ class _ActionTilesState extends State<_ActionTiles> {
     final ar = UellowApi.instance.lang == 'ar';
     return GridView.builder(
       shrinkWrap: true,
+      // v2.2.07 — explicit zero padding: with extendBody the inherited
+      // MediaQuery bottom inset injected a phantom gap below the grid.
+      padding: EdgeInsets.zero,
       physics: const NeverScrollableScrollPhysics(),
       // v2.1.20 — bigger tiles per request (icons were tiny).
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(

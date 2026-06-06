@@ -59,7 +59,15 @@ class BlockEnvelope extends StatelessWidget {
     final innerPadX  = ((props['bg_pad_x'] as num?)?.toDouble() ?? 6).clamp(0, 40).toDouble();
     final innerPadY  = ((props['bg_pad_y'] as num?)?.toDouble() ?? 8).clamp(0, 40).toDouble();
 
-    Widget content = RepaintBoundary(child: child);
+    // v2.2.07 — strip the inherited bottom inset (extendBody injects the
+    // nav height into MediaQuery.padding): inner shrinkWrap grids/lists
+    // without an explicit `padding:` were sprouting a phantom gap under
+    // every block. The OUTER page scroll keeps its own inset.
+    Widget content = MediaQuery.removePadding(
+      context: context,
+      removeBottom: true,
+      child: RepaintBoundary(child: child),
+    );
 
     if (hasBg) {
       content = Container(
