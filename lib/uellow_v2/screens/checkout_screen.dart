@@ -1106,20 +1106,24 @@ class _ShippingMethodList extends StatelessWidget {
                 Flexible(child: Text(name, style: const TextStyle(
                     fontSize: 12, fontWeight: FontWeight.w800,
                     color: UellowColors.ink))),
-                if (unavailable) Container(
-                  margin: const EdgeInsetsDirectional.only(start: 6),
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 6, vertical: 1.5),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFFFF1F0),
-                    border: Border.all(color: const Color(0xFFFFC9C5)),
-                    borderRadius: BorderRadius.circular(999),
+                // v2.1.98 — the chip sits at the END of the line.
+                if (unavailable) ...[
+                  const Spacer(),
+                  Container(
+                    margin: const EdgeInsetsDirectional.only(start: 6),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 6, vertical: 1.5),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFFF1F0),
+                      border: Border.all(color: const Color(0xFFFFC9C5)),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Text(lang == 'ar' ? '⏰ غير متاح الآن' : '⏰ Unavailable now',
+                        style: const TextStyle(fontSize: 8.5,
+                            fontWeight: FontWeight.w900,
+                            color: Color(0xFFB91C1C))),
                   ),
-                  child: Text(lang == 'ar' ? '⏰ غير متاح الآن' : '⏰ Unavailable now',
-                      style: const TextStyle(fontSize: 8.5,
-                          fontWeight: FontWeight.w900,
-                          color: Color(0xFFB91C1C))),
-                ),
+                ],
               ]),
               if (unavailable && availNote.isNotEmpty) Padding(
                 padding: const EdgeInsets.only(top: 2),
