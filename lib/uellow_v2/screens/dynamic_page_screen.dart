@@ -18,6 +18,7 @@ import '../router/uellow_router.dart';
 import '../widgets/flash_banner.dart' show BannerPattern;
 import '../widgets/product_card.dart';
 import 'dynamic_block_extras.dart';
+import 'promo_page_blocks.dart';
 
 class DynamicPageScreen extends StatefulWidget {
   const DynamicPageScreen({super.key, required this.slug});
@@ -268,6 +269,28 @@ Widget _renderBlock(BuildContext c, Map<String, dynamic> b, DynTheme t) {
           variant: kind.replaceFirst('promo-', ''),
           p: p, data: data, t: t, ar: ar); break;
     case 'trust-strip':    inner = TrustStripBlock(p: p, t: t, ar: ar); break;
+    // v2.2.06 — PROMOTION PAGE blocks (10 designs, see promo_page_blocks).
+    case 'promo-hero':
+      // full-bleed: kill the envelope side padding by default
+      if (p['pad_x'] == null) p['pad_x'] = 0;
+      if (p['pad_y'] == null) p['pad_y'] = 0;
+      inner = PromoHeroBlock(p: p, data: data, ar: ar); break;
+    case 'promo-countdown':  inner = PromoCountdownBlock(p: p, data: data, ar: ar); break;
+    case 'promo-carousel':   inner = PromoCarouselBlock(p: p, data: data, ar: ar); break;
+    case 'promo-mega2':      inner = PromoMegaGridBlock(p: p, data: data, ar: ar); break;
+    case 'promo-flash-rail': inner = PromoFlashRailBlock(p: p, data: data, ar: ar); break;
+    case 'promo-masonry':    inner = PromoMasonryBlock(p: p, data: data, ar: ar); break;
+    case 'promo-coupon':     inner = PromoCouponBlock(p: p, ar: ar); break;
+    case 'promo-tiers':      inner = PromoTiersBlock(p: p, ar: ar); break;
+    case 'promo-marquee':
+      if (p['pad_x'] == null) p['pad_x'] = 0;
+      inner = PromoMarqueeBlock(p: p, ar: ar); break;
+    case 'promo-banner-cta':
+      inner = Builder(builder: (ctx) => PromoBannerCtaBlock(p: p, ar: ar,
+          onTap: () {
+        final l = (p['link'] as Map?)?.cast<String, dynamic>();
+        if (l != null) openBlockLink(ctx, l);
+      })); break;
     default:               return const SizedBox.shrink();
   }
   return BlockEnvelope(props: p, theme: t, child: inner);

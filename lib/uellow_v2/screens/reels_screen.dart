@@ -162,6 +162,9 @@ class _ReelsScreenState extends State<ReelsScreen> {
     return Scaffold(
       backgroundColor: Colors.black,
       bottomNavigationBar: const UellowBottomNav(active: UNavTab.reels),
+      // v2.2.06 — page content shows THROUGH the floating strips area
+      // (Beena bubble / reviewers banner): true transparency.
+      extendBody: true,
       body: SafeArea(child: Stack(children: [
         if (_items.isEmpty && _loading)
           const Center(child: CircularProgressIndicator(color: Colors.white))

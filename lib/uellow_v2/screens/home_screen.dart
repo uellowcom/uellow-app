@@ -186,6 +186,9 @@ class _HomeScreenState extends State<HomeScreen> {
         }),
       )),
       bottomNavigationBar: const UellowBottomNav(active: UNavTab.home),
+      // v2.2.06 — page content shows THROUGH the floating strips area
+      // (Beena bubble / reviewers banner): true transparency.
+      extendBody: true,
     );
   }
 

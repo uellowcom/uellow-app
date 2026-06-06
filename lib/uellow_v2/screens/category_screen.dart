@@ -57,6 +57,9 @@ class _CategoryScreenState extends State<CategoryScreen> {
     return Scaffold(
       backgroundColor: UellowColors.bg,
       bottomNavigationBar: const UellowBottomNav(active: UNavTab.shop),
+      // v2.2.06 — page content shows THROUGH the floating strips area
+      // (Beena bubble / reviewers banner): true transparency.
+      extendBody: true,
       body: SafeArea(child: Column(children: [
         const _CatTopBar(),
         // v2.1.57 — targeted announcement strip (admin-controlled).

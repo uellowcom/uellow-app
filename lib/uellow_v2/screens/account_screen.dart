@@ -80,6 +80,9 @@ class _AccountScreenState extends State<AccountScreen> {
     return Scaffold(
       backgroundColor: UellowColors.bg,
       bottomNavigationBar: const UellowBottomNav(active: UNavTab.account),
+      // v2.2.06 — page content shows THROUGH the floating strips area
+      // (Beena bubble / reviewers banner): true transparency.
+      extendBody: true,
       body: SafeArea(bottom: false, child: FutureBuilder<Map<String, dynamic>?>(
         future: _future,
         builder: (_, snap) {
