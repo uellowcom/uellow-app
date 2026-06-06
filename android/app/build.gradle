@@ -37,10 +37,25 @@ android {
         multiDexEnabled = true
     }
 
+    // v2.2.07 — Google Play upload key (generated 2026-06-06, reset
+    // requested in Play Console). Used ONLY when UELLOW_SIGN=upload so
+    // direct-download APKs keep the debug signature (in-place updates).
+    signingConfigs {
+        upload {
+            storeFile file('/root/secrets/uellow-upload-2026.jks')
+            storePassword new File('/root/secrets/uellow-upload-2026.password.txt').exists()
+                ? new File('/root/secrets/uellow-upload-2026.password.txt').text.trim() : ''
+            keyAlias 'uellow-upload'
+            keyPassword new File('/root/secrets/uellow-upload-2026.password.txt').exists()
+                ? new File('/root/secrets/uellow-upload-2026.password.txt').text.trim() : ''
+        }
+    }
+
     buildTypes {
         release {
             // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.debug
+            signingConfig = (System.getenv('UELLOW_SIGN') == 'upload')
+                ? signingConfigs.upload : signingConfigs.debug
         }
     }
 }
