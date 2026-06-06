@@ -15,6 +15,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../api/uellow_api.dart';
 import '../router/uellow_router.dart';
 import '../theme/uellow_theme.dart';
+import '../widgets/review_prompt_dialog.dart';
 import '../widgets/uellow_bottom_nav.dart';
 
 class AccountScreen extends StatefulWidget {
@@ -767,21 +768,46 @@ class _RecentOrderCard extends StatelessWidget {
                       style: const TextStyle(fontSize: 11.5,
                           color: UellowColors.muted, fontWeight: FontWeight.w600)),
                 ])),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-                  decoration: BoxDecoration(
-                    color: UellowColors.darkBrown,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Row(mainAxisSize: MainAxisSize.min, children: [
-                    Text(ar ? 'تتبع' : 'Track',
-                        style: const TextStyle(color: UellowColors.yellowLight,
-                            fontSize: 11, fontWeight: FontWeight.w900)),
-                    const SizedBox(width: 4),
-                    const Icon(Icons.arrow_forward, size: 12,
-                        color: UellowColors.yellowLight),
-                  ]),
-                ),
+                // v2.1.94 — delivered → the button becomes a green "Rate"
+                // that opens the review sheet for THIS order.
+                status == 'delivered'
+                    ? GestureDetector(
+                        onTap: () => ReviewPromptService.showForOrder(
+                            context, (order['id'] as num?)?.toInt() ?? 0),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 7),
+                          decoration: BoxDecoration(
+                            color: UellowColors.successDk,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Row(mainAxisSize: MainAxisSize.min, children: [
+                            const Icon(Icons.star_rounded, size: 13,
+                                color: Colors.white),
+                            const SizedBox(width: 4),
+                            Text(ar ? 'قيّم' : 'Rate',
+                                style: const TextStyle(color: Colors.white,
+                                    fontSize: 11, fontWeight: FontWeight.w900)),
+                          ]),
+                        ),
+                      )
+                    : Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 7),
+                        decoration: BoxDecoration(
+                          color: UellowColors.darkBrown,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(mainAxisSize: MainAxisSize.min, children: [
+                          Text(ar ? 'تتبع' : 'Track',
+                              style: const TextStyle(
+                                  color: UellowColors.yellowLight,
+                                  fontSize: 11, fontWeight: FontWeight.w900)),
+                          const SizedBox(width: 4),
+                          const Icon(Icons.arrow_forward, size: 12,
+                              color: UellowColors.yellowLight),
+                        ]),
+                      ),
               ])),
           // ── Progress dots
           Padding(padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),

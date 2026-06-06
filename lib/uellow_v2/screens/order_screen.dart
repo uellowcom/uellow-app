@@ -381,7 +381,7 @@ class _MapBoxState extends State<_MapBox> {
     final markersJs = markers.join('\n');
     // route line only when NOT in clean live-tracking mode
     final polyJs = (!liveTracking && coords.length >= 2)
-        ? "L.polyline([${coords.join(',')}],{color:'#2F6E62',weight:3,opacity:0.55,dashArray:'2,8',lineCap:'round'}).addTo(map);"
+        ? "L.polyline([${coords.join(',')}],{color:'#E11D2E',weight:3,opacity:0.75,dashArray:'2,8',lineCap:'round'}).addTo(map);"
         : "";
     return '''
 <!doctype html><html><head><meta charset="utf-8"/>

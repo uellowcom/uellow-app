@@ -311,13 +311,13 @@ class _UellowBottomNavState extends State<UellowBottomNav> {
     // v2.1.74 — the banner + nav sit on a WHITE base so the page's grey
     // scaffold background never shows as a frame around the floating
     // banner (the banner appears "alone", merged with the nav).
-    return Material(
-      color: Colors.white,
-      child: Column(mainAxisSize: MainAxisSize.min, children: [
-        const ReviewReplyBanner(),
-        // v2.1.92 — the nudge is now a small chat bubble anchored over the
-        // Beena tab (its tail points at the icon) and auto-dismisses.
-        ValueListenableBuilder<List<DynNavItem>>(
+    return Column(mainAxisSize: MainAxisSize.min, children: [
+      // v2.1.92/94 — the Beena chat bubble floats on a TRANSPARENT backdrop
+      // (page content shows through via extendBody) OUTSIDE the white nav
+      // base — it used to inherit a full-width white strip.
+      Material(
+        type: MaterialType.transparency,
+        child: ValueListenableBuilder<List<DynNavItem>>(
           valueListenable: NavBarCache.instance.items,
           builder: (_, navItems, __) {
             double? anchor;
@@ -329,19 +329,25 @@ class _UellowBottomNavState extends State<UellowBottomNav> {
             return BeenaNudgeStrip(anchorFraction: anchor);
           },
         ),
-        AnnouncementStrip(screen: _stripScreen()),
-        ValueListenableBuilder<List<DynNavItem>>(
-          valueListenable: NavBarCache.instance.items,
-          builder: (_, items, __) {
-            if (items.isNotEmpty) return _buildDynamic(context, items);
-            // v2.1.69 — the OLD hardcoded tabs are gone for good: until
-            // the designed nav loads (first-ever launch only, thanks to
-            // the snapshot), a neutral placeholder bar holds the space.
-            return _buildPlaceholder();
-          },
-        ),
-      ]),
-    );
+      ),
+      Material(
+        color: Colors.white,
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          const ReviewReplyBanner(),
+          AnnouncementStrip(screen: _stripScreen()),
+          ValueListenableBuilder<List<DynNavItem>>(
+            valueListenable: NavBarCache.instance.items,
+            builder: (_, items, __) {
+              if (items.isNotEmpty) return _buildDynamic(context, items);
+              // v2.1.69 — the OLD hardcoded tabs are gone for good: until
+              // the designed nav loads (first-ever launch only, thanks to
+              // the snapshot), a neutral placeholder bar holds the space.
+              return _buildPlaceholder();
+            },
+          ),
+        ]),
+      ),
+    ]);
   }
 
   Widget _buildPlaceholder() {

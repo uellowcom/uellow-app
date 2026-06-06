@@ -54,6 +54,38 @@ class ReviewPromptService {
       );
     } catch (_) {/* never block startup */}
   }
+
+  /// v2.1.94 — explicit "Rate" tap (account card): force-show the dialog
+  /// for ONE order, ignoring the session/done/snooze guards.
+  static Future<void> showForOrder(BuildContext context, int orderId) async {
+    final ar = UellowApi.instance.lang.toLowerCase().startsWith('ar');
+    try {
+      final token = await UellowApi.instance.tokenStore.readToken();
+      if (token == null || token.isEmpty) return;
+      final r = await http.get(
+        Uri.parse('${UellowApi.instance.baseUrl}'
+            '/api/mobile/v2/reviews/prompt?order_id=$orderId'),
+        headers: {'Accept': 'application/json',
+                  'Authorization': 'Bearer $token'},
+      ).timeout(const Duration(seconds: 8));
+      final j = jsonDecode(utf8.decode(r.bodyBytes)) as Map<String, dynamic>;
+      final prompt = (j['data']?['prompt'] as Map?)?.cast<String, dynamic>();
+      if (!context.mounted) return;
+      if (prompt == null) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(ar
+                ? 'قيّمت كل منتجات هذا الطلب ✓'
+                : 'You already reviewed everything in this order ✓'),
+            duration: const Duration(seconds: 2)));
+        return;
+      }
+      showModalBottomSheet(
+        context: context, isScrollControlled: true,
+        backgroundColor: Colors.transparent,
+        builder: (_) => ReviewPromptDialog(prompt: prompt),
+      );
+    } catch (_) {/* non-blocking */}
+  }
 }
 
 class ReviewPromptDialog extends StatefulWidget {
