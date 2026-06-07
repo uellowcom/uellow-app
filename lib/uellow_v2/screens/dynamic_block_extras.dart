@@ -5081,6 +5081,25 @@ class ReelsStripBlock extends StatelessWidget {
       DynSectionHeader(props: p, theme: t, ar: ar,
           fallbackEn: '🔥 Trending videos'),
       body,
+      // v2.2.24 — yellow "View more" button → full Reels screen (on by
+      // default; hide with show_more:false).
+      if (p['show_more'] != false) Padding(
+        padding: const EdgeInsets.fromLTRB(12, 10, 12, 2),
+        child: SizedBox(height: 40, child: ElevatedButton(
+          onPressed: () => Navigator.pushNamed(context, '/reels'),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: _parseColor(p['btn_color']) ?? UellowColors.yellow,
+            foregroundColor: _parseColor(p['btn_text_color'])
+                ?? UellowColors.darkBrown,
+            elevation: 0,
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12)),
+          ),
+          child: Text(ar ? 'المزيد من الفيديوهات' : 'View more videos',
+              style: const TextStyle(fontWeight: FontWeight.w900,
+                  fontSize: 13)),
+        )),
+      ),
     ]);
   }
 }
