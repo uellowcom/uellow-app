@@ -278,13 +278,34 @@ class _CollectionScreenState extends State<CollectionScreen> {
   Widget build(BuildContext context) {
     final lang = UellowApi.instance.lang;
     final ar = lang.toLowerCase().startsWith('ar');
+    // v2.2.24 — filtered-set links carry an auto label like "Filtered: …";
+    // show a clean, human title derived from the filters instead.
+    String? filterTitle;
+    final fl = widget.filters;
+    if (fl != null && fl.isNotEmpty) {
+      if ((fl['min_discount'] != null && (fl['min_discount'] as num) > 0) ||
+          fl['on_sale'] == true) {
+        final d = (fl['min_discount'] as num?)?.toInt() ?? 0;
+        filterTitle = d >= 40
+            ? (ar ? 'تصفية وخصومات' : 'Clearance')
+            : (ar ? 'عروض وتخفيضات' : 'Offers & deals');
+      } else if (fl['free_shipping'] == true) {
+        filterTitle = ar ? 'شحن مجاني' : 'Free shipping';
+      } else if ((fl['value_ids'] is List) &&
+          (fl['value_ids'] as List).isNotEmpty) {
+        filterTitle = ar ? 'مختارات لك' : 'Curated picks';
+      } else {
+        filterTitle = ar ? 'منتجات مختارة' : 'Selected products';
+      }
+    }
     final title = widget.searchQuery != null && widget.searchQuery!.isNotEmpty
         ? (ar ? 'نتائج "${widget.searchQuery}"' : 'Results for "${widget.searchQuery}"')
         : widget.brandName != null && widget.brandName!.isNotEmpty
           ? widget.brandName!
-          : (widget.feedTitle != null && widget.feedTitle!.isNotEmpty
+          : (filterTitle
+              ?? (widget.feedTitle != null && widget.feedTitle!.isNotEmpty
               ? widget.feedTitle!
-              : (_category?.name.current(lang) ?? (ar ? 'منتجات' : 'Products')));
+              : (_category?.name.current(lang) ?? (ar ? 'منتجات' : 'Products'))));
     final subs = _category?.children ?? const <UellowCategory>[];
     return Scaffold(
       backgroundColor: UellowColors.bg,

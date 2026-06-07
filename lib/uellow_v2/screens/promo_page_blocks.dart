@@ -689,6 +689,10 @@ class _PromoCarouselBlockState extends State<PromoCarouselBlock> {
     final fontColor = promoParseColor(p['font_color']) ?? UellowColors.ink;
     final link = (p['link'] as Map?)?.cast<String, dynamic>();
     final moreLabel = _tx(p, 'ctaEn', 'ctaAr', ar);
+    // v2.2.24 — dedicated button colours (fall back to the accent).
+    final btnColor = promoParseColor(p['btn_color']) ?? c1;
+    final btnText = promoParseColor(p['btn_text_color'])
+        ?? UellowColors.darkBrown;
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       if (title.isNotEmpty || sub.isNotEmpty || link != null) Padding(
         padding: const EdgeInsets.fromLTRB(14, 2, 14, 8),
@@ -700,12 +704,19 @@ class _PromoCarouselBlockState extends State<PromoCarouselBlock> {
             if (sub.isNotEmpty) Text(sub, style: const TextStyle(
                 fontSize: 11.5, color: UellowColors.muted)),
           ])),
+          // v2.2.24 — the "View more" button lives in the HEADER only,
+          // styled with the configurable button colour.
           if (link != null) GestureDetector(
             onTap: () => openBlockLink(context, link),
-            child: Text(ar ? (moreLabel.isEmpty ? 'عرض الكل' : moreLabel)
-                    : (moreLabel.isEmpty ? 'See all' : moreLabel),
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800,
-                    color: c1)),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+              decoration: BoxDecoration(color: btnColor,
+                  borderRadius: BorderRadius.circular(999)),
+              child: Text(ar ? (moreLabel.isEmpty ? 'عرض المزيد' : moreLabel)
+                      : (moreLabel.isEmpty ? 'View more' : moreLabel),
+                  style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w900,
+                      color: btnText)),
+            ),
           ),
         ]),
       ),
@@ -732,23 +743,7 @@ class _PromoCarouselBlockState extends State<PromoCarouselBlock> {
                 borderRadius: BorderRadius.circular(3)),
           ),
       ]),
-      // v2.2.21 — yellow "View more" button (when a link target is set).
-      if (link != null) Padding(
-        padding: const EdgeInsets.fromLTRB(14, 10, 14, 0),
-        child: SizedBox(height: 40, child: ElevatedButton(
-          onPressed: () => openBlockLink(context, link),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: c1, foregroundColor: UellowColors.darkBrown,
-            elevation: 0,
-            shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12)),
-          ),
-          child: Text(ar ? (moreLabel.isEmpty ? 'عرض المزيد' : moreLabel)
-                  : (moreLabel.isEmpty ? 'View more' : moreLabel),
-              style: const TextStyle(fontWeight: FontWeight.w900,
-                  fontSize: 13)),
-        )),
-      ),
+      // v2.2.24 — bottom button removed; it now lives in the header only.
     ]);
   }
 }
@@ -811,7 +806,9 @@ class PromoMegaGridBlock extends StatelessWidget {
               onPressed: () => openBlockLink(context,
                   (p['link'] as Map).cast<String, dynamic>()),
               style: ElevatedButton.styleFrom(
-                backgroundColor: rib, foregroundColor: Colors.white,
+                backgroundColor: promoParseColor(p['btn_color']) ?? rib,
+                foregroundColor: promoParseColor(p['btn_text_color'])
+                    ?? Colors.white,
                 elevation: 0,
                 shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12)),
@@ -819,8 +816,9 @@ class PromoMegaGridBlock extends StatelessWidget {
               child: Text(() {
                 final l = _tx(p, 'ctaEn', 'ctaAr', ar);
                 return l.isNotEmpty ? l : (ar ? 'عرض المزيد' : 'View more');
-              }(), style: const TextStyle(fontWeight: FontWeight.w900,
-                  fontSize: 13)),
+              }(), style: TextStyle(fontWeight: FontWeight.w900,
+                  fontSize: 13,
+                  color: promoParseColor(p['btn_text_color']) ?? Colors.white)),
             )),
         ),
       ]),
