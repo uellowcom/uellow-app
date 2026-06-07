@@ -349,6 +349,9 @@ void _gotoScreen(BuildContext c, String name) {
     'loyalty': Routes.loyalty, 'wallet': Routes.wallet,
     'coupons': Routes.coupons, 'notifications': Routes.notifications,
     'search': Routes.search, 'home': Routes.home,
+    // v2.2.23 — more deep-linkable screens.
+    'affiliate': Routes.affiliate, 'reels': Routes.reels,
+    'bundles': Routes.bundles, 'tryon': Routes.tryOn,
   };
   final r = map[name];
   if (r != null) Navigator.of(c).pushNamed(r);

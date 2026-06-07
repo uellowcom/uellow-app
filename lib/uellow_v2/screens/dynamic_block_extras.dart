@@ -2385,6 +2385,9 @@ void _openLink(BuildContext c, Map<String, dynamic>? link) {
         'account': Routes.account, 'orders': Routes.orders, 'beena': Routes.beena,
         'loyalty': Routes.loyalty, 'wallet': Routes.wallet, 'coupons': Routes.coupons,
         'notifications': Routes.notifications, 'search': Routes.search, 'home': Routes.home,
+        // v2.2.23 — affiliate / reels / bundles / try-on deep links.
+        'affiliate': Routes.affiliate, 'reels': Routes.reels,
+        'bundles': Routes.bundles, 'tryon': Routes.tryOn,
       };
       final r = map[value];
       if (r != null) Navigator.of(c).pushNamed(r);
