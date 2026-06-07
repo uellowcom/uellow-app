@@ -274,7 +274,11 @@ Widget _renderBlock(BuildContext c, Map<String, dynamic> b, DynTheme t) {
       // full-bleed: kill the envelope side padding by default
       if (p['pad_x'] == null) p['pad_x'] = 0;
       if (p['pad_y'] == null) p['pad_y'] = 0;
-      inner = PromoHeroBlock(p: p, data: data, ar: ar); break;
+      inner = Builder(builder: (ctx) => PromoHeroBlock(p: p, data: data,
+          ar: ar, onCta: () {
+        final l = (p['link'] as Map?)?.cast<String, dynamic>();
+        if (l != null) openBlockLink(ctx, l);
+      })); break;
     case 'promo-countdown':  inner = PromoCountdownBlock(p: p, data: data, ar: ar); break;
     case 'promo-carousel':   inner = PromoCarouselBlock(p: p, data: data, ar: ar); break;
     case 'promo-mega2':      inner = PromoMegaGridBlock(p: p, data: data, ar: ar); break;

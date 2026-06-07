@@ -283,13 +283,17 @@ class _ConfettiPainter extends CustomPainter {
   bool shouldRepaint(covariant _ConfettiPainter old) => old.t != t;
 }
 
-// ═══ 1. PROMO HERO — full-width animated campaign header ════════════════
+// ═══ 1. PROMO HERO — premium animated campaign header ══════════════════
+// v2.2.09 — designer rework: layered glow blobs, gradient display title,
+// heroic discount line ("UP TO 70%"), glass countdown with unit labels,
+// kicker chip, sparkle accents, optional CTA and a curved bottom edge.
 class PromoHeroBlock extends StatelessWidget {
   const PromoHeroBlock({super.key, required this.p, required this.data,
-      required this.ar});
+      required this.ar, this.onCta});
   final Map<String, dynamic> p;
   final Map<String, dynamic> data;
   final bool ar;
+  final VoidCallback? onCta;
 
   @override
   Widget build(BuildContext context) {
@@ -301,7 +305,7 @@ class PromoHeroBlock extends StatelessWidget {
     final c3 = promoParseColor(p['c3']) ?? Colors.white;
     final txt = promoParseColor(p['text_color']) ?? Colors.white;
     final anim = (p['animation'] ?? 'aurora').toString();
-    final h = ((p['height'] as num?)?.toDouble() ?? 170).clamp(120, 420)
+    final h = ((p['height'] as num?)?.toDouble() ?? 210).clamp(140, 460)
         .toDouble();
     final title = _tx(p, 'titleEn', 'titleAr', ar).isNotEmpty
         ? _tx(p, 'titleEn', 'titleAr', ar)
@@ -309,101 +313,214 @@ class PromoHeroBlock extends StatelessWidget {
     final sub = _tx(p, 'subEn', 'subAr', ar).isNotEmpty
         ? _tx(p, 'subEn', 'subAr', ar)
         : ((promo?['subtitle'] as Map?)?[ar ? 'ar' : 'en'] ?? '').toString();
+    final kicker = _tx(p, 'kickerEn', 'kickerAr', ar);
+    final discount = (p['discount_text'] ?? '').toString().trim();
+    final cta = _tx(p, 'ctaEn', 'ctaAr', ar);
     final logo = (p['logo_image'] ?? promo?['logo'] ?? '').toString();
     final emoji = (p['emoji'] ?? promo?['emoji'] ?? '🎉').toString();
     final endsRaw = (p['ends_at'] ?? promo?['ends_at'] ?? '').toString();
     final ends = DateTime.tryParse(endsRaw);
     final showCd = p['show_countdown'] != false && ends != null;
-    // v2.2.08 — pattern overlay (same 22 artworks as the product-page
-    // banner) + compact ADAPTIVE layout: short heroes lay logo+text side
-    // by side; tall ones stay centred. Rounded bottom for a premium feel.
     final pattern = (p['pattern'] ?? promo?['pattern'] ?? 'none').toString();
-    final compact = h < 200;
+    final curved = p['bottom_curve'] != false;
 
-    final logoRing = Container(
-      width: compact ? 46 : 60, height: compact ? 46 : 60,
-      decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.white,
-          border: Border.all(color: Colors.white.withValues(alpha: .65),
-              width: 2.5),
-          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: .25),
-              blurRadius: 12, offset: const Offset(0, 4))]),
-      clipBehavior: Clip.antiAlias,
-      alignment: Alignment.center,
-      child: logo.isNotEmpty
-          ? CachedNetworkImage(imageUrl: _abs(logo),
-              width: compact ? 46 : 60, height: compact ? 46 : 60,
-              fit: BoxFit.cover,
-              errorWidget: (_, __, ___) => Text(emoji,
-                  style: TextStyle(fontSize: compact ? 22 : 28)))
-          : Text(emoji, style: TextStyle(fontSize: compact ? 22 : 28)),
-    );
-    final titleTxt = Text(title, maxLines: 2,
-        textAlign: compact ? TextAlign.start : TextAlign.center,
-        overflow: TextOverflow.ellipsis,
-        style: TextStyle(color: txt, fontSize: compact ? 18 : 23,
-            height: 1.12, fontWeight: FontWeight.w900,
-            shadows: const [Shadow(color: Color(0x59000000), blurRadius: 8)]));
-    final subTxt = sub.isEmpty ? null : Text(sub, maxLines: 2,
-        textAlign: compact ? TextAlign.start : TextAlign.center,
-        overflow: TextOverflow.ellipsis,
-        style: TextStyle(color: txt.withValues(alpha: .92),
-            fontSize: compact ? 11.5 : 13, fontWeight: FontWeight.w600));
-    final cd = !showCd ? null : Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-          color: Colors.black.withValues(alpha: .18),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.white.withValues(alpha: .25))),
-      child: PromoCountdown(endsAt: ends, color: txt, compact: compact),
-    );
-
-    return Container(
+    final core = SizedBox(
       height: h,
-      clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        borderRadius: const BorderRadius.vertical(
-            bottom: Radius.circular(24)),
-        boxShadow: [BoxShadow(color: c2.withValues(alpha: .35),
-            blurRadius: 18, offset: const Offset(0, 8))],
-      ),
       child: Stack(fit: StackFit.expand, children: [
         _AnimatedPromoBg(style: anim, c1: c1, c2: c2, c3: c3),
         if (pattern != 'none')
           CustomPaint(painter: BannerPattern(style: pattern),
               child: const SizedBox.expand()),
-        // soft veil for legibility
+        // depth: two oversized glow blobs
+        Positioned(top: -70, left: -50, child: _glow(c3, 190)),
+        Positioned(bottom: -90, right: -60, child: _glow(Colors.white, 230)),
+        // legibility veil
         Container(decoration: BoxDecoration(gradient: LinearGradient(
             begin: Alignment.topCenter, end: Alignment.bottomCenter,
-            colors: [Colors.black.withValues(alpha: .04),
-                     Colors.black.withValues(alpha: .22)]))),
+            colors: [Colors.black.withValues(alpha: .05),
+                     Colors.black.withValues(alpha: .28)]))),
+        // sparkle accents
+        const Positioned(top: 18, right: 26,
+            child: Text('✦', style: TextStyle(
+                color: Colors.white70, fontSize: 17))),
+        const Positioned(top: 52, left: 22,
+            child: Text('✧', style: TextStyle(
+                color: Colors.white38, fontSize: 12))),
+        Positioned(bottom: curved ? 48 : 26, right: 38,
+            child: const Text('✦', style: TextStyle(
+                color: Colors.white38, fontSize: 11))),
         SafeArea(bottom: false, child: Padding(
-          padding: const EdgeInsets.fromLTRB(18, 10, 18, 14),
-          child: compact
-              ? Row(children: [
-                  logoRing,
-                  const SizedBox(width: 12),
-                  Expanded(child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                    titleTxt,
-                    if (subTxt != null) ...[
-                      const SizedBox(height: 2), subTxt],
-                    if (cd != null) ...[const SizedBox(height: 7), cd],
-                  ])),
-                ])
-              : Column(mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                  logoRing,
-                  const SizedBox(height: 8),
-                  titleTxt,
-                  if (subTxt != null) ...[const SizedBox(height: 3), subTxt],
-                  if (cd != null) ...[const SizedBox(height: 10), cd],
+          padding: EdgeInsets.fromLTRB(18, 12, 18, curved ? 30 : 16),
+          child: Column(mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+            // ── logo + kicker row ──
+            Row(mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.center, children: [
+              _logoRing(logo, emoji, 44),
+              if (kicker.isNotEmpty) ...[
+                const SizedBox(width: 9),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 11, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: .16),
+                    borderRadius: BorderRadius.circular(999),
+                    border: Border.all(
+                        color: Colors.white.withValues(alpha: .4)),
+                  ),
+                  child: Text(kicker.toUpperCase(), style: TextStyle(
+                      color: txt, fontSize: 10.5, letterSpacing: 1.4,
+                      fontWeight: FontWeight.w900)),
+                ),
+              ],
+            ]),
+            const SizedBox(height: 8),
+            // ── display title with gradient sheen ──
+            ShaderMask(
+              shaderCallback: (r) => LinearGradient(
+                  begin: Alignment.topCenter, end: Alignment.bottomCenter,
+                  colors: [txt, txt.withValues(alpha: .82)]).createShader(r),
+              child: Text(title, textAlign: TextAlign.center, maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: txt, height: 1.08,
+                      fontSize: discount.isNotEmpty ? 21 : 26,
+                      fontWeight: FontWeight.w900, letterSpacing: -.3,
+                      shadows: const [Shadow(color: Color(0x66000000),
+                          blurRadius: 10, offset: Offset(0, 3))])),
+            ),
+            // ── heroic discount line ──
+            if (discount.isNotEmpty) Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Row(mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.center, children: [
+                Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                  Text(ar ? 'خصم' : 'UP', style: TextStyle(color: txt,
+                      fontSize: 13, height: 1.05,
+                      fontWeight: FontWeight.w900)),
+                  Text(ar ? 'حتى' : 'TO', style: TextStyle(
+                      color: txt.withValues(alpha: .85), fontSize: 13,
+                      height: 1.05, fontWeight: FontWeight.w900)),
                 ]),
+                const SizedBox(width: 7),
+                ShaderMask(
+                  shaderCallback: (r) => LinearGradient(
+                      colors: [c3, Colors.white]).createShader(r),
+                  child: Text(discount, style: const TextStyle(
+                      color: Colors.white, fontSize: 42, height: 1.0,
+                      fontWeight: FontWeight.w900, fontStyle: FontStyle.italic,
+                      letterSpacing: -1,
+                      shadows: [Shadow(color: Color(0x73000000),
+                          blurRadius: 14, offset: Offset(0, 4))])),
+                ),
+              ]),
+            ),
+            if (sub.isNotEmpty) Padding(
+              padding: const EdgeInsets.only(top: 3),
+              child: Text(sub, textAlign: TextAlign.center, maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: txt.withValues(alpha: .9),
+                      fontSize: 12, fontWeight: FontWeight.w600)),
+            ),
+            if (showCd) Padding(
+              padding: const EdgeInsets.only(top: 10),
+              child: Column(children: [
+                Text(ar ? '⏰ ينتهي العرض خلال' : '⏰ OFFER ENDS IN',
+                    style: TextStyle(color: txt.withValues(alpha: .8),
+                        fontSize: 9.5, letterSpacing: 1.2,
+                        fontWeight: FontWeight.w800)),
+                const SizedBox(height: 5),
+                _glassCountdown(ends, txt),
+              ]),
+            ),
+            if (cta.isNotEmpty) Padding(
+              padding: const EdgeInsets.only(top: 10),
+              child: GestureDetector(
+                onTap: onCta,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 22, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(999),
+                    boxShadow: const [BoxShadow(color: Color(0x59000000),
+                        blurRadius: 12, offset: Offset(0, 4))],
+                  ),
+                  child: Text(cta, style: TextStyle(color: c2,
+                      fontSize: 13.5, fontWeight: FontWeight.w900)),
+                ),
+              ),
+            ),
+          ]),
         )),
       ]),
     );
+
+    if (!curved) {
+      return Container(
+        clipBehavior: Clip.antiAlias,
+        decoration: BoxDecoration(
+          borderRadius: const BorderRadius.vertical(
+              bottom: Radius.circular(24)),
+          boxShadow: [BoxShadow(color: c2.withValues(alpha: .35),
+              blurRadius: 18, offset: const Offset(0, 8))],
+        ),
+        child: core,
+      );
+    }
+    return ClipPath(clipper: _HeroWaveClipper(), child: core);
   }
+
+  Widget _glow(Color c, double size) => Container(
+        width: size, height: size,
+        decoration: BoxDecoration(shape: BoxShape.circle,
+            gradient: RadialGradient(colors: [
+              c.withValues(alpha: .35), c.withValues(alpha: 0)])),
+      );
+
+  Widget _logoRing(String logo, String emoji, double d) => Container(
+        width: d, height: d,
+        decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.white,
+            border: Border.all(
+                color: Colors.white.withValues(alpha: .6), width: 2.5),
+            boxShadow: const [BoxShadow(color: Color(0x4D000000),
+                blurRadius: 12, offset: Offset(0, 4))]),
+        clipBehavior: Clip.antiAlias,
+        alignment: Alignment.center,
+        child: logo.isNotEmpty
+            ? CachedNetworkImage(imageUrl: _abs(logo), width: d, height: d,
+                fit: BoxFit.cover,
+                errorWidget: (_, __, ___) => Text(emoji,
+                    style: TextStyle(fontSize: d * .48)))
+            : Text(emoji, style: TextStyle(fontSize: d * .48)),
+      );
+
+  Widget _glassCountdown(DateTime? ends, Color txt) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+            color: Colors.black.withValues(alpha: .22),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: Colors.white.withValues(alpha: .28))),
+        child: PromoCountdown(endsAt: ends, color: txt),
+      );
+}
+
+/// Concave wave cut along the hero's bottom edge.
+class _HeroWaveClipper extends CustomClipper<Path> {
+  @override
+  Path getClip(Size size) {
+    final p = Path()
+      ..lineTo(0, size.height - 26)
+      ..quadraticBezierTo(size.width * .25, size.height,
+          size.width * .5, size.height - 14)
+      ..quadraticBezierTo(size.width * .75, size.height - 28,
+          size.width, size.height - 6)
+      ..lineTo(size.width, 0)
+      ..close();
+    return p;
+  }
+
+  @override
+  bool shouldReclip(covariant CustomClipper<Path> old) => false;
 }
 
 String _tx(Map p, String en, String arK, bool ar) =>
@@ -513,45 +630,140 @@ class _PromoCarouselBlockState extends State<PromoCarouselBlock> {
   }
 }
 
-// ═══ 4. MEGA GRID (٪ ribbons) ═══════════════════════════════════════════
+// ═══ 4. MEGA GRID — custom sale cards (v2.2.09 redesign) ═══════════════
+// Bespoke card (not the standard ProductCard): badge INSIDE the image
+// corner, tinted price, save-chip, optional header with accent bar.
 class PromoMegaGridBlock extends StatelessWidget {
   const PromoMegaGridBlock({super.key, required this.p, required this.data,
       required this.ar});
   final Map<String, dynamic> p;
   final Map<String, dynamic> data;
   final bool ar;
+
   @override
   Widget build(BuildContext context) {
     final items = promoItems(data);
     if (items.isEmpty) return const SizedBox.shrink();
     final rib = promoParseColor(p['c1']) ?? const Color(0xFFE63946);
+    final cols = (int.tryParse('${p['columns'] ?? 2}') ?? 2).clamp(2, 3);
+    final style = (p['card_style'] ?? 'light').toString();
+    final title = _tx(p, 'titleEn', 'titleAr', ar);
+    final sub = _tx(p, 'subEn', 'subAr', ar);
+    final showSave = p['show_save'] != false;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 10),
-      child: GridView.builder(
-        shrinkWrap: true, physics: const NeverScrollableScrollPhysics(),
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 2, mainAxisSpacing: 10, crossAxisSpacing: 10,
-            childAspectRatio: 0.584),
-        itemCount: items.length,
-        itemBuilder: (_, i) {
-          final d = items[i].discountPct;
-          return Stack(clipBehavior: Clip.none, children: [
-            ProductCard(rich: true, product: items[i], hideAvail: true),
-            if (d > 0) PositionedDirectional(top: 8, start: -2,
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        if (title.isNotEmpty) Padding(
+          padding: const EdgeInsets.only(bottom: 10),
+          child: Row(children: [
+            Container(width: 4, height: 30, decoration: BoxDecoration(
+                color: rib, borderRadius: BorderRadius.circular(2))),
+            const SizedBox(width: 8),
+            Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(title, style: const TextStyle(fontSize: 16,
+                  fontWeight: FontWeight.w900, color: UellowColors.ink)),
+              if (sub.isNotEmpty)
+                Text(sub, style: const TextStyle(fontSize: 11,
+                    color: UellowColors.muted)),
+            ]),
+          ]),
+        ),
+        GridView.builder(
+          shrinkWrap: true, physics: const NeverScrollableScrollPhysics(),
+          padding: EdgeInsets.zero,
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: cols, mainAxisSpacing: 10, crossAxisSpacing: 10,
+              childAspectRatio: cols == 3 ? 0.62 : 0.70),
+          itemCount: items.length,
+          itemBuilder: (_, i) =>
+              _saleCard(context, items[i], rib, style, showSave, cols),
+        ),
+      ]),
+    );
+  }
+
+  Widget _saleCard(BuildContext ctx, UellowProductCard prod, Color rib,
+      String style, bool showSave, int cols) {
+    final d = prod.discountPct;
+    final tinted = style == 'tinted';
+    final lang = ar ? 'ar' : 'en';
+    double? saved;
+    if (prod.comparePrice != null) {
+      saved = prod.comparePrice!.amount - prod.price.amount;
+      if (saved <= 0) saved = null;
+    }
+    return GestureDetector(
+      onTap: () => UellowRouter.goProduct(ctx, prod.id),
+      child: Container(
+        decoration: BoxDecoration(
+          color: tinted ? rib.withValues(alpha: .05) : Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: tinted
+              ? rib.withValues(alpha: .25) : const Color(0xFFEDEDED)),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          // image with the badge pinned INSIDE its corner
+          Expanded(child: Stack(fit: StackFit.expand, children: [
+            CachedNetworkImage(imageUrl: _abs(prod.image), fit: BoxFit.cover,
+                errorWidget: (_, __, ___) =>
+                    const ColoredBox(color: Color(0xFFF4F4F4))),
+            if (d > 0) PositionedDirectional(top: 6, start: 6,
               child: Container(
                 padding: const EdgeInsets.symmetric(
-                    horizontal: 10, vertical: 4),
+                    horizontal: 7, vertical: 3),
                 decoration: BoxDecoration(color: rib,
-                    borderRadius: const BorderRadius.only(
-                        topRight: Radius.circular(2),
-                        bottomRight: Radius.circular(9),
-                        bottomLeft: Radius.circular(9))),
-                child: Text('-$d%', style: const TextStyle(
-                    color: Colors.white, fontSize: 13,
+                    borderRadius: BorderRadius.circular(8),
+                    boxShadow: const [BoxShadow(color: Color(0x40000000),
+                        blurRadius: 6, offset: Offset(0, 2))]),
+                child: Text('-$d%', style: TextStyle(
+                    color: Colors.white, fontSize: cols == 3 ? 10 : 11.5,
                     fontWeight: FontWeight.w900)),
               )),
-          ]);
-        },
+          ])),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(9, 8, 9, 9),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+              Text(prod.name.current(lang), maxLines: cols == 3 ? 1 : 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: cols == 3 ? 10.5 : 12,
+                      fontWeight: FontWeight.w700,
+                      color: UellowColors.ink, height: 1.3)),
+              const SizedBox(height: 5),
+              FittedBox(fit: BoxFit.scaleDown,
+                  alignment: AlignmentDirectional.centerStart,
+                  child: Row(mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.end, children: [
+                Text(prod.price.formatLocalized(lang), style: TextStyle(
+                    fontSize: cols == 3 ? 12.5 : 14.5,
+                    fontWeight: FontWeight.w900, color: rib)),
+                if (prod.comparePrice != null) ...[
+                  const SizedBox(width: 5),
+                  Text(prod.comparePrice!.formatLocalized(lang),
+                      style: const TextStyle(fontSize: 10,
+                          color: UellowColors.muted,
+                          decoration: TextDecoration.lineThrough)),
+                ],
+              ])),
+              if (showSave && saved != null) Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                      color: rib.withValues(alpha: .1),
+                      borderRadius: BorderRadius.circular(6)),
+                  child: Text(
+                      ar ? 'وفّرت ${saved.toStringAsFixed(saved % 1 == 0 ? 0 : 2)}'
+                         : 'Save ${saved.toStringAsFixed(saved % 1 == 0 ? 0 : 2)}',
+                      style: TextStyle(fontSize: 9.5, color: rib,
+                          fontWeight: FontWeight.w800)),
+                ),
+              ),
+            ]),
+          ),
+        ]),
       ),
     );
   }
