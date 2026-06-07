@@ -384,7 +384,11 @@ class _Hero extends StatelessWidget {
           if (imgUrl.isNotEmpty)
             CachedNetworkImage(imageUrl: imgUrl, fit: BoxFit.cover,
               errorWidget: (_, __, ___) => Container(decoration: BoxDecoration(gradient: t.heroGradient()))),
-          if (imgUrl.isNotEmpty)
+          // v2.2.17 — overlay configurable (overlay_color/overlay_opacity);
+          // default keeps the bottom legibility gradient.
+          if (imgUrl.isNotEmpty && blockOverlayCustom(p))
+            Container(color: blockOverlay(p) ?? Colors.transparent)
+          else if (imgUrl.isNotEmpty)
             Container(decoration: BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.topCenter, end: Alignment.bottomCenter,
@@ -1254,8 +1258,9 @@ class _Banner1 extends StatelessWidget {
           if (imgUrl.isNotEmpty)
             CachedNetworkImage(imageUrl: imgUrl, fit: BoxFit.cover,
                 errorWidget: (_, __, ___) => Container(color: color)),
-          if (imgUrl.isNotEmpty)
-            Container(color: Colors.black.withValues(alpha: 0.35)),
+          // v2.2.17 — configurable overlay (Style tab), default .35.
+          if (imgUrl.isNotEmpty && blockOverlay(p, defOpacity: .35) != null)
+            Container(color: blockOverlay(p, defOpacity: .35)),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
             child: Row(children: [

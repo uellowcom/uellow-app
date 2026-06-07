@@ -14,7 +14,8 @@ import 'package:flutter/services.dart';
 import '../../api/uellow_api.dart';
 import '../../api/uellow_models.dart';
 import '../router/uellow_router.dart';
-import 'dynamic_block_extras.dart' show blockMargin;
+import 'dynamic_block_extras.dart'
+    show blockMargin, blockOverlay, blockOverlayCustom, pickLocalizedImage;
 import '../theme/uellow_theme.dart';
 import '../widgets/flash_banner.dart' show BannerPattern;
 import '../widgets/product_card.dart';
@@ -354,11 +355,15 @@ class PromoHeroBlock extends StatelessWidget {
         // depth: two oversized glow blobs
         Positioned(top: -70, left: -50, child: _glow(c3, 190)),
         Positioned(bottom: -90, right: -60, child: _glow(Colors.white, 230)),
-        // legibility veil
-        Container(decoration: BoxDecoration(gradient: LinearGradient(
-            begin: Alignment.topCenter, end: Alignment.bottomCenter,
-            colors: [Colors.black.withValues(alpha: .05),
-                     Colors.black.withValues(alpha: .28)]))),
+        // legibility veil — v2.2.17: admin override via overlay_color/
+        // overlay_opacity (solid); default stays the soft gradient.
+        if (blockOverlayCustom(p))
+          Container(color: blockOverlay(p) ?? Colors.transparent)
+        else
+          Container(decoration: BoxDecoration(gradient: LinearGradient(
+              begin: Alignment.topCenter, end: Alignment.bottomCenter,
+              colors: [Colors.black.withValues(alpha: .05),
+                       Colors.black.withValues(alpha: .28)]))),
         // sparkle accents
         const Positioned(top: 18, right: 26,
             child: Text('✦', style: TextStyle(
@@ -1111,7 +1116,9 @@ class PromoBannerCtaBlock extends StatelessWidget {
     final c1 = promoParseColor(p['c1']) ?? UellowColors.darkBrown;
     final c2 = promoParseColor(p['c2']) ?? const Color(0xFF1F1100);
     final txt = promoParseColor(p['text_color']) ?? Colors.white;
-    final img = (p['image_url'] ?? '').toString();
+    // v2.2.17 — builder picker now sets image_url(+_ar): honour the
+    // Arabic override when the app runs in Arabic.
+    final img = pickLocalizedImage(p, ar);
     final title = _tx(p, 'titleEn', 'titleAr', ar);
     final cta = _tx(p, 'ctaEn', 'ctaAr', ar);
     // v2.2.14 — fullscreen option + countdown from the linked promotion.
@@ -1143,8 +1150,10 @@ class PromoBannerCtaBlock extends StatelessWidget {
           if (img.isNotEmpty)
             CachedNetworkImage(imageUrl: _abs(img), fit: BoxFit.cover,
                 errorWidget: (_, __, ___) => const SizedBox.shrink()),
-          if (img.isNotEmpty)
-            Container(color: Colors.black.withValues(alpha: .30)),
+          // v2.2.17 — overlay configurable from the builder Style tab
+          // (overlay_color / overlay_opacity; 0 = no veil).
+          if (img.isNotEmpty && blockOverlay(p, defOpacity: .30) != null)
+            Container(color: blockOverlay(p, defOpacity: .30)),
           Padding(
             padding: const EdgeInsets.all(16),
             child: Row(children: [
@@ -1454,21 +1463,38 @@ class PromoShowcaseBlock extends StatelessWidget {
             catch (_) { return null; }
           }).whereType<UellowProductCard>().toList();
       final display = CardDisplay.fromMap(p['card'] as Map?);
+      // v2.2.17 — the card slot used to be FIXED (286 rail / 0.585 grid),
+      // sized for every row visible, so hiding name/price/rating left a
+      // white strip at the card bottom. The info height now follows the
+      // visible rows (rich layout: pad 10 + ticker 17 + badges 17 always;
+      // name 32 / price 20 / rating 16 when shown), or the explicit
+      // builder override.
+      double infoH = 10 + 17 + 17;
+      if (display.name) infoH += 32;
+      if (display.price) infoH += 20;
+      if (display.rating) infoH += 16;
+      if (display.infoHeight != null) infoH = display.infoHeight!;
+      const buffer = 14.0; // shadow / rounding breathing room
       if (items.isEmpty) {
         content = const SizedBox.shrink();
       } else if (grid) {
-        content = GridView.builder(
-          shrinkWrap: true, physics: const NeverScrollableScrollPhysics(),
-          padding: EdgeInsets.zero,
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2, crossAxisSpacing: 8, mainAxisSpacing: 8,
-              childAspectRatio: 0.585),
-          itemCount: items.length,
-          itemBuilder: (_, i) => ProductCard(rich: true, product: items[i],
-              hideAvail: true, display: display),
-        );
+        content = LayoutBuilder(builder: (_, cons) {
+          final cellW = (cons.maxWidth - 8) / 2;
+          final cellH = cellW + infoH + buffer; // square image + info rows
+          return GridView.builder(
+            shrinkWrap: true, physics: const NeverScrollableScrollPhysics(),
+            padding: EdgeInsets.zero,
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 2, crossAxisSpacing: 8, mainAxisSpacing: 8,
+                childAspectRatio: cellW / cellH),
+            itemCount: items.length,
+            itemBuilder: (_, i) => ProductCard(rich: true, product: items[i],
+                hideAvail: true, display: display),
+          );
+        });
       } else {
-        content = SizedBox(height: 286, child: ListView.separated(
+        content = SizedBox(height: 160 + infoH + buffer,
+            child: ListView.separated(
           scrollDirection: Axis.horizontal,
           padding: EdgeInsets.zero,
           itemCount: items.length,

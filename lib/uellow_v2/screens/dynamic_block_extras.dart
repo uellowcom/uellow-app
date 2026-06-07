@@ -48,6 +48,28 @@ BorderRadius blockRadius(Map<String, dynamic> p, double r) {
   return BorderRadius.circular(r);
 }
 
+/// v2.2.17 — configurable scrim over a block's background image.
+/// Builder props: `overlay_color` (#hex) + `overlay_opacity` (0–100).
+/// Defaults keep each block's original look; opacity 0 removes the veil.
+/// Returns null when the veil should not be painted at all.
+Color? blockOverlay(Map<String, dynamic> p,
+    {double defOpacity = .30, Color defColor = Colors.black}) {
+  final op = (p['overlay_opacity'] as num?)?.toDouble();
+  final a = (op != null ? op / 100.0 : defOpacity).clamp(0.0, 1.0);
+  if (a <= 0) return null;
+  Color c = defColor;
+  final m = RegExp(r'#?([0-9A-Fa-f]{6})')
+      .firstMatch((p['overlay_color'] ?? '').toString());
+  if (m != null) c = Color(int.parse('FF${m.group(1)}', radix: 16));
+  return c.withValues(alpha: a);
+}
+
+/// True when the admin explicitly configured the overlay (used by blocks
+/// whose DEFAULT veil is a gradient rather than a solid colour).
+bool blockOverlayCustom(Map<String, dynamic> p) =>
+    p['overlay_opacity'] != null ||
+    (p['overlay_color'] ?? '').toString().isNotEmpty;
+
 class BlockEnvelope extends StatelessWidget {
   const BlockEnvelope({
     super.key,

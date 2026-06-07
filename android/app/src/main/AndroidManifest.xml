@@ -1,4 +1,9 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+          xmlns:tools="http://schemas.android.com/tools">
+    <!-- v2.2.17 — minSdk lowered to 21 (Android 5.0) for old-phone
+         support; the record plugin (Beena voice) declares 23 — override
+         its check, voice use is already guarded in code. -->
+    <uses-sdk tools:overrideLibrary="com.llfbandit.record"/>
     <!-- Required for release builds — flutter only auto-injects INTERNET
          in debug. Without it the app throws SocketException: Failed
          host lookup on every API call. -->
