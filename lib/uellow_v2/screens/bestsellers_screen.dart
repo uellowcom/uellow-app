@@ -93,6 +93,8 @@ class _BestsellersScreenState extends State<BestsellersScreen> {
         appBar: AppBar(
           backgroundColor: const Color(0xFF1F1A10),
           foregroundColor: Colors.white,
+          // v2.2.25 — yellow back arrow.
+          iconTheme: const IconThemeData(color: UellowColors.yellow),
           title: Text(ar ? '👑 الأفضل مبيعاً' : '👑 Bestsellers',
               style: const TextStyle(
                   color: UellowColors.yellow,
@@ -125,7 +127,8 @@ class _BestsellersScreenState extends State<BestsellersScreen> {
                 // category filter chips (header)
                 if (_cats.isNotEmpty) SliverToBoxAdapter(child: Container(
                   color: const Color(0xFF1F1A10),
-                  padding: const EdgeInsets.only(bottom: 10),
+                  // v2.2.25 — small breathing space above the category chips.
+                  padding: const EdgeInsets.only(top: 8, bottom: 10),
                   child: SizedBox(height: 34, child: ListView.separated(
                     scrollDirection: Axis.horizontal,
                     padding: const EdgeInsets.symmetric(horizontal: 12),
