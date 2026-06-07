@@ -770,10 +770,16 @@ class PromoMegaGridBlock extends StatelessWidget {
       onTap: () => UellowRouter.goProduct(ctx, prod.id),
       child: Container(
         decoration: BoxDecoration(
-          color: tinted ? rib.withValues(alpha: .05) : Colors.white,
+          // v2.2.14 — solid white card (tinted = opaque wash over white, never
+          // see-through against the page background).
+          color: tinted
+              ? (Color.alphaBlend(rib.withValues(alpha: .06), Colors.white))
+              : Colors.white,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(color: tinted
               ? rib.withValues(alpha: .25) : const Color(0xFFEDEDED)),
+          boxShadow: const [BoxShadow(color: Color(0x0A000000),
+              blurRadius: 6, offset: Offset(0, 2))],
         ),
         clipBehavior: Clip.antiAlias,
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -1181,9 +1187,10 @@ class _DashedLinePainter extends CustomPainter {
 
 // ═══ 7. BANNER + CTA ════════════════════════════════════════════════════
 class PromoBannerCtaBlock extends StatelessWidget {
-  const PromoBannerCtaBlock({super.key, required this.p, required this.ar,
-      required this.onTap});
+  const PromoBannerCtaBlock({super.key, required this.p, this.data,
+      required this.ar, required this.onTap});
   final Map<String, dynamic> p;
+  final Map<String, dynamic>? data;
   final bool ar;
   final VoidCallback onTap;
   @override
@@ -1194,14 +1201,29 @@ class PromoBannerCtaBlock extends StatelessWidget {
     final img = (p['image_url'] ?? '').toString();
     final title = _tx(p, 'titleEn', 'titleAr', ar);
     final cta = _tx(p, 'ctaEn', 'ctaAr', ar);
-    return GestureDetector(
+    // v2.2.14 — fullscreen option + countdown from the linked promotion.
+    final fullscreen = p['fullscreen'] == true;
+    final promo = (data?['promo'] as Map?)?.cast<String, dynamic>();
+    final endsRaw = (p['ends_at'] ?? promo?['ends_at'] ?? '').toString();
+    final ends = DateTime.tryParse(endsRaw);
+    final showCd = p['show_countdown'] == true && ends != null;
+    final cdBox = promoParseColor(p['cd_box_color'])
+        ?? Colors.black.withValues(alpha: .45);
+    final cdText = promoParseColor(p['cd_text_color']) ?? Colors.white;
+    final cdLabel = promoParseColor(p['cd_label_color']) ?? Colors.white;
+    final height = fullscreen
+        ? MediaQuery.of(context).size.height -
+            MediaQuery.of(context).padding.vertical - 80
+        : ((p['height'] as num?)?.toDouble() ?? 130).clamp(90.0, 320.0);
+
+    final banner = GestureDetector(
       onTap: onTap,
       child: Container(
-        height: ((p['height'] as num?)?.toDouble() ?? 130).clamp(90, 260),
-        margin: const EdgeInsets.symmetric(horizontal: 10),
+        height: height,
+        margin: EdgeInsets.symmetric(horizontal: fullscreen ? 0 : 10),
         clipBehavior: Clip.antiAlias,
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(fullscreen ? 0 : 16),
           gradient: LinearGradient(colors: [c1, c2]),
         ),
         child: Stack(fit: StackFit.expand, children: [
@@ -1213,8 +1235,9 @@ class PromoBannerCtaBlock extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.all(16),
             child: Row(children: [
-              Expanded(child: Text(title, maxLines: 3,
-                  style: TextStyle(color: txt, fontSize: 18, height: 1.25,
+              Expanded(child: Text(title, maxLines: fullscreen ? 5 : 3,
+                  style: TextStyle(color: txt,
+                      fontSize: fullscreen ? 26 : 18, height: 1.25,
                       fontWeight: FontWeight.w900))),
               if (cta.isNotEmpty)
                 Container(
@@ -1228,59 +1251,356 @@ class PromoBannerCtaBlock extends StatelessWidget {
                 ),
             ]),
           ),
+          // ── small countdown, bottom-center ──
+          if (showCd) Positioned(
+            left: 0, right: 0, bottom: 12,
+            child: Center(child: Column(mainAxisSize: MainAxisSize.min,
+                children: [
+              Text(ar ? '⏰ ينتهي خلال' : '⏰ ENDS IN',
+                  style: TextStyle(color: cdLabel, fontSize: 9,
+                      letterSpacing: 1, fontWeight: FontWeight.w800)),
+              const SizedBox(height: 3),
+              PromoCountdown(endsAt: ends, color: cdText, boxColor: cdBox,
+                  labelColor: cdLabel, compact: true, scale: 0.9),
+            ])),
+          ),
+        ]),
+      ),
+    );
+    return banner;
+  }
+}
+
+// ═══ 8. TIERS — buy-more-save-more product wall (v2.2.14) ════════════════
+// Each product shows its single-unit price AND a bulk price (e.g. ×10),
+// using the product's real bulk-pricing ladder (data.items[].bulk_pricing).
+class PromoTiersBlock extends StatelessWidget {
+  const PromoTiersBlock({super.key, required this.p, this.data, required this.ar});
+  final Map<String, dynamic> p;
+  final Map<String, dynamic>? data;
+  final bool ar;
+  @override
+  Widget build(BuildContext context) {
+    final raw = ((data?['items'] as List?) ?? const []).cast<dynamic>()
+        .map((e) => (e as Map).cast<String, dynamic>()).toList();
+    if (raw.isEmpty) return const SizedBox.shrink();
+    final bulkQty = (p['bulk_qty'] as num?)?.toInt() ?? 10;
+    final accent = promoParseColor(p['c1']) ?? UellowColors.yellow;
+    final cardColor = promoParseColor(p['card_color']) ?? Colors.white;
+    final fontColor = promoParseColor(p['font_color']) ?? UellowColors.ink;
+    final title = _tx(p, 'titleEn', 'titleAr', ar);
+    final sub = _tx(p, 'subEn', 'subAr', ar);
+    final grid = (p['layout'] ?? 'list').toString() == 'grid';
+    final lang = ar ? 'ar' : 'en';
+
+    final cards = <Widget>[];
+    for (final m in raw) {
+      UellowProductCard prod;
+      try { prod = UellowProductCard.fromJson(m); } catch (_) { continue; }
+      final tiers = ((m['bulk_pricing'] as List?) ?? const [])
+          .map((e) => (e as Map).cast<String, dynamic>()).toList();
+      cards.add(_TierCard(prod: prod, tiers: tiers, bulkQty: bulkQty,
+          accent: accent, cardColor: cardColor, fontColor: fontColor,
+          ar: ar, lang: lang, grid: grid));
+    }
+    if (cards.isEmpty) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        if (title.isNotEmpty || sub.isNotEmpty) Padding(
+          padding: const EdgeInsets.fromLTRB(2, 0, 2, 10),
+          child: Row(children: [
+            Container(width: 4, height: 30, decoration: BoxDecoration(
+                color: accent, borderRadius: BorderRadius.circular(2))),
+            const SizedBox(width: 8),
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+              if (title.isNotEmpty) Text(title, style: TextStyle(
+                  fontSize: 16, fontWeight: FontWeight.w900, color: fontColor)),
+              if (sub.isNotEmpty) Text(sub, style: const TextStyle(
+                  fontSize: 11.5, color: UellowColors.muted)),
+            ])),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(color: accent.withValues(alpha: .15),
+                  borderRadius: BorderRadius.circular(999)),
+              child: Text(ar ? 'وفّر بالجملة' : 'Bulk deals',
+                  style: TextStyle(fontSize: 10,
+                      color: Color.lerp(accent, Colors.black, .35),
+                      fontWeight: FontWeight.w900)),
+            ),
+          ]),
+        ),
+        if (grid)
+          Wrap(spacing: 8, runSpacing: 8, children: [
+            for (final c in cards)
+              SizedBox(width: (MediaQuery.of(context).size.width - 28) / 2,
+                  child: c),
+          ])
+        else
+          Column(children: [
+            for (final c in cards) Padding(
+              padding: const EdgeInsets.only(bottom: 8), child: c),
+          ]),
+      ]),
+    );
+  }
+}
+
+class _TierCard extends StatelessWidget {
+  const _TierCard({required this.prod, required this.tiers, required this.bulkQty,
+      required this.accent, required this.cardColor, required this.fontColor,
+      required this.ar, required this.lang, required this.grid});
+  final UellowProductCard prod;
+  final List<Map<String, dynamic>> tiers;
+  final int bulkQty;
+  final Color accent, cardColor, fontColor;
+  final bool ar;
+  final String lang;
+  final bool grid;
+
+  String _money(double v) {
+    final s = v.toStringAsFixed(v % 1 == 0 ? 0 : 2);
+    return ar ? '$s ${prod.price.displaySymbol("ar")}'
+        : '$s ${prod.price.displaySymbol("en")}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final unit = prod.price.amount;
+    // best per-unit price when buying bulkQty (lowest tier whose min_qty ≤ qty)
+    var bulkUnit = unit;
+    var savePct = 0;
+    for (final t in tiers) {
+      final mq = (t['min_qty'] as num?)?.toInt() ?? 0;
+      final pr = (t['price'] as num?)?.toDouble() ?? unit;
+      if (mq <= bulkQty && pr <= bulkUnit) {
+        bulkUnit = pr;
+        savePct = (t['save_pct'] as num?)?.toInt() ?? 0;
+      }
+    }
+    final bulkTotal = bulkUnit * bulkQty;
+
+    Widget priceRow(String qtyLabel, String total, {String? perUnit,
+        bool highlight = false}) => Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+      decoration: BoxDecoration(
+        color: highlight ? accent.withValues(alpha: .12) : const Color(0xFFF6F6F6),
+        borderRadius: BorderRadius.circular(9),
+        border: highlight ? Border.all(color: accent.withValues(alpha: .5)) : null,
+      ),
+      child: Row(children: [
+        Text(qtyLabel, style: TextStyle(fontSize: 11,
+            fontWeight: FontWeight.w800,
+            color: highlight ? Color.lerp(accent, Colors.black, .4) : fontColor)),
+        const Spacer(),
+        Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+          Text(total, style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w900,
+              color: highlight ? Color.lerp(accent, Colors.black, .4) : fontColor)),
+          if (perUnit != null) Text(perUnit, style: const TextStyle(fontSize: 9,
+              color: UellowColors.muted, fontWeight: FontWeight.w600)),
+        ]),
+      ]),
+    );
+
+    return GestureDetector(
+      onTap: () => UellowRouter.goProduct(context, prod.id),
+      child: Container(
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: cardColor,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: const Color(0xFFEDEDED)),
+          boxShadow: const [BoxShadow(color: Color(0x0A000000),
+              blurRadius: 6, offset: Offset(0, 2))],
+        ),
+        child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          ClipRRect(borderRadius: BorderRadius.circular(10),
+            child: CachedNetworkImage(imageUrl: _abs(prod.image),
+                width: grid ? 56 : 66, height: grid ? 56 : 66, fit: BoxFit.cover,
+                errorWidget: (_, __, ___) => Container(
+                    width: grid ? 56 : 66, height: grid ? 56 : 66,
+                    color: const Color(0xFFF4F4F4)))),
+          const SizedBox(width: 10),
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min, children: [
+            Text(prod.name.current(lang), maxLines: grid ? 1 : 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700,
+                    color: fontColor, height: 1.25)),
+            const SizedBox(height: 7),
+            priceRow(ar ? 'حبة واحدة' : '1 unit', _money(unit)),
+            const SizedBox(height: 5),
+            Row(children: [
+              Expanded(child: priceRow(
+                  ar ? '$bulkQty حبة' : '$bulkQty units', _money(bulkTotal),
+                  perUnit: savePct > 0
+                      ? (ar ? '${_money(bulkUnit)} للحبة' : '${_money(bulkUnit)}/ea')
+                      : null,
+                  highlight: true)),
+              if (savePct > 0) ...[
+                const SizedBox(width: 6),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
+                  decoration: BoxDecoration(color: UellowColors.successDk,
+                      borderRadius: BorderRadius.circular(8)),
+                  child: Text('-$savePct%', style: const TextStyle(
+                      color: Colors.white, fontSize: 11,
+                      fontWeight: FontWeight.w900)),
+                ),
+              ],
+            ]),
+          ])),
         ]),
       ),
     );
   }
 }
 
-// ═══ 8. TIERS (buy more save more) ══════════════════════════════════════
-class PromoTiersBlock extends StatelessWidget {
-  const PromoTiersBlock({super.key, required this.p, required this.ar});
+// ═══ 8b. CAMPAIGN SHOWCASE (v2.2.14) ════════════════════════════════════
+// A themed gradient hero holding EITHER coupons OR a product feed, with an
+// optional promotion countdown. Every part's colour is configurable.
+class PromoShowcaseBlock extends StatelessWidget {
+  const PromoShowcaseBlock({super.key, required this.p, required this.data,
+      required this.ar});
   final Map<String, dynamic> p;
+  final Map<String, dynamic> data;
   final bool ar;
+
+  Color _c(String k, Color fb) => promoParseColor(p[k]) ?? fb;
+
+  List<Map<String, dynamic>> _coupons() {
+    if ((p['coupon_mode'] ?? '') == 'manual') {
+      final code = (p['code'] ?? '').toString();
+      if (code.isEmpty) return const [];
+      return [{'name': {'en': _tx(p, 'titleEn', 'titleAr', false),
+                        'ar': _tx(p, 'titleEn', 'titleAr', true)},
+               'code': code, 'discount_text': '', 'expiry': null, 'min_amount': 0}];
+    }
+    return ((data['coupons'] as List?) ?? const []).cast<dynamic>()
+        .map((e) => (e as Map).cast<String, dynamic>()).toList();
+  }
+
   @override
   Widget build(BuildContext context) {
-    final c1 = promoParseColor(p['c1']) ?? UellowColors.yellow;
-    final tiers = <(String, String)>[];
-    for (var i = 1; i <= 4; i++) {
-      final t = _tx(p, 'tier${i}En', 'tier${i}Ar', ar);
-      if (t.isNotEmpty) tiers.add(('${i == 1 ? '🥉' : i == 2 ? '🥈' : i == 3 ? '🥇' : '🏆'}', t));
-    }
-    if (tiers.isEmpty) return const SizedBox.shrink();
+    final c1 = _c('c1', const Color(0xFF2563EB));
+    final c2 = _c('c2', const Color(0xFF1E3A8A));
+    final tc = _c('text_color', Colors.white);
+    final sc = _c('sub_color', const Color(0xFFDBEAFE));
     final title = _tx(p, 'titleEn', 'titleAr', ar);
+    final sub = _tx(p, 'subEn', 'subAr', ar);
+    final emoji = (p['emoji'] ?? '🎁').toString();
+    final ctype = (p['content_type'] ?? 'coupons').toString();
+    final grid = (p['layout'] ?? 'rail').toString() == 'grid';
+    final promo = (data['promo'] as Map?)?.cast<String, dynamic>();
+    final ends = DateTime.tryParse(
+        (p['ends_at'] ?? promo?['ends_at'] ?? '').toString());
+    final showCd = p['show_countdown'] == true && ends != null;
+    final cdPos = (p['countdown_position'] ?? 'top-right').toString();
+    final cdBox = _c('cd_box_color', c2);
+    final cdText = _c('cd_text_color', Colors.white);
+    final cdLabel = _c('cd_label_color', sc);
+
+    Widget? countdown = showCd ? Column(mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.center, children: [
+      Text(ar ? '⏰ ينتهي خلال' : '⏰ ENDS IN', style: TextStyle(
+          color: cdLabel, fontSize: 8.5, letterSpacing: .8,
+          fontWeight: FontWeight.w800)),
+      const SizedBox(height: 3),
+      PromoCountdown(endsAt: ends, color: cdText, boxColor: cdBox,
+          labelColor: cdLabel, compact: true, scale: .82),
+    ]) : null;
+
+    // ── content ──
+    Widget content;
+    if (ctype == 'coupons') {
+      final coupons = _coupons();
+      if (coupons.isEmpty) {
+        content = const SizedBox.shrink();
+      } else if (grid) {
+        content = Wrap(spacing: 8, runSpacing: 8, children: [
+          for (final c in coupons)
+            SizedBox(width: (MediaQuery.of(context).size.width - 44) / 2,
+                child: _CouponCard(c: c, p: p, ar: ar)),
+        ]);
+      } else {
+        content = SizedBox(height: 210, child: ListView.separated(
+          scrollDirection: Axis.horizontal,
+          padding: EdgeInsets.zero,
+          itemCount: coupons.length,
+          separatorBuilder: (_, __) => const SizedBox(width: 8),
+          itemBuilder: (_, i) => Align(alignment: Alignment.topCenter,
+              child: _CouponCard(c: coupons[i], p: p, ar: ar, width: 240)),
+        ));
+      }
+    } else {
+      final items = ((data['items'] as List?) ?? const []).cast<dynamic>()
+          .map((e) {
+            try { return UellowProductCard.fromJson((e as Map).cast<String, dynamic>()); }
+            catch (_) { return null; }
+          }).whereType<UellowProductCard>().toList();
+      final display = CardDisplay.fromMap(p['card'] as Map?);
+      if (items.isEmpty) {
+        content = const SizedBox.shrink();
+      } else if (grid) {
+        content = GridView.builder(
+          shrinkWrap: true, physics: const NeverScrollableScrollPhysics(),
+          padding: EdgeInsets.zero,
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 2, crossAxisSpacing: 8, mainAxisSpacing: 8,
+              childAspectRatio: 0.585),
+          itemCount: items.length,
+          itemBuilder: (_, i) => ProductCard(rich: true, product: items[i],
+              hideAvail: true, display: display),
+        );
+      } else {
+        content = SizedBox(height: 286, child: ListView.separated(
+          scrollDirection: Axis.horizontal,
+          padding: EdgeInsets.zero,
+          itemCount: items.length,
+          separatorBuilder: (_, __) => const SizedBox(width: 8),
+          itemBuilder: (_, i) => SizedBox(width: 160,
+              child: ProductCard(rich: true, product: items[i],
+                  hideAvail: true, display: display)),
+        ));
+      }
+    }
+
+    final header = Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text(emoji, style: const TextStyle(fontSize: 26)),
+      const SizedBox(width: 10),
+      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min, children: [
+        if (title.isNotEmpty) Text(title, maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(color: tc, fontSize: 18,
+                fontWeight: FontWeight.w900, height: 1.15)),
+        if (sub.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 2),
+          child: Text(sub, maxLines: 2, overflow: TextOverflow.ellipsis,
+              style: TextStyle(color: sc, fontSize: 12))),
+      ])),
+      if (countdown != null && cdPos != 'below-title') Padding(
+        padding: const EdgeInsetsDirectional.only(start: 8), child: countdown),
+    ]);
+
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 10),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: const Color(0xFFEDEDED))),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(title.isNotEmpty ? title
-            : (ar ? 'اشترِ أكثر، وفّر أكثر' : 'Buy more, save more'),
-            style: const TextStyle(fontWeight: FontWeight.w900,
-                fontSize: 15, color: UellowColors.ink)),
-        const SizedBox(height: 10),
-        for (var i = 0; i < tiers.length; i++) ...[
-          Row(children: [
-            Container(width: 34, height: 34, alignment: Alignment.center,
-                decoration: BoxDecoration(
-                    color: c1.withValues(alpha: .12 + i * .1),
-                    shape: BoxShape.circle),
-                child: Text(tiers[i].$1,
-                    style: const TextStyle(fontSize: 16))),
-            const SizedBox(width: 10),
-            Expanded(child: Text(tiers[i].$2,
-                style: const TextStyle(fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    color: UellowColors.ink))),
-          ]),
-          if (i < tiers.length - 1) Padding(
-            padding: const EdgeInsetsDirectional.only(start: 16),
-            child: Container(width: 2, height: 12,
-                color: c1.withValues(alpha: .35)),
-          ),
-        ],
+      margin: const EdgeInsets.fromLTRB(10, 4, 10, 8),
+      padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(begin: Alignment.topLeft,
+            end: Alignment.bottomRight, colors: [c1, c2]),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [BoxShadow(color: c1.withValues(alpha: .3),
+            blurRadius: 14, offset: const Offset(0, 6))],
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        header,
+        if (countdown != null && cdPos == 'below-title') Padding(
+          padding: const EdgeInsets.only(top: 10),
+          child: Align(alignment: Alignment.center, child: countdown)),
+        const SizedBox(height: 14),
+        content,
       ]),
     );
   }

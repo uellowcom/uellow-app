@@ -2414,6 +2414,10 @@ class _ExploreMoreBlockState extends State<ExploreMoreBlock> {
   bool get _showWhy       => widget.p['show_why_caption']  != false;
   bool get _showTrending  => widget.p['show_trending_stat']!= false;
   bool get _showActivity  => widget.p['show_live_activity']== true;
+  String get _chipStyle   => (widget.p['chip_style'] as String?) ?? 'pill';
+  bool get _stickyChips   => widget.p['sticky_chips'] == true;
+  double get _chipsBarHeight =>
+      _chipStyle == 'card' ? 44 : (_chipStyle == 'segmented' ? 40 : 38);
 
   @override
   void initState() {
@@ -2553,6 +2557,12 @@ class _ExploreMoreBlockState extends State<ExploreMoreBlock> {
     final trendingMap = (widget.data['trending_stat'] as Map?)?.cast<String, dynamic>();
     final showLoadMoreBtn = _hasMore && !_loading && _autoRounds >= _autoLimit;
 
+    // v2.2.14 — sticky chips: explore becomes a self-contained viewport-height
+    // scroller with the category bar pinned at the top.
+    if (_stickyChips && _showChips && _chips.isNotEmpty) {
+      return _buildSticky(context, t, ar, title, showLoadMoreBtn);
+    }
+
     return Stack(children: [
       Padding(
         // v2.1.36 — no bottom padding while the Load-more button shows;
@@ -2635,6 +2645,7 @@ class _ExploreMoreBlockState extends State<ExploreMoreBlock> {
             _ChipsBar(
               chips: _chips, active: _activeChipId, dark: t.dark,
               ar: ar, onTap: _changeChip,
+              style: _chipStyle, accent: t.primary,
             ),
           // ─── Sort bar ──────────────────────────────────────────────────────
           if (_showSortBar)
@@ -2711,6 +2722,90 @@ class _ExploreMoreBlockState extends State<ExploreMoreBlock> {
           ),
         ),
     ]);
+  }
+
+  // v2.2.14 — sticky variant: pinned chips + sliver grid in a viewport window.
+  Widget _buildSticky(BuildContext context, DynTheme t, bool ar, String title,
+      bool showLoadMoreBtn) {
+    final vh = MediaQuery.of(context).size.height;
+    final h = (vh * 0.82).clamp(360.0, vh);
+    final cols = _columns;
+    final display = CardDisplay.fromMap(widget.p['card'] as Map?);
+    return SizedBox(height: h, child: CustomScrollView(
+      physics: const ClampingScrollPhysics(),
+      slivers: [
+        if ((widget.p['show_title'] != false) && title.isNotEmpty)
+          SliverToBoxAdapter(child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 12, 6),
+            child: Row(children: [
+              Icon(Icons.explore_outlined, size: 17, color: t.dark),
+              const SizedBox(width: 6),
+              Expanded(child: Text(title, maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: t.dark, fontSize: 14.5,
+                      fontWeight: FontWeight.w900))),
+              if (_showShuffle) GestureDetector(onTap: _shuffle,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+                  decoration: BoxDecoration(color: UellowColors.yellowSoft,
+                      border: Border.all(color: UellowColors.yellow),
+                      borderRadius: BorderRadius.circular(14)),
+                  child: const Icon(Icons.shuffle, size: 14,
+                      color: UellowColors.darkBrown))),
+            ]),
+          )),
+        SliverPersistentHeader(pinned: true, delegate: _PinnedBar(
+          height: _chipsBarHeight + 8, color: t.pageBg,
+          child: _ChipsBar(chips: _chips, active: _activeChipId, dark: t.dark,
+              ar: ar, onTap: _changeChip, style: _chipStyle, accent: t.primary),
+        )),
+        if (_showSortBar) SliverToBoxAdapter(
+            child: _SortBar(active: _sort, dark: t.dark, ar: ar,
+                onTap: _changeSort)),
+        if (_items.isEmpty && _loading && _showSkeleton)
+          SliverToBoxAdapter(child: _SkeletonGrid(columns: cols))
+        else if (_items.isEmpty && !_loading)
+          SliverToBoxAdapter(child: Padding(padding: const EdgeInsets.all(20),
+              child: Center(child: Text(ar ? 'لا توجد منتجات' : 'No products yet',
+                  style: TextStyle(color: t.dark.withOpacity(0.6))))))
+        else
+          SliverPadding(padding: const EdgeInsets.fromLTRB(12, 4, 12, 0),
+            sliver: SliverGrid(
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: cols, crossAxisSpacing: 8, mainAxisSpacing: 8,
+                childAspectRatio: cols == 2 ? 0.585 : 0.52),
+              delegate: SliverChildBuilderDelegate((_, i) {
+                if (_autoRounds < _autoLimit && _hasMore && !_loading
+                    && i >= _gridLength() - (cols * 2)) {
+                  WidgetsBinding.instance.addPostFrameCallback((_) => _loadMore());
+                }
+                final res = _resolveSlot(i);
+                if (res == null) return const SizedBox.shrink();
+                return _ProductTile(product: res.product, meta: res.meta,
+                    showBadges: _showBadges, isHero: false, display: display);
+              }, childCount: _gridLength()),
+            )),
+        SliverToBoxAdapter(child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Center(child: _loading && _items.isNotEmpty
+              ? SizedBox(width: 22, height: 22, child: CircularProgressIndicator(
+                  color: t.dark, strokeWidth: 2.5))
+              : showLoadMoreBtn
+                  ? ElevatedButton.icon(onPressed: _loadMore,
+                      icon: const Icon(Icons.arrow_downward, size: 16),
+                      label: Text(ar ? 'تحميل المزيد' : 'Load more',
+                          style: const TextStyle(fontWeight: FontWeight.w800)),
+                      style: ElevatedButton.styleFrom(
+                          backgroundColor: UellowColors.yellowSoft,
+                          foregroundColor: UellowColors.darkBrown, elevation: 0))
+                  : (!_hasMore && _items.isNotEmpty && _showEndMarker
+                      ? Text(ar ? '— نهاية النتائج —' : '— end of feed —',
+                          style: TextStyle(color: t.dark.withOpacity(0.5),
+                              fontSize: 11.5))
+                      : const SizedBox.shrink())),
+        )),
+      ],
+    ));
   }
 
   Widget _renderGrid() {
@@ -2864,54 +2959,148 @@ class _ProductTile extends StatelessWidget {
 // ─── Chips bar (category filter) ────────────────────────────────────────────
 class _ChipsBar extends StatelessWidget {
   const _ChipsBar({required this.chips, required this.active,
-    required this.dark, required this.ar, required this.onTap});
+    required this.dark, required this.ar, required this.onTap,
+    this.style = 'pill', this.accent});
   final List<Map<String, dynamic>> chips;
   final int? active;
   final Color dark;
   final bool ar;
   final void Function(int? id) onTap;
+  // v2.2.14 — professional chip styles: pill / outline / underline / segmented / card.
+  final String style;
+  final Color? accent;
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      height: 36,
-      child: ListView(
+    final acc = accent ?? dark;
+    final entries = <(String, int?)>[
+      (ar ? 'الكل' : 'All', null),
+      for (final c in chips)
+        ((c['name']?.toString() ?? ''), (c['id'] as num?)?.toInt()),
+    ];
+    // Segmented = one rounded track holding all chips.
+    if (style == 'segmented') {
+      return SizedBox(height: 40, child: ListView(
         scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.fromLTRB(6, 4, 6, 4),
+        padding: const EdgeInsets.fromLTRB(8, 4, 8, 4),
         physics: const ClampingScrollPhysics(),
-        children: [
-          _chip(label: ar ? 'الكل' : 'All', selected: active == null, onTap: () => onTap(null)),
-          for (final c in chips)
-            _chip(
-              label: c['name']?.toString() ?? '',
-              selected: active == (c['id'] as num?)?.toInt(),
-              onTap: () => onTap((c['id'] as num?)?.toInt()),
-            ),
-        ],
-      ),
-    );
+        children: [Container(
+          padding: const EdgeInsets.all(3),
+          decoration: BoxDecoration(color: const Color(0xFFEFEADC),
+              borderRadius: BorderRadius.circular(22)),
+          child: Row(children: [
+            for (final e in entries) _seg(e.$1, active == e.$2, acc,
+                () => onTap(e.$2)),
+          ]),
+        )],
+      ));
+    }
+    final h = style == 'card' ? 44.0 : (style == 'underline' ? 38.0 : 38.0);
+    return SizedBox(height: h, child: ListView(
+      scrollDirection: Axis.horizontal,
+      padding: const EdgeInsets.fromLTRB(8, 4, 8, 4),
+      physics: const ClampingScrollPhysics(),
+      children: [
+        for (final e in entries)
+          _chip(e.$1, active == e.$2, acc, () => onTap(e.$2)),
+      ],
+    ));
   }
 
-  Widget _chip({required String label, required bool selected, required VoidCallback onTap}) {
-    return Padding(
-      padding: const EdgeInsets.only(right: 5),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(14),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-          decoration: BoxDecoration(
-            color: selected ? dark : Colors.white,
-            border: Border.all(color: selected ? dark : const Color(0xFFE5DCC2)),
-            borderRadius: BorderRadius.circular(14),
-          ),
-          child: Text(label, style: TextStyle(
-              color: selected ? Colors.white : dark,
-              fontSize: 11.5, fontWeight: FontWeight.w800)),
+  Widget _seg(String label, bool sel, Color acc, VoidCallback onTap) =>
+      GestureDetector(onTap: onTap, child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+        decoration: BoxDecoration(
+          color: sel ? acc : Colors.transparent,
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: sel ? const [BoxShadow(color: Color(0x22000000),
+              blurRadius: 4, offset: Offset(0, 1))] : null,
         ),
-      ),
-    );
+        child: Text(label, style: TextStyle(
+            color: sel ? Colors.white : dark.withValues(alpha: .75),
+            fontSize: 11.5, fontWeight: FontWeight.w800)),
+      ));
+
+  Widget _chip(String label, bool sel, Color acc, VoidCallback onTap) {
+    switch (style) {
+      case 'outline':
+        return Padding(padding: const EdgeInsets.only(right: 6),
+          child: GestureDetector(onTap: onTap, child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+            decoration: BoxDecoration(
+              color: sel ? acc.withValues(alpha: .12) : Colors.white,
+              border: Border.all(color: sel ? acc : const Color(0xFFE5DCC2),
+                  width: sel ? 1.6 : 1),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Text(label, style: TextStyle(
+                color: sel ? acc : dark, fontSize: 11.5,
+                fontWeight: FontWeight.w800)),
+          )));
+      case 'underline':
+        return Padding(padding: const EdgeInsets.only(right: 4),
+          child: GestureDetector(onTap: onTap, child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min, children: [
+            Padding(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+              child: Text(label, style: TextStyle(
+                  color: sel ? acc : dark.withValues(alpha: .6),
+                  fontSize: 12.5,
+                  fontWeight: sel ? FontWeight.w900 : FontWeight.w600))),
+            AnimatedContainer(duration: const Duration(milliseconds: 200),
+                height: 3, width: sel ? 22 : 0,
+                decoration: BoxDecoration(color: acc,
+                    borderRadius: BorderRadius.circular(2))),
+          ])));
+      case 'card':
+        return Padding(padding: const EdgeInsets.only(right: 7),
+          child: GestureDetector(onTap: onTap, child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            decoration: BoxDecoration(
+              color: sel ? acc : Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [BoxShadow(
+                  color: sel ? acc.withValues(alpha: .35) : const Color(0x14000000),
+                  blurRadius: sel ? 8 : 5, offset: const Offset(0, 2))],
+            ),
+            child: Text(label, style: TextStyle(
+                color: sel ? Colors.white : dark, fontSize: 12,
+                fontWeight: FontWeight.w900)),
+          )));
+      default: // pill
+        return Padding(padding: const EdgeInsets.only(right: 5),
+          child: GestureDetector(onTap: onTap, child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 7),
+            decoration: BoxDecoration(
+              color: sel ? acc : Colors.white,
+              border: Border.all(color: sel ? acc : const Color(0xFFE5DCC2)),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Text(label, style: TextStyle(
+                color: sel ? Colors.white : dark, fontSize: 11.5,
+                fontWeight: FontWeight.w800)),
+          )));
+    }
   }
+}
+
+// v2.2.14 — pinned header host for the sticky chips bar.
+class _PinnedBar extends SliverPersistentHeaderDelegate {
+  _PinnedBar({required this.height, required this.child, required this.color});
+  final double height;
+  final Widget child;
+  final Color color;
+  @override
+  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) =>
+      Container(color: color, alignment: Alignment.centerLeft, child: child);
+  @override
+  double get maxExtent => height;
+  @override
+  double get minExtent => height;
+  @override
+  bool shouldRebuild(covariant _PinnedBar old) =>
+      old.height != height || old.child != child || old.color != color;
 }
 
 // ─── Sort bar ───────────────────────────────────────────────────────────────

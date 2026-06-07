@@ -285,16 +285,18 @@ Widget _renderBlock(BuildContext c, Map<String, dynamic> b, DynTheme t) {
     case 'promo-flash-rail': inner = PromoFlashRailBlock(p: p, data: data, ar: ar); break;
     case 'promo-masonry':    inner = PromoMasonryBlock(p: p, data: data, ar: ar); break;
     case 'promo-coupon':     inner = PromoCouponBlock(p: p, data: data, ar: ar); break;
-    case 'promo-tiers':      inner = PromoTiersBlock(p: p, ar: ar); break;
+    case 'promo-tiers':      inner = PromoTiersBlock(p: p, data: data, ar: ar); break;
     case 'promo-marquee':
       if (p['pad_x'] == null) p['pad_x'] = 0;
       inner = PromoMarqueeBlock(p: p, ar: ar); break;
     case 'promo-banner-cta':
-      inner = Builder(builder: (ctx) => PromoBannerCtaBlock(p: p, ar: ar,
+      inner = Builder(builder: (ctx) => PromoBannerCtaBlock(p: p, data: data, ar: ar,
           onTap: () {
         final l = (p['link'] as Map?)?.cast<String, dynamic>();
         if (l != null) openBlockLink(ctx, l);
       })); break;
+    case 'promo-showcase':
+      inner = PromoShowcaseBlock(p: p, data: data, ar: ar); break;
     case 'new-customer-zone':
       inner = NewCustomerZoneBlock(p: p, data: data, ar: ar); break;
     default:               return const SizedBox.shrink();
@@ -2175,9 +2177,12 @@ class _FlashHeroState extends State<_FlashHero> {
 
   @override
   Widget build(BuildContext context) {
+    // v2.2.14 — refined, shorter hero: deep premium gradient, gold FLASH
+    // chip, compact countdown, discount badge, clean image plate.
+    final ar = widget.ar;
     return Container(
-      margin: const EdgeInsets.fromLTRB(8, 4, 8, 8),
-      height: 260,
+      margin: const EdgeInsets.fromLTRB(8, 4, 8, 6),
+      height: 196,
       child: PageView.builder(
         physics: const ClampingScrollPhysics(),
         controller: _ctrl,
@@ -2185,6 +2190,8 @@ class _FlashHeroState extends State<_FlashHero> {
         itemCount: widget.items.length,
         itemBuilder: (_, i) {
           final p = widget.items[i];
+          final hasCmp = p.comparePrice != null;
+          final disc = p.discountPct;
           return Padding(
             padding: const EdgeInsets.symmetric(horizontal: 4),
             child: GestureDetector(
@@ -2192,44 +2199,45 @@ class _FlashHeroState extends State<_FlashHero> {
               child: Container(
                 clipBehavior: Clip.antiAlias,
                 decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(18),
+                  borderRadius: BorderRadius.circular(20),
                   gradient: const LinearGradient(
                     begin: Alignment.topLeft, end: Alignment.bottomRight,
-                    colors: [Color(0xFFC0392B), Color(0xFFF59E0B), Color(0xFFFFD340)],
+                    colors: [Color(0xFF7A1420), Color(0xFFC0392B), Color(0xFFE85D2A)],
                   ),
                   boxShadow: const [BoxShadow(
-                      color: Color(0x44C0392B), blurRadius: 18,
+                      color: Color(0x40C0392B), blurRadius: 16,
                       offset: Offset(0, 6))],
                 ),
-                // v2.2.08 — REBUILT: the image was absolutely-positioned
-                // (LTR-fixed) and sat under the name/price — worst in
-                // Arabic. Now a clean Row: text and image in separate
-                // lanes (can never overlap), RTL-safe, image on a soft
-                // white plate.
                 child: Stack(children: [
+                  // soft corner glow for depth
+                  Positioned(top: -40, right: -30, child: Container(
+                    width: 150, height: 150,
+                    decoration: BoxDecoration(shape: BoxShape.circle,
+                        color: Colors.white.withValues(alpha: .07)))),
                   Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 14, 16, 20),
+                    padding: const EdgeInsets.fromLTRB(14, 12, 14, 16),
                     child: Column(crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                       Row(children: [
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
                           decoration: BoxDecoration(
-                            color: Colors.white,
+                            gradient: const LinearGradient(
+                                colors: [Color(0xFFFFD340), Color(0xFFF5A623)]),
                             borderRadius: BorderRadius.circular(20)),
                           child: Row(mainAxisSize: MainAxisSize.min, children: [
-                            const Icon(Icons.flash_on, color: Color(0xFFC0392B), size: 14),
+                            const Icon(Icons.bolt, color: Color(0xFF7A1420), size: 14),
                             const SizedBox(width: 2),
-                            Text(UellowApi.instance.lang == 'ar' ? 'فلاش' : 'FLASH',
-                                style: const TextStyle(color: Color(0xFFC0392B),
-                                    fontSize: 11, fontWeight: FontWeight.w900,
-                                    letterSpacing: 0.8)),
+                            Text(ar ? 'فلاش سيل' : 'FLASH SALE',
+                                style: const TextStyle(color: Color(0xFF7A1420),
+                                    fontSize: 10.5, fontWeight: FontWeight.w900,
+                                    letterSpacing: 0.6)),
                           ]),
                         ),
                         const Spacer(),
-                        _DhmsCounter(initial: widget.endsAt),
+                        _DhmsCounter(initial: widget.endsAt, minimal: true),
                       ]),
-                      const SizedBox(height: 10),
+                      const SizedBox(height: 12),
                       Expanded(child: Row(
                           crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
@@ -2238,61 +2246,73 @@ class _FlashHeroState extends State<_FlashHero> {
                             mainAxisAlignment: MainAxisAlignment.center,
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                          if (widget.display.name) Text(p.name.current(widget.ar ? 'ar' : 'en'),
+                          if (widget.display.name) Text(
+                              p.name.current(ar ? 'ar' : 'en'),
                               maxLines: 2, overflow: TextOverflow.ellipsis,
                               style: const TextStyle(color: Colors.white,
-                                  fontSize: 16.5, fontWeight: FontWeight.w900,
-                                  height: 1.25,
-                                  shadows: [Shadow(color: Colors.black54, blurRadius: 6)])),
+                                  fontSize: 14.5, fontWeight: FontWeight.w800,
+                                  height: 1.2)),
                           const SizedBox(height: 6),
-                          Text(p.price.format(),
-                              style: const TextStyle(color: Colors.white,
-                                  fontSize: 21, fontWeight: FontWeight.w900,
-                                  shadows: [Shadow(color: Colors.black54, blurRadius: 6)])),
-                          if (p.comparePrice != null)
-                            Text(p.comparePrice!.format(),
-                                style: const TextStyle(color: Colors.white70,
-                                    fontSize: 12.5, fontWeight: FontWeight.w600,
-                                    decoration: TextDecoration.lineThrough)),
-                          const SizedBox(height: 10),
+                          Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                            Text(p.price.format(),
+                                style: const TextStyle(color: Colors.white,
+                                    fontSize: 22, fontWeight: FontWeight.w900,
+                                    height: 1.0)),
+                            if (disc > 0) ...[
+                              const SizedBox(width: 6),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(color: Colors.white,
+                                    borderRadius: BorderRadius.circular(6)),
+                                child: Text('-$disc%', style: const TextStyle(
+                                    color: Color(0xFFC0392B), fontSize: 11,
+                                    fontWeight: FontWeight.w900)),
+                              ),
+                            ],
+                          ]),
+                          if (hasCmp) Text(p.comparePrice!.format(),
+                              style: const TextStyle(color: Colors.white70,
+                                  fontSize: 11.5, fontWeight: FontWeight.w600,
+                                  decoration: TextDecoration.lineThrough)),
+                          const SizedBox(height: 9),
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(20)),
-                            child: Text(widget.ar ? 'تسوّق الآن ←' : 'Shop now →',
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 13, vertical: 6),
+                            decoration: BoxDecoration(color: Colors.white,
+                                borderRadius: BorderRadius.circular(20)),
+                            child: Text(ar ? 'تسوّق الآن ←' : 'Shop now →',
                                 style: const TextStyle(color: Color(0xFFC0392B),
-                                    fontSize: 12, fontWeight: FontWeight.w900)),
+                                    fontSize: 11.5, fontWeight: FontWeight.w900)),
                           ),
                         ])),
                         const SizedBox(width: 12),
-                        // ── image lane (its own plate — can't overlap) ──
-                        Expanded(flex: 9, child: Container(
+                        // ── image plate ──
+                        Expanded(flex: 8, child: Container(
                           decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: .92),
-                            borderRadius: BorderRadius.circular(16),
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(14),
                             boxShadow: const [BoxShadow(
-                                color: Color(0x33000000), blurRadius: 10,
-                                offset: Offset(0, 4))],
+                                color: Color(0x33000000), blurRadius: 8,
+                                offset: Offset(0, 3))],
                           ),
                           clipBehavior: Clip.antiAlias,
-                          padding: const EdgeInsets.all(8),
+                          padding: const EdgeInsets.all(6),
                           child: CachedNetworkImage(
-                            imageUrl: p.image,
-                            fit: BoxFit.contain,
+                            imageUrl: p.image, fit: BoxFit.contain,
                             errorWidget: (_, __, ___) => const Icon(
                                 Icons.shopping_bag,
-                                color: Color(0xFFC0392B), size: 60),
+                                color: Color(0xFFC0392B), size: 48),
                           ),
                         )),
                       ])),
                     ]),
                   ),
-                  // Slide indicators
-                  Positioned(bottom: 8, left: 0, right: 0,
+                  if (widget.items.length > 1) Positioned(bottom: 6, left: 0, right: 0,
                     child: Row(mainAxisAlignment: MainAxisAlignment.center, children:
-                      List.generate(widget.items.length, (k) => Container(
-                        width: k == _i ? 18 : 6, height: 4,
+                      List.generate(widget.items.length, (k) => AnimatedContainer(
+                        duration: const Duration(milliseconds: 250),
+                        width: k == _i ? 16 : 5, height: 4,
                         margin: const EdgeInsets.symmetric(horizontal: 2),
                         decoration: BoxDecoration(
                           color: k == _i ? Colors.white : Colors.white54,
