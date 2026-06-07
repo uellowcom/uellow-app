@@ -2251,7 +2251,9 @@ class _FlashHeroState extends State<_FlashHero> {
                           ]),
                         ),
                         const Spacer(),
-                        _DhmsCounter(initial: widget.endsAt, minimal: true),
+                        // v2.2.24 — full boxed YELLOW counter (D/H/M/S) per
+                        // request, instead of the inline minimal H:M:S.
+                        _DhmsCounter(initial: widget.endsAt, dark: true),
                       ]),
                       const SizedBox(height: 12),
                       Expanded(child: Row(
