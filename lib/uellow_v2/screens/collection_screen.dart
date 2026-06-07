@@ -181,10 +181,26 @@ class _CollectionScreenState extends State<CollectionScreen> {
   Map<String, dynamic>? _filterSpec;
 
   Future<void> _loadFilterSpec() async {
-    if (widget.categoryId == null || _filterSpec != null) return;
+    if (_filterSpec != null) return;
+    // v2.2.24 — search results have no filter facet; everything else
+    // (category OR any product feed/filtered-set page) gets a filter bar.
+    if (widget.searchQuery != null && widget.searchQuery!.isNotEmpty) return;
     try {
-      final url = Uri.parse(
-        '${UellowApi.instance.baseUrl}/api/mobile/v2/categories/${widget.categoryId}/filters');
+      final base = UellowApi.instance.baseUrl;
+      // Category page → that category's facets; any other feed → the
+      // global product filter spec (optionally narrowed by a link's
+      // category / on-sale filters).
+      late final Uri url;
+      if (widget.categoryId != null) {
+        url = Uri.parse('$base/api/mobile/v2/categories/${widget.categoryId}/filters');
+      } else {
+        final fl = widget.filters ?? const {};
+        url = Uri.parse('$base/api/mobile/v2/products/filters').replace(
+          queryParameters: {
+            if (fl['category_id'] != null) 'category_id': '${fl['category_id']}',
+            if (fl['on_sale'] == true) 'on_sale': '1',
+          });
+      }
       final r = await http.get(url);
       final body = jsonDecode(utf8.decode(r.bodyBytes)) as Map<String, dynamic>;
       if (body['success'] == true && mounted) {
