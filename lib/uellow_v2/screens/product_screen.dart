@@ -25,6 +25,8 @@ import 'compare_screen.dart' show CompareService;
 import 'auth_screen.dart';
 import '../widgets/flash_banner.dart';
 import '../widgets/product_card.dart';
+import '../services/admin_mode.dart';
+import 'admin/admin_product_sheet.dart';
 
 class ProductScreen extends StatefulWidget {
   const ProductScreen({super.key, required this.productId});
@@ -177,7 +179,7 @@ class _ProductScreenState extends State<ProductScreen> {
       slivers: [
       SliverToBoxAdapter(child: _Gallery(
         images: gallery, videos: p.videos, page: _galleryPage,
-        promo: p.promo,
+        promo: p.promo, productId: p.id,
         onChanged: (i) => setState(() => _galleryPage = i),
         onShare: () => Share.share(
           'Check out ${p.name.current(UellowApi.instance.lang)} on Uellow\n'
@@ -367,7 +369,10 @@ class _Gallery extends StatelessWidget {
     required this.onShare, required this.onWishlist, required this.inWishlist,
     this.promo,
     this.onCompare,
+    this.productId,
   });
+  // v2.2.11 — admin shield on the product image opens the product admin sheet.
+  final int? productId;
   final Map<String, dynamic>? promo;
   final List<String> images;
   final List<UellowProductVideo> videos;
@@ -441,6 +446,31 @@ class _Gallery extends StatelessWidget {
                 ? Icons.arrow_forward_ios : Icons.arrow_back_ios_new,
             color: UellowColors.darkBrown,
             onTap: () => Navigator.maybePop(context))),
+        // v2.2.11 — 🛡️ admin-only shield on the product image; opens the
+        // product admin sheet (cost / variants / stock / barcode / prices).
+        if (productId != null) Positioned(top: 62, left: 14,
+          child: ValueListenableBuilder<bool>(
+            valueListenable: AdminMode.isAdmin,
+            builder: (ctx, isAdmin, _) => !isAdmin
+                ? const SizedBox.shrink()
+                : GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () => showAdminProductSheet(ctx, productId!),
+                    child: Container(
+                      width: 38, height: 38,
+                      decoration: BoxDecoration(
+                        color: const Color(0xE6241302),
+                        shape: BoxShape.circle,
+                        border: Border.all(color: const Color(0x66F5C320)),
+                        boxShadow: const [BoxShadow(
+                            color: Color(0x33000000), blurRadius: 5,
+                            offset: Offset(0, 2))],
+                      ),
+                      child: const Icon(Icons.shield_outlined,
+                          size: 19, color: UellowColors.yellow),
+                    ),
+                  ),
+          )),
         Positioned(top: 14, right: 14, child: Row(children: [
           // v2.1.58 — compare (product PAGE only, never on cards per spec)
           if (onCompare != null) ...[

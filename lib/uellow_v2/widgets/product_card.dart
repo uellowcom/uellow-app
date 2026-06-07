@@ -22,6 +22,45 @@ import '../theme/uellow_theme.dart';
 import '../screens/admin/admin_product_sheet.dart';
 import '../screens/product_screen.dart' show MidStrikePrice;
 
+// v2.2.11 — per-element product-card display map. Designers toggle any
+// element of the card per block in the page builder (b.props.card). The
+// resolved block carries `props.card` to Flutter; blocks build a
+// [CardDisplay] from it and pass it to every ProductCard. Every flag
+// defaults to VISIBLE so untouched blocks render exactly as before.
+class CardDisplay {
+  const CardDisplay({
+    this.name = true,
+    this.brand = true,
+    this.price = true,
+    this.compare = true,
+    this.discount = true,
+    this.save = true,
+    this.rating = true,
+    this.wishlist = true,
+    this.promo = true,
+    this.rank = true,
+    this.video = true,
+    this.priceWatch = true,
+    this.badges = true,
+  });
+
+  final bool name, brand, price, compare, discount, save, rating, wishlist,
+      promo, rank, video, priceWatch, badges;
+
+  /// Build from the builder's `card` map. A missing key = visible (true).
+  factory CardDisplay.fromMap(Map? m) {
+    if (m == null || m.isEmpty) return const CardDisplay();
+    bool v(String k) => m[k] == null ? true : m[k] == true;
+    return CardDisplay(
+      name: v('name'), brand: v('brand'), price: v('price'),
+      compare: v('compare'), discount: v('discount'), save: v('save'),
+      rating: v('rating'), wishlist: v('wishlist'), promo: v('promo'),
+      rank: v('rank'), video: v('video'), priceWatch: v('price_watch'),
+      badges: v('badges'),
+    );
+  }
+}
+
 class ProductCard extends StatefulWidget {
   const ProductCard({
     super.key,
@@ -36,6 +75,7 @@ class ProductCard extends StatefulWidget {
     this.hideAvail = false,
     this.rich = false,
     this.surface = 'site',
+    this.display = const CardDisplay(),
   });
 
   // v2.1.34 — backend-controlled "Best seller" placement. Loaded from
@@ -68,6 +108,8 @@ class ProductCard extends StatefulWidget {
   // Matched against [rankBadgeScope] to decide if the quiet best-seller
   // line renders under the name.
   final String surface;
+  // v2.2.11 — per-element visibility map from the page builder.
+  final CardDisplay display;
 
   @override
   State<ProductCard> createState() => _ProductCardState();
@@ -94,9 +136,14 @@ class _ProductCardState extends State<ProductCard> {
         ? product.comparePrice!.amount - product.price.amount : 0.0;
     // v2.1.34 — quiet best-seller line under the name, gated by the
     // backend placement setting (off / category / related / all).
-    final showRank = product.rank != null &&
+    final d = widget.display;
+    final showRank = d.rank && product.rank != null &&
         (ProductCard.rankBadgeScope == 'all' ||
          ProductCard.rankBadgeScope == widget.surface);
+    // v2.2.11 — fold the per-element map into the existing hide flags so
+    // the discount badge/pill, struck price and save pill obey the toggles.
+    final hideDiscount = widget.hideDiscount || !d.discount;
+    final hideSavePill = widget.hideSavePill || !d.save;
 
     return GestureDetector(
       onTap: widget.onTap ?? () => UellowRouter.goProduct(context, product.id),
@@ -113,24 +160,25 @@ class _ProductCardState extends State<ProductCard> {
           ? _RichLayout(product: product, lang: lang,
               hasDiscount: hasDiscount, discountPct: discountPct,
               saveAmount: saveAmount, faved: _faved, onFav: _toggleFav,
-              showRank: showRank, hideAvail: widget.hideAvail)
+              showRank: showRank, hideAvail: widget.hideAvail, display: d)
           : widget.inFlashSale
           ? _FlashLayout(product: product, lang: lang,
               hasDiscount: hasDiscount, discountPct: discountPct,
-              saveAmount: saveAmount, faved: _faved, onFav: _toggleFav)
+              saveAmount: saveAmount, faved: _faved, onFav: _toggleFav,
+              display: d)
           : _StdLayout(product: product, lang: lang,
               // v2.0.91 — when hideDiscount is set, pretend there is no
               // discount AT ALL so the image badge + inline pill + struck
               // compare price all vanish.
-              hasDiscount: widget.hideDiscount ? false : hasDiscount,
-              discountPct: widget.hideDiscount ? 0 : discountPct,
+              hasDiscount: hideDiscount ? false : hasDiscount,
+              discountPct: hideDiscount ? 0 : discountPct,
               saveAmount: saveAmount,
-              showStockLabel: widget.hideSavePill ? false : widget.showStockLabel,
-              hideSavePill: widget.hideSavePill,
+              showStockLabel: hideSavePill ? false : widget.showStockLabel,
+              hideSavePill: hideSavePill,
               hideFreeShip: widget.hideFreeShip,
               compact: widget.compact,
               faved: _faved, onFav: _toggleFav,
-              showRank: showRank),
+              showRank: showRank, display: d),
       ),
     );
   }
@@ -168,7 +216,9 @@ class _StdLayout extends StatelessWidget {
     this.compact = false, this.hideSavePill = false,
     this.hideFreeShip = false,
     this.showRank = false,
+    this.display = const CardDisplay(),
   });
+  final CardDisplay display;
   final UellowProductCard product;
   final String lang;
   final bool hasDiscount;
@@ -202,13 +252,13 @@ class _StdLayout extends StatelessWidget {
       children: [
         _Image(product: product, hasDiscount: hasDiscount,
             discountPct: discountPct, faved: faved, onFav: onFav,
-            hideFreeShip: hideFreeShip),
+            hideFreeShip: hideFreeShip, display: display),
         Padding(
           padding: EdgeInsets.fromLTRB(8, compact ? 4 : 6, 8, compact ? 6 : 8),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              SizedBox(
+              if (display.name) SizedBox(
                 height: nameH,
                 // v2.1.34 — when the rank line shows, the name drops to 1
                 // line so the card's total height never changes.
@@ -240,7 +290,7 @@ class _StdLayout extends StatelessWidget {
               // v2.1.87 — the whole price line auto-shrinks to fit the card
               // width (big-number currencies like EGP no longer overlap),
               // and amounts use the currency's own decimals (not hard 3).
-              FittedBox(
+              if (display.price) FittedBox(
                 fit: BoxFit.scaleDown,
                 alignment: AlignmentDirectional.centerStart,
                 child: Row(crossAxisAlignment: CrossAxisAlignment.center,
@@ -257,10 +307,12 @@ class _StdLayout extends StatelessWidget {
                       color: UellowColors.muted,
                     )),
                 if (hasDiscount) ...[
-                  const SizedBox(width: 5),
-                  MidStrikePrice(
-                      text: product.comparePrice!.displayAmount(),
-                      fontSize: cmpFs, color: Colors.black87),
+                  if (display.compare) ...[
+                    const SizedBox(width: 5),
+                    MidStrikePrice(
+                        text: product.comparePrice!.displayAmount(),
+                        fontSize: cmpFs, color: Colors.black87),
+                  ],
                   const SizedBox(width: 4),
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1.5),
@@ -277,7 +329,7 @@ class _StdLayout extends StatelessWidget {
                 ],
               ])),
               // v2.1.25 — price-intelligence indicator (drop / lowest-90d).
-              if (product.priceTrend != null) Padding(
+              if (display.priceWatch && product.priceTrend != null) Padding(
                 padding: const EdgeInsets.only(top: 2),
                 child: Builder(builder: (_) {
                   final t = product.priceTrend!;
@@ -303,7 +355,7 @@ class _StdLayout extends StatelessWidget {
                 }),
               ),
               SizedBox(height: padBetweenPriceAndStats),
-              _StatsRow(product: product, lang: lang),
+              if (display.rating) _StatsRow(product: product, lang: lang),
               if (!hideSavePill) ...[
                 const SizedBox(height: 6),
                 Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
@@ -420,7 +472,9 @@ class _FlashLayout extends StatelessWidget {
     required this.product, required this.lang,
     required this.hasDiscount, required this.discountPct, required this.saveAmount,
     required this.faved, required this.onFav,
+    this.display = const CardDisplay(),
   });
+  final CardDisplay display;
   final UellowProductCard product;
   final String lang;
   final bool hasDiscount;
@@ -444,7 +498,7 @@ class _FlashLayout extends StatelessWidget {
       Stack(children: [
         _Image(product: product, hasDiscount: false,
             discountPct: 0, faved: faved, onFav: onFav, clean: true),
-        if (discountPct > 0) PositionedDirectional(
+        if (discountPct > 0 && display.discount) PositionedDirectional(
           top: 6, end: 6,
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2.5),
@@ -462,7 +516,7 @@ class _FlashLayout extends StatelessWidget {
                     height: 1.0)),
           ),
         ),
-        if (product.hasVideo) PositionedDirectional(
+        if (product.hasVideo && display.video) PositionedDirectional(
           top: 6, start: 6,
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2.5),
@@ -480,7 +534,7 @@ class _FlashLayout extends StatelessWidget {
             ]),
           ),
         ),
-        if (product.badges.contains('free_shipping')) PositionedDirectional(
+        if (product.badges.contains('free_shipping') && display.badges) PositionedDirectional(
           bottom: 6, start: 6,
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2.5),
@@ -518,14 +572,14 @@ class _FlashLayout extends StatelessWidget {
             Text(product.price.displaySymbol(lang),
                 style: const TextStyle(fontSize: 8.5, fontWeight: FontWeight.w800,
                     color: Color(0xFFC62828))),
-            if (hasDiscount) ...[
+            if (hasDiscount && display.compare) ...[
               const SizedBox(width: 4),
               Flexible(child: MidStrikePrice(
                   text: product.comparePrice!.amount.toStringAsFixed(3),
                   fontSize: 9, color: UellowColors.muted)),
             ],
           ]),
-          if (hasDiscount) ...[
+          if (hasDiscount && display.save) ...[
             const SizedBox(height: 5),
             // v2.0.65 — centered "Save X.XXX KD" pill in the flash card.
             Align(alignment: Alignment.center, child: Container(
@@ -576,7 +630,9 @@ class _Image extends StatelessWidget {
     this.clean = false,
     this.hideFreeShip = false,
     this.extraBadges = const [],
+    this.display = const CardDisplay(),
   });
+  final CardDisplay display;
   final UellowProductCard product;
   final bool hasDiscount;
   final int discountPct;
@@ -616,7 +672,7 @@ class _Image extends StatelessWidget {
               ),
             ]),
           ),
-          if (discountPct > 0 && !clean) Positioned(
+          if (discountPct > 0 && !clean && display.discount) Positioned(
             top: 8, left: 8,
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
@@ -635,7 +691,7 @@ class _Image extends StatelessWidget {
                   )),
             ),
           ),
-          if (product.hasVideo && !clean) Positioned(
+          if (product.hasVideo && !clean && display.video) Positioned(
             top: 8, right: 8,
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
@@ -661,7 +717,7 @@ class _Image extends StatelessWidget {
           // backend rank_badge_scope setting.
           // v2.0.82 — Free shipping badge (when the product is tagged)
           if (product.badges.contains('free_shipping') && !clean
-              && !hideFreeShip) Positioned(
+              && !hideFreeShip && display.badges) Positioned(
             bottom: 8, left: 8,
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
@@ -685,7 +741,7 @@ class _Image extends StatelessWidget {
               ]),
             ),
           ),
-          Positioned(bottom: 8, right: 8,
+          if (display.wishlist) Positioned(bottom: 8, right: 8,
             child: _HeartBtn(filled: faved, onTap: onFav)),
           // v2.2.10 — 🛡️ admin-only chip: opens the product admin
           // dialog (cost / variants / stock / barcode / prices).
@@ -843,7 +899,9 @@ class _RichLayout extends StatelessWidget {
     required this.saveAmount, required this.faved, required this.onFav,
     this.showRank = false,
     this.hideAvail = false,
+    this.display = const CardDisplay(),
   });
+  final CardDisplay display;
   final UellowProductCard product;
   final String lang;
   final bool hasDiscount;
@@ -875,21 +933,21 @@ class _RichLayout extends StatelessWidget {
       ]),
     );
     if (!hideAvail) out.add(_AvailPill(product: product));
-    if (product.priceTrend?['is_lowest'] == true) {
+    if (display.priceWatch && product.priceTrend?['is_lowest'] == true) {
       out.add(coin('🔥', ar ? 'أقل سعر' : 'LOWEST',
           const Color(0xFFFFF3E0), const Color(0xFFBF360C)));
     }
-    if (product.badges.contains('sale')) {
+    if (display.badges && product.badges.contains('sale')) {
       out.add(coin('⚡', ar ? 'عرض' : 'SALE',
           const Color(0xFFFFEBEE), const Color(0xFFC62828)));
     }
     // v2.1.34 — 🏆 BEST coin removed: the rank now renders as a quiet
     // text line under the name (backend-controlled placement).
-    if (product.badges.contains('new')) {
+    if (display.badges && product.badges.contains('new')) {
       out.add(coin('✨', ar ? 'جديد' : 'NEW',
           const Color(0xFFE3F2FD), const Color(0xFF1565C0)));
     }
-    if (product.badges.contains('free_shipping')) {
+    if (display.badges && product.badges.contains('free_shipping')) {
       out.add(Container(
         padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
         decoration: BoxDecoration(color: UellowColors.yellow,
@@ -905,7 +963,7 @@ class _RichLayout extends StatelessWidget {
         ]),
       ));
     }
-    if (product.hasVideo) {
+    if (display.video && product.hasVideo) {
       out.add(Container(
         padding: const EdgeInsets.all(2.5),
         decoration: BoxDecoration(
@@ -930,18 +988,18 @@ class _RichLayout extends StatelessWidget {
         // v2.1.28 — clean photo; overflow badges land on it bottom-end.
         _Image(product: product, hasDiscount: hasDiscount,
             discountPct: discountPct, faved: faved, onFav: onFav,
-            clean: true, extraBadges: overflow),
+            clean: true, extraBadges: overflow, display: display),
         Padding(
           padding: const EdgeInsets.fromLTRB(8, 4, 8, 6),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             // ── name (2 lines) — promo coin inline BEFORE the name.
             // v2.1.34 — with the rank line shown, the name drops to 1
             // line so the card height never changes.
-            SizedBox(height: 30, child: Column(
+            if (display.name) SizedBox(height: 30, child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
               Text.rich(TextSpan(children: [
-              if (product.promo != null) WidgetSpan(
+              if (product.promo != null && display.promo) WidgetSpan(
                 alignment: PlaceholderAlignment.middle,
                 child: Container(
                   margin: const EdgeInsetsDirectional.only(end: 4),
@@ -974,7 +1032,7 @@ class _RichLayout extends StatelessWidget {
             ])),
             const SizedBox(height: 2),
             // ── price row ──
-            Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
+            if (display.price) Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
               Text(product.price.amount.toStringAsFixed(3),
                   style: const TextStyle(fontSize: 13.5,
                       fontWeight: FontWeight.w900,
@@ -984,24 +1042,28 @@ class _RichLayout extends StatelessWidget {
                   style: const TextStyle(fontSize: 9,
                       fontWeight: FontWeight.w700, color: UellowColors.muted)),
               if (hasDiscount) ...[
-                const SizedBox(width: 5),
-                Flexible(child: MidStrikePrice(
-                    text: product.comparePrice!.amount.toStringAsFixed(3),
-                    fontSize: 9, color: Colors.black87)),
-                const SizedBox(width: 4),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1.5),
-                  decoration: BoxDecoration(color: UellowColors.danger,
-                      borderRadius: BorderRadius.circular(3)),
-                  child: Text('-$discountPct%', style: const TextStyle(
-                      color: Colors.white, fontSize: 8.5,
-                      fontWeight: FontWeight.w900, height: 1.0)),
-                ),
+                if (display.compare) ...[
+                  const SizedBox(width: 5),
+                  Flexible(child: MidStrikePrice(
+                      text: product.comparePrice!.amount.toStringAsFixed(3),
+                      fontSize: 9, color: Colors.black87)),
+                ],
+                if (display.discount) ...[
+                  const SizedBox(width: 4),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1.5),
+                    decoration: BoxDecoration(color: UellowColors.danger,
+                        borderRadius: BorderRadius.circular(3)),
+                    child: Text('-$discountPct%', style: const TextStyle(
+                        color: Colors.white, fontSize: 8.5,
+                        fontWeight: FontWeight.w900, height: 1.0)),
+                  ),
+                ],
               ],
             ]),
             const SizedBox(height: 2),
             // ── FULL 5 stars + (count) + price-intelligence indicator ──
-            SizedBox(height: 14, child: Row(children: [
+            if (display.rating) SizedBox(height: 14, child: Row(children: [
               for (var i = 0; i < 5; i++) Icon(
                 i < product.rating.avg.round()
                     ? Icons.star_rounded : Icons.star_outline_rounded,
@@ -1013,7 +1075,7 @@ class _RichLayout extends StatelessWidget {
               Text('(${product.rating.count})', style: const TextStyle(
                   fontSize: 9, color: UellowColors.muted,
                   fontWeight: FontWeight.w600)),
-              if (product.priceTrend != null) ...[
+              if (display.priceWatch && product.priceTrend != null) ...[
                 const SizedBox(width: 6),
                 Builder(builder: (_) {
                   final t = product.priceTrend!;

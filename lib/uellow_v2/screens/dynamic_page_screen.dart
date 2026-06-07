@@ -284,7 +284,7 @@ Widget _renderBlock(BuildContext c, Map<String, dynamic> b, DynTheme t) {
     case 'promo-mega2':      inner = PromoMegaGridBlock(p: p, data: data, ar: ar); break;
     case 'promo-flash-rail': inner = PromoFlashRailBlock(p: p, data: data, ar: ar); break;
     case 'promo-masonry':    inner = PromoMasonryBlock(p: p, data: data, ar: ar); break;
-    case 'promo-coupon':     inner = PromoCouponBlock(p: p, ar: ar); break;
+    case 'promo-coupon':     inner = PromoCouponBlock(p: p, data: data, ar: ar); break;
     case 'promo-tiers':      inner = PromoTiersBlock(p: p, ar: ar); break;
     case 'promo-marquee':
       if (p['pad_x'] == null) p['pad_x'] = 0;
@@ -295,6 +295,8 @@ Widget _renderBlock(BuildContext c, Map<String, dynamic> b, DynTheme t) {
         final l = (p['link'] as Map?)?.cast<String, dynamic>();
         if (l != null) openBlockLink(ctx, l);
       })); break;
+    case 'new-customer-zone':
+      inner = NewCustomerZoneBlock(p: p, data: data, ar: ar); break;
     default:               return const SizedBox.shrink();
   }
   return BlockEnvelope(props: p, theme: t, child: inner);
@@ -883,12 +885,15 @@ class _ProductsBlock extends StatelessWidget {
     ]);
   }
 
+  // v2.2.11 — per-element display map from the builder (b.props.card).
+  CardDisplay get _display => CardDisplay.fromMap(p['card'] as Map?);
+
   // v2.1.33 — carousel + grid_2 (incl. Bestsellers) render the SAME
   // rich card as the category page. grid_3 stays compact (too narrow).
   Widget _richCard(Map<String, dynamic> prod) {
     try {
       return ProductCard(rich: true,
-          product: UellowProductCard.fromJson(prod));
+          product: UellowProductCard.fromJson(prod), display: _display);
     } catch (_) {
       return _card(prod);
     }
@@ -1697,15 +1702,16 @@ class _FlashBlock extends StatelessWidget {
         linkedLabel.isNotEmpty
             ? linkedLabel
             : (ar ? 'فلاش سيل' : 'Flash Sale'));
+    final display = CardDisplay.fromMap(p['card'] as Map?);
     switch (variant) {
-      case 'dark':    return _FlashDark(items: items, title: title, ar: ar, endsAt: endsAt, onOpen: _open);
-      case 'minimal': return _FlashMinimal(items: items, title: title, ar: ar, endsAt: endsAt, onOpen: _open);
-      case 'hero':    return _FlashHero(items: items, title: title, ar: ar, endsAt: endsAt, onOpen: _open);
+      case 'dark':    return _FlashDark(items: items, title: title, ar: ar, endsAt: endsAt, onOpen: _open, display: display);
+      case 'minimal': return _FlashMinimal(items: items, title: title, ar: ar, endsAt: endsAt, onOpen: _open, display: display);
+      case 'hero':    return _FlashHero(items: items, title: title, ar: ar, endsAt: endsAt, onOpen: _open, display: display);
       // v2.1.36 — new promo designs:
-      case 'royal':   return _FlashRoyal(items: items, title: title, ar: ar, endsAt: endsAt, onOpen: _open);
-      case 'custom':  return _FlashCustom(items: items, title: title, ar: ar, endsAt: endsAt, p: p, onOpen: _open);
+      case 'royal':   return _FlashRoyal(items: items, title: title, ar: ar, endsAt: endsAt, onOpen: _open, display: display);
+      case 'custom':  return _FlashCustom(items: items, title: title, ar: ar, endsAt: endsAt, p: p, onOpen: _open, display: display);
       case 'classic':
-      default:        return _FlashClassic(items: items, title: title, ar: ar, endsAt: endsAt, onOpen: _open);
+      default:        return _FlashClassic(items: items, title: title, ar: ar, endsAt: endsAt, onOpen: _open, display: display);
     }
   }
 
@@ -1736,12 +1742,13 @@ class _FlashBlock extends StatelessWidget {
 // ── Variant: CLASSIC (the legacy yellow/orange one) ────────────────────────
 
 class _FlashClassic extends StatelessWidget {
-  const _FlashClassic({required this.items, required this.title, required this.ar, required this.endsAt, required this.onOpen});
+  const _FlashClassic({required this.items, required this.title, required this.ar, required this.endsAt, required this.onOpen, this.display = const CardDisplay()});
   final List<UellowProductCard> items;
   final String title;
   final bool ar;
   final Duration endsAt;
   final void Function(BuildContext) onOpen;
+  final CardDisplay display;
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
@@ -1808,7 +1815,7 @@ class _FlashClassic extends StatelessWidget {
                   separatorBuilder: (_, __) => const SizedBox(width: 8),
                   itemBuilder: (_, i) => SizedBox(
                       width: 124,
-                      child: ProductCard(product: items[i], inFlashSale: true)),
+                      child: ProductCard(product: items[i], inFlashSale: true, display: display)),
                 ),
               ),
             ]),
@@ -1822,12 +1829,13 @@ class _FlashClassic extends StatelessWidget {
 // ── Variant: DARK — premium black/neon ────────────────────────────────────
 
 class _FlashDark extends StatelessWidget {
-  const _FlashDark({required this.items, required this.title, required this.ar, required this.endsAt, required this.onOpen});
+  const _FlashDark({required this.items, required this.title, required this.ar, required this.endsAt, required this.onOpen, this.display = const CardDisplay()});
   final List<UellowProductCard> items;
   final String title;
   final bool ar;
   final Duration endsAt;
   final void Function(BuildContext) onOpen;
+  final CardDisplay display;
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
@@ -1880,7 +1888,7 @@ class _FlashDark extends StatelessWidget {
               separatorBuilder: (_, __) => const SizedBox(width: 8),
               itemBuilder: (_, i) => SizedBox(
                   width: 138,
-                  child: ProductCard(product: items[i], inFlashSale: true)),
+                  child: ProductCard(product: items[i], inFlashSale: true, display: display)),
             ),
           ),
         ]),
@@ -1892,12 +1900,13 @@ class _FlashDark extends StatelessWidget {
 // ── Variant: MINIMAL — clean, red accents ─────────────────────────────────
 
 class _FlashMinimal extends StatelessWidget {
-  const _FlashMinimal({required this.items, required this.title, required this.ar, required this.endsAt, required this.onOpen});
+  const _FlashMinimal({required this.items, required this.title, required this.ar, required this.endsAt, required this.onOpen, this.display = const CardDisplay()});
   final List<UellowProductCard> items;
   final String title;
   final bool ar;
   final Duration endsAt;
   final void Function(BuildContext) onOpen;
+  final CardDisplay display;
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -1944,7 +1953,7 @@ class _FlashMinimal extends StatelessWidget {
             separatorBuilder: (_, __) => const SizedBox(width: 8),
             itemBuilder: (_, i) => SizedBox(
                 width: 138,
-                child: ProductCard(product: items[i], inFlashSale: true)),
+                child: ProductCard(product: items[i], inFlashSale: true, display: display)),
           ),
         ),
       ]),
@@ -1955,12 +1964,13 @@ class _FlashMinimal extends StatelessWidget {
 // ── Variant: ROYAL — premium deep-purple & gold (v2.1.36) ─────────────────
 
 class _FlashRoyal extends StatelessWidget {
-  const _FlashRoyal({required this.items, required this.title, required this.ar, required this.endsAt, required this.onOpen});
+  const _FlashRoyal({required this.items, required this.title, required this.ar, required this.endsAt, required this.onOpen, this.display = const CardDisplay()});
   final List<UellowProductCard> items;
   final String title;
   final bool ar;
   final Duration endsAt;
   final void Function(BuildContext) onOpen;
+  final CardDisplay display;
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
@@ -2013,7 +2023,7 @@ class _FlashRoyal extends StatelessWidget {
               separatorBuilder: (_, __) => const SizedBox(width: 8),
               itemBuilder: (_, i) => SizedBox(
                   width: 138,
-                  child: ProductCard(product: items[i], inFlashSale: true)),
+                  child: ProductCard(product: items[i], inFlashSale: true, display: display)),
             ),
           ),
         ]),
@@ -2041,13 +2051,14 @@ Color _flashHexColor(dynamic raw, Color fallback) {
 class _FlashCustom extends StatelessWidget {
   const _FlashCustom({required this.items, required this.title,
       required this.ar, required this.endsAt, required this.p,
-      required this.onOpen});
+      required this.onOpen, this.display = const CardDisplay()});
   final List<UellowProductCard> items;
   final String title;
   final bool ar;
   final Duration endsAt;
   final Map<String, dynamic> p;
   final void Function(BuildContext) onOpen;
+  final CardDisplay display;
   @override
   Widget build(BuildContext context) {
     final c1 = _flashHexColor(p['flash_c1'], const Color(0xFFF5C320));
@@ -2120,7 +2131,7 @@ class _FlashCustom extends StatelessWidget {
                   separatorBuilder: (_, __) => const SizedBox(width: 8),
                   itemBuilder: (_, i) => SizedBox(
                       width: cardW,
-                      child: ProductCard(product: items[i], inFlashSale: true)),
+                      child: ProductCard(product: items[i], inFlashSale: true, display: display)),
                 ),
               ),
             ]),
@@ -2134,12 +2145,13 @@ class _FlashCustom extends StatelessWidget {
 // ── Variant: HERO — full-bleed single-product spotlight ───────────────────
 
 class _FlashHero extends StatefulWidget {
-  const _FlashHero({required this.items, required this.title, required this.ar, required this.endsAt, required this.onOpen});
+  const _FlashHero({required this.items, required this.title, required this.ar, required this.endsAt, required this.onOpen, this.display = const CardDisplay()});
   final List<UellowProductCard> items;
   final String title;
   final bool ar;
   final Duration endsAt;
   final void Function(BuildContext) onOpen;
+  final CardDisplay display;
   @override
   State<_FlashHero> createState() => _FlashHeroState();
 }
@@ -2226,7 +2238,7 @@ class _FlashHeroState extends State<_FlashHero> {
                             mainAxisAlignment: MainAxisAlignment.center,
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                          Text(p.name.current(widget.ar ? 'ar' : 'en'),
+                          if (widget.display.name) Text(p.name.current(widget.ar ? 'ar' : 'en'),
                               maxLines: 2, overflow: TextOverflow.ellipsis,
                               style: const TextStyle(color: Colors.white,
                                   fontSize: 16.5, fontWeight: FontWeight.w900,
@@ -2381,4 +2393,104 @@ class _DiagonalStripes extends CustomPainter {
   }
   @override
   bool shouldRepaint(covariant _) => false;
+}
+
+// ─── v2.2.11 — 🌟 New-Customer Zone teaser block ───────────────────────────
+// Gradient hero + preview rail that deep-links into the full NewCustomerScreen.
+// Offer config + preview items come from the resolver (data.offer / data.items).
+class NewCustomerZoneBlock extends StatelessWidget {
+  const NewCustomerZoneBlock(
+      {super.key, required this.p, required this.data, required this.ar});
+  final Map<String, dynamic> p;
+  final Map<String, dynamic> data;
+  final bool ar;
+
+  Color _c(Object? raw, Color fb) {
+    try {
+      var s = (raw ?? '').toString().replaceAll('#', '');
+      if (s.length == 6) s = 'FF$s';
+      return Color(int.parse(s, radix: 16));
+    } catch (_) { return fb; }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final offer = (data['offer'] as Map?)?.cast<String, dynamic>();
+    if (offer == null) return const SizedBox.shrink();
+    final items = ((data['items'] as List?) ?? const [])
+        .map((e) {
+          try { return UellowProductCard.fromJson((e as Map).cast<String, dynamic>()); }
+          catch (_) { return null; }
+        }).whereType<UellowProductCard>().toList();
+    final c1 = _c(offer['c1'], const Color(0xFF7C3AED));
+    final c2 = _c(offer['c2'], const Color(0xFF2563EB));
+    final tc = _c(offer['text_color'], Colors.white);
+    final title = ((offer['title'] as Map?)?[ar ? 'ar' : 'en'] ?? '').toString();
+    final sub = ((offer['subtitle'] as Map?)?[ar ? 'ar' : 'en'] ?? '').toString();
+    final emoji = (offer['emoji'] ?? '🎁').toString();
+    final pct = (offer['discount_pct'] as num?)?.toInt() ?? 0;
+
+    void open() => Navigator.pushNamed(context, Routes.newCustomer);
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        GestureDetector(
+          onTap: open,
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                  begin: Alignment.topLeft, end: Alignment.bottomRight,
+                  colors: [c1, c2]),
+              borderRadius: BorderRadius.circular(18),
+              boxShadow: [BoxShadow(color: c1.withValues(alpha: .3),
+                  blurRadius: 12, offset: const Offset(0, 6))],
+            ),
+            child: Row(children: [
+              Text(emoji, style: const TextStyle(fontSize: 34)),
+              const SizedBox(width: 12),
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min, children: [
+                Text(title.isNotEmpty ? title
+                    : (ar ? 'حصري للعملاء الجدد' : 'Exclusive for New Customers'),
+                    maxLines: 2, overflow: TextOverflow.ellipsis,
+                    style: TextStyle(color: tc, fontSize: 16,
+                        fontWeight: FontWeight.w900, height: 1.2)),
+                if (sub.isNotEmpty) Text(sub, maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(color: tc.withValues(alpha: .9), fontSize: 11.5)),
+                if (pct > 0) Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
+                    decoration: BoxDecoration(color: Colors.white.withValues(alpha: .22),
+                        borderRadius: BorderRadius.circular(999),
+                        border: Border.all(color: tc.withValues(alpha: .5))),
+                    child: Text(ar ? 'خصم حتى $pct%' : 'Up to $pct% OFF',
+                        style: TextStyle(color: tc, fontWeight: FontWeight.w900,
+                            fontSize: 11)),
+                  ),
+                ),
+              ])),
+              Icon(ar ? Icons.chevron_left : Icons.chevron_right,
+                  color: tc, size: 26),
+            ]),
+          ),
+        ),
+        if (items.isNotEmpty) Padding(
+          padding: const EdgeInsets.only(top: 10),
+          child: SizedBox(height: 286, child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 2),
+            itemCount: items.length,
+            separatorBuilder: (_, __) => const SizedBox(width: 8),
+            itemBuilder: (_, i) => SizedBox(width: 160,
+                child: ProductCard(rich: true, product: items[i],
+                    display: CardDisplay.fromMap(p['card'] as Map?))),
+          )),
+        ),
+      ]),
+    );
+  }
 }

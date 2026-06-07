@@ -45,11 +45,14 @@ String _abs(String u) =>
 // ─── live countdown helper ──────────────────────────────────────────────
 class PromoCountdown extends StatefulWidget {
   const PromoCountdown({super.key, required this.endsAt, this.color,
-      this.boxColor, this.compact = false});
+      this.boxColor, this.compact = false, this.labelColor, this.scale = 1.0});
   final DateTime? endsAt;
   final Color? color;
   final Color? boxColor;
   final bool compact;
+  // v2.2.11 — separate label colour + a size multiplier (sm/md/lg in hero).
+  final Color? labelColor;
+  final double scale;
   @override
   State<PromoCountdown> createState() => _PromoCountdownState();
 }
@@ -80,14 +83,16 @@ class _PromoCountdownState extends State<PromoCountdown> {
       (d.inSeconds % 60, ar ? 'ثانية' : 'S'),
     ];
     final fg = widget.color ?? Colors.white;
+    final lc = widget.labelColor ?? fg.withValues(alpha: .8);
     final bg = widget.boxColor ?? Colors.white.withValues(alpha: .18);
-    final sz = widget.compact ? 13.0 : 19.0;
+    final sc = widget.scale;
+    final sz = (widget.compact ? 13.0 : 19.0) * sc;
     return Row(mainAxisSize: MainAxisSize.min, children: [
       for (var i = 0; i < parts.length; i++) ...[
         Container(
           padding: EdgeInsets.symmetric(
-              horizontal: widget.compact ? 7 : 10,
-              vertical: widget.compact ? 4 : 7),
+              horizontal: (widget.compact ? 7 : 10) * sc,
+              vertical: (widget.compact ? 4 : 7) * sc),
           decoration: BoxDecoration(color: bg,
               borderRadius: BorderRadius.circular(10)),
           child: Column(mainAxisSize: MainAxisSize.min, children: [
@@ -97,7 +102,7 @@ class _PromoCountdownState extends State<PromoCountdown> {
                     fontFeatures: const [FontFeature.tabularFigures()])),
             if (!widget.compact)
               Text(parts[i].$2, style: TextStyle(
-                  color: fg.withValues(alpha: .8), fontSize: 8.5,
+                  color: lc, fontSize: 8.5 * sc,
                   fontWeight: FontWeight.w700)),
           ]),
         ),
@@ -323,11 +328,25 @@ class PromoHeroBlock extends StatelessWidget {
     final showCd = p['show_countdown'] != false && ends != null;
     final pattern = (p['pattern'] ?? promo?['pattern'] ?? 'none').toString();
     final curved = p['bottom_curve'] != false;
+    // v2.2.11 — background image slider + configurable countdown.
+    final bgImages = ((p['bg_images'] as List?) ?? const [])
+        .map((e) => _abs(e.toString()))
+        .where((s) => s.isNotEmpty && s != _abs('')).toList();
+    final slideInterval =
+        ((p['slide_interval'] as num?)?.toInt() ?? 4).clamp(2, 12);
+    final cdPos = (p['countdown_position'] ?? 'bottom-center').toString();
+    final cdSize = (p['countdown_size'] ?? 'sm').toString();
+    final cdBox = promoParseColor(p['countdown_box_color'])
+        ?? Colors.black.withValues(alpha: .45);
+    final cdText = promoParseColor(p['countdown_text_color']) ?? Colors.white;
+    final cdLabel = promoParseColor(p['countdown_label_color']) ?? Colors.white;
 
     final core = SizedBox(
       height: h,
       child: Stack(fit: StackFit.expand, children: [
         _AnimatedPromoBg(style: anim, c1: c1, c2: c2, c3: c3),
+        if (bgImages.isNotEmpty) Positioned.fill(
+            child: _HeroBgSlider(images: bgImages, interval: slideInterval)),
         if (pattern != 'none')
           CustomPaint(painter: BannerPattern(style: pattern),
               child: const SizedBox.expand()),
@@ -421,17 +440,6 @@ class PromoHeroBlock extends StatelessWidget {
                   style: TextStyle(color: txt.withValues(alpha: .9),
                       fontSize: 12, fontWeight: FontWeight.w600)),
             ),
-            if (showCd) Padding(
-              padding: const EdgeInsets.only(top: 10),
-              child: Column(children: [
-                Text(ar ? '⏰ ينتهي العرض خلال' : '⏰ OFFER ENDS IN',
-                    style: TextStyle(color: txt.withValues(alpha: .8),
-                        fontSize: 9.5, letterSpacing: 1.2,
-                        fontWeight: FontWeight.w800)),
-                const SizedBox(height: 5),
-                _glassCountdown(ends, txt),
-              ]),
-            ),
             if (cta.isNotEmpty) Padding(
               padding: const EdgeInsets.only(top: 10),
               child: GestureDetector(
@@ -452,6 +460,10 @@ class PromoHeroBlock extends StatelessWidget {
             ),
           ]),
         )),
+        // v2.2.11 — countdown rendered as a positioned overlay so it keeps
+        // its anchor (and rises automatically) when the height is reduced.
+        if (showCd) _heroCountdown(
+            cdPos, cdSize, ends, cdBox, cdText, cdLabel, ar, curved),
       ]),
     );
 
@@ -494,14 +506,73 @@ class PromoHeroBlock extends StatelessWidget {
             : Text(emoji, style: TextStyle(fontSize: d * .48)),
       );
 
-  Widget _glassCountdown(DateTime? ends, Color txt) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        decoration: BoxDecoration(
-            color: Colors.black.withValues(alpha: .22),
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: Colors.white.withValues(alpha: .28))),
-        child: PromoCountdown(endsAt: ends, color: txt),
-      );
+  // v2.2.11 — countdown overlay anchored by the builder's position setting.
+  Widget _heroCountdown(String pos, String size, DateTime ends, Color box,
+      Color text, Color label, bool ar, bool curved) {
+    const aligns = {
+      'top-left': Alignment.topLeft, 'top-center': Alignment.topCenter,
+      'top-right': Alignment.topRight, 'center': Alignment.center,
+      'bottom-left': Alignment.bottomLeft, 'bottom-center': Alignment.bottomCenter,
+      'bottom-right': Alignment.bottomRight,
+    };
+    final align = aligns[pos] ?? Alignment.bottomCenter;
+    final compact = size == 'sm';
+    final scale = size == 'lg' ? 1.25 : (size == 'md' ? 1.0 : 0.9);
+    return Positioned.fill(child: Padding(
+      padding: EdgeInsets.fromLTRB(14, 14, 14, curved ? 30 : 14),
+      child: Align(alignment: align, child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.center, children: [
+        Text(ar ? '⏰ ينتهي خلال' : '⏰ ENDS IN',
+            style: TextStyle(color: label, fontSize: 9.5 * scale,
+                letterSpacing: 1.1, fontWeight: FontWeight.w800)),
+        const SizedBox(height: 4),
+        PromoCountdown(endsAt: ends, color: text, boxColor: box,
+            labelColor: label, compact: compact, scale: scale),
+      ]))));
+  }
+}
+
+// v2.2.11 — auto-advancing background image slider for the Promo Hero.
+class _HeroBgSlider extends StatefulWidget {
+  const _HeroBgSlider({required this.images, required this.interval});
+  final List<String> images;
+  final int interval;
+  @override
+  State<_HeroBgSlider> createState() => _HeroBgSliderState();
+}
+
+class _HeroBgSliderState extends State<_HeroBgSlider> {
+  final _ctrl = PageController();
+  int _i = 0;
+  Timer? _t;
+  @override
+  void initState() {
+    super.initState();
+    if (widget.images.length > 1) {
+      _t = Timer.periodic(Duration(seconds: widget.interval), (_) {
+        if (!mounted || !_ctrl.hasClients) return;
+        _i = (_i + 1) % widget.images.length;
+        _ctrl.animateToPage(_i,
+            duration: const Duration(milliseconds: 600), curve: Curves.easeInOut);
+      });
+    }
+  }
+  @override
+  void dispose() { _t?.cancel(); _ctrl.dispose(); super.dispose(); }
+  @override
+  Widget build(BuildContext context) {
+    if (widget.images.length == 1) {
+      return Image.network(widget.images.first, fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) => const SizedBox.shrink());
+    }
+    return PageView.builder(
+      controller: _ctrl,
+      itemCount: widget.images.length,
+      itemBuilder: (_, i) => Image.network(widget.images[i], fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) => const SizedBox.shrink()),
+    );
+  }
 }
 
 /// Concave wave cut along the hero's bottom edge.
@@ -610,7 +681,8 @@ class _PromoCarouselBlockState extends State<PromoCarouselBlock> {
         itemCount: items.length,
         itemBuilder: (_, i) => Padding(
           padding: const EdgeInsets.symmetric(horizontal: 5),
-          child: ProductCard(rich: true, product: items[i], hideAvail: true),
+          child: ProductCard(rich: true, product: items[i], hideAvail: true,
+              display: CardDisplay.fromMap(widget.p['card'] as Map?)),
         ),
       )),
       const SizedBox(height: 8),
@@ -799,75 +871,197 @@ class PromoFlashRailBlock extends StatelessWidget {
                 boxColor: Colors.transparent, compact: true),
           ),
         Expanded(child: ProductCard(
-            rich: true, product: items[i], hideAvail: true)),
+            rich: true, product: items[i], hideAvail: true,
+            display: CardDisplay.fromMap(p['card'] as Map?))),
       ])),
     ));
   }
 }
 
 // ═══ 6. COUPON CARD (dashed + copy) ═════════════════════════════════════
+// v2.2.11 — professional coupon wall. Manual single code OR real coupons
+// from the loyalty engine (resolved into data['coupons']). Layouts:
+// grid / slider / carousel / list. Fully colour-customisable + claim btn.
 class PromoCouponBlock extends StatelessWidget {
-  const PromoCouponBlock({super.key, required this.p, required this.ar});
+  const PromoCouponBlock({super.key, required this.p, this.data, required this.ar});
   final Map<String, dynamic> p;
+  final Map<String, dynamic>? data;
   final bool ar;
+
+  List<Map<String, dynamic>> _coupons() {
+    final mode = (p['coupon_mode'] ?? 'manual').toString();
+    if (mode == 'manual') {
+      final code = (p['code'] ?? '').toString();
+      if (code.isEmpty) return const [];
+      return [{
+        'name': {'en': _tx(p, 'titleEn', 'titleAr', false),
+                 'ar': _tx(p, 'titleEn', 'titleAr', true)},
+        'code': code, 'discount_text': '', 'expiry': null, 'min_amount': 0,
+      }];
+    }
+    final raw = ((data?['coupons'] as List?) ?? const []).cast<dynamic>();
+    return raw.map((e) => (e as Map).cast<String, dynamic>()).toList();
+  }
+
   @override
   Widget build(BuildContext context) {
-    final code = (p['code'] ?? '').toString();
-    if (code.isEmpty) return const SizedBox.shrink();
-    final c1 = promoParseColor(p['c1']) ?? UellowColors.yellow;
+    final coupons = _coupons();
+    if (coupons.isEmpty) return const SizedBox.shrink();
+    final layout = (p['layout'] ?? 'grid').toString();
     final title = _tx(p, 'titleEn', 'titleAr', ar);
     final sub = _tx(p, 'subEn', 'subAr', ar);
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 10),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: c1.withValues(alpha: .08),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: c1, width: 1.6),
-      ),
-      child: Row(children: [
-        Text('🎟', style: const TextStyle(fontSize: 30)),
-        const SizedBox(width: 12),
-        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-          Text(title.isNotEmpty ? title
-              : (ar ? 'كوبون خصم' : 'Discount coupon'),
-              style: const TextStyle(fontWeight: FontWeight.w900,
-                  fontSize: 14, color: UellowColors.ink)),
-          if (sub.isNotEmpty)
-            Text(sub, style: const TextStyle(fontSize: 11,
-                color: UellowColors.muted)),
-          const SizedBox(height: 6),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: c1, width: 1.2,
-                  strokeAlign: BorderSide.strokeAlignOutside),
-            ),
-            child: Text(code, style: TextStyle(
-                fontFamily: 'monospace', letterSpacing: 2,
-                fontWeight: FontWeight.w900, fontSize: 16,
-                color: promoParseColor(p['code_color'])
-                    ?? UellowColors.darkBrown)),
+    final showHeader = (p['coupon_mode'] ?? 'manual') != 'manual' &&
+        (title.isNotEmpty || sub.isNotEmpty);
+
+    Widget card(Map<String, dynamic> c, {double? width}) =>
+        _CouponCard(c: c, p: p, ar: ar, width: width);
+
+    Widget body;
+    switch (layout) {
+      case 'slider':
+        body = SizedBox(height: 132, child: ListView.separated(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          itemCount: coupons.length,
+          separatorBuilder: (_, __) => const SizedBox(width: 8),
+          itemBuilder: (_, i) => card(coupons[i], width: 250),
+        ));
+        break;
+      case 'carousel':
+        body = SizedBox(height: 140, child: PageView.builder(
+          controller: PageController(viewportFraction: 0.88),
+          itemCount: coupons.length,
+          itemBuilder: (_, i) => Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 5),
+            child: card(coupons[i]),
           ),
-        ])),
-        const SizedBox(width: 8),
-        ElevatedButton(
-          onPressed: () {
-            Clipboard.setData(ClipboardData(text: code));
-            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                content: Text(ar ? 'نُسخ الكود ✓' : 'Code copied ✓'),
-                duration: const Duration(seconds: 1)));
-          },
-          style: ElevatedButton.styleFrom(backgroundColor: c1,
-              foregroundColor: UellowColors.darkBrown,
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 14, vertical: 10)),
-          child: Text(ar ? 'انسخ' : 'Copy',
-              style: const TextStyle(fontWeight: FontWeight.w900)),
-        ),
+        ));
+        break;
+      case 'list':
+        body = Column(children: [
+          for (final c in coupons) Padding(
+            padding: const EdgeInsets.fromLTRB(10, 0, 10, 8),
+            child: card(c),
+          ),
+        ]);
+        break;
+      default: // grid
+        body = Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          child: Wrap(spacing: 8, runSpacing: 8, children: [
+            for (final c in coupons)
+              SizedBox(
+                width: (MediaQuery.of(context).size.width - 28) / 2,
+                child: card(c)),
+          ]),
+        );
+    }
+
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      if (showHeader) Padding(
+        padding: const EdgeInsets.fromLTRB(14, 0, 14, 8),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          if (title.isNotEmpty) Text(title, style: TextStyle(
+              fontWeight: FontWeight.w900, fontSize: 15,
+              color: promoParseColor(p['font_color']) ?? UellowColors.ink)),
+          if (sub.isNotEmpty) Text(sub, style: const TextStyle(
+              fontSize: 11.5, color: UellowColors.muted)),
+        ]),
+      ),
+      body,
+    ]);
+  }
+}
+
+class _CouponCard extends StatelessWidget {
+  const _CouponCard({required this.c, required this.p, required this.ar, this.width});
+  final Map<String, dynamic> c;
+  final Map<String, dynamic> p;
+  final bool ar;
+  final double? width;
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = promoParseColor(p['c1']) ?? UellowColors.yellow;
+    final cardColor = promoParseColor(p['card_color']) ?? Colors.white;
+    final fontColor = promoParseColor(p['font_color']) ?? UellowColors.ink;
+    final codeColor = promoParseColor(p['code_color']) ?? UellowColors.darkBrown;
+    final claimColor = promoParseColor(p['claim_color']) ?? UellowColors.darkBrown;
+    final claimText = promoParseColor(p['claim_text_color']) ?? Colors.white;
+    final code = (c['code'] ?? '').toString();
+    final name = ((c['name'] as Map?)?[ar ? 'ar' : 'en'] ?? '').toString();
+    final disc = (c['discount_text'] ?? '').toString();
+    final minAmt = (c['min_amount'] as num?)?.toDouble() ?? 0;
+    final claimLabel = _tx(p, 'claimEn', 'claimAr', ar);
+
+    return Container(
+      width: width,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: cardColor,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: accent, width: 1.4),
+        boxShadow: const [BoxShadow(color: Color(0x0F000000),
+            blurRadius: 8, offset: Offset(0, 2))],
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min, children: [
+        Row(children: [
+          Text('🎟', style: TextStyle(fontSize: 18, color: accent)),
+          const SizedBox(width: 6),
+          if (disc.isNotEmpty) Container(
+            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+            decoration: BoxDecoration(color: accent,
+                borderRadius: BorderRadius.circular(999)),
+            child: Text(disc, style: const TextStyle(color: Colors.white,
+                fontSize: 11, fontWeight: FontWeight.w900)),
+          ),
+          const Spacer(),
+        ]),
+        const SizedBox(height: 6),
+        Text(name.isNotEmpty ? name : (ar ? 'كوبون خصم' : 'Discount coupon'),
+            maxLines: 1, overflow: TextOverflow.ellipsis,
+            style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12.5,
+                color: fontColor)),
+        if (minAmt > 0) Text(
+            ar ? 'بحد أدنى ${minAmt.toStringAsFixed(0)}' : 'Min ${minAmt.toStringAsFixed(0)}',
+            style: const TextStyle(fontSize: 10, color: UellowColors.muted)),
+        const SizedBox(height: 8),
+        Row(children: [
+          if (code.isNotEmpty) Expanded(child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+            decoration: BoxDecoration(
+              color: accent.withValues(alpha: .10),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: accent.withValues(alpha: .4)),
+            ),
+            child: Text(code, maxLines: 1, overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontFamily: 'monospace', letterSpacing: 1.5,
+                    fontWeight: FontWeight.w900, fontSize: 13, color: codeColor)),
+          )),
+          if (code.isNotEmpty) const SizedBox(width: 6),
+          ElevatedButton(
+            onPressed: () {
+              if (code.isNotEmpty) {
+                Clipboard.setData(ClipboardData(text: code));
+              }
+              ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                  content: Text(code.isNotEmpty
+                      ? (ar ? 'نُسخ الكود ✓' : 'Code copied ✓')
+                      : (ar ? 'تم ✓' : 'Done ✓')),
+                  duration: const Duration(seconds: 1)));
+            },
+            style: ElevatedButton.styleFrom(
+                backgroundColor: claimColor, foregroundColor: claimText,
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                minimumSize: const Size(0, 34),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(9))),
+            child: Text(claimLabel.isNotEmpty ? claimLabel
+                : (ar ? 'احصل عليه' : 'Claim'),
+                style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 12)),
+          ),
+        ]),
       ]),
     );
   }

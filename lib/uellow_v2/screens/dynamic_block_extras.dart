@@ -1487,7 +1487,8 @@ class DiscountStripBlock extends StatelessWidget {
       final prod = UellowProductCard.fromJson(pp);
       // v2.1.56 — availability pill hidden in this block only per spec.
       return SizedBox(width: width,
-          child: ProductCard(rich: true, product: prod, hideAvail: true));
+          child: ProductCard(rich: true, product: prod, hideAvail: true,
+              display: CardDisplay.fromMap(p['card'] as Map?)));
     } catch (_) {
       return _DiscountCard(p: pp, props: p, t: t, ar: ar, width: width);
     }
@@ -2726,6 +2727,7 @@ class _ExploreMoreBlockState extends State<ExploreMoreBlock> {
               meta: _itemMeta.isNotEmpty ? _itemMeta[0] : const {},
               showBadges: _showBadges,
               isHero: true,
+              display: CardDisplay.fromMap(widget.p['card'] as Map?),
             ),
           ),
         ),
@@ -2751,6 +2753,7 @@ class _ExploreMoreBlockState extends State<ExploreMoreBlock> {
           return _ProductTile(
             product: res.product, meta: res.meta,
             showBadges: _showBadges, isHero: false,
+            display: CardDisplay.fromMap(widget.p['card'] as Map?),
           );
         },
       ),
@@ -2808,18 +2811,20 @@ class _SlotResult {
 // ─── Tile with badges + sponsored overlay ───────────────────────────────────
 class _ProductTile extends StatelessWidget {
   const _ProductTile({required this.product, required this.meta,
-      required this.showBadges, required this.isHero});
+      required this.showBadges, required this.isHero,
+      this.display = const CardDisplay()});
   final UellowProductCard product;
   final Map<String, dynamic> meta;
   final bool showBadges;
   final bool isHero;
+  final CardDisplay display;
 
   @override
   Widget build(BuildContext context) {
     final badges = ((meta['badges'] as List?) ?? const []).cast<dynamic>();
     final isSponsored = meta['sponsored'] == true;
     return Stack(children: [
-      ProductCard(rich: true, product: product),
+      ProductCard(rich: true, product: product, display: display),
       if (showBadges && badges.isNotEmpty)
         Positioned(
           top: 4, right: 4,
@@ -4810,6 +4815,9 @@ class PromoSectionBlock extends StatelessWidget {
     return v;
   }
 
+  // v2.2.11 — per-element card display map (b.props.card) from the builder.
+  CardDisplay get _display => CardDisplay.fromMap(p['card'] as Map?);
+
   @override
   Widget build(BuildContext context) {
     final items = ((data['items'] as List?) ?? const [])
@@ -5031,7 +5039,7 @@ class PromoSectionBlock extends StatelessWidget {
           scrollDirection: Axis.horizontal, itemCount: rest.length,
           separatorBuilder: (_, __) => const SizedBox(width: 8),
           itemBuilder: (_, i) => SizedBox(width: 150,
-              child: ProductCard(rich: true, product: rest[i], hideAvail: true)),
+              child: ProductCard(rich: true, product: rest[i], hideAvail: true, display: _display)),
         )),
       ],
     ]);
@@ -5094,7 +5102,7 @@ class PromoSectionBlock extends StatelessWidget {
       itemBuilder: (_, i) {
         final d = items[i].discountPct;
         return Stack(clipBehavior: Clip.none, children: [
-          ProductCard(rich: true, product: items[i], hideAvail: true),
+          ProductCard(rich: true, product: items[i], hideAvail: true, display: _display),
           if (d > 0) PositionedDirectional(top: 8, start: -2, child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: const BoxDecoration(color: Color(0xFFE63946),
@@ -5114,7 +5122,7 @@ class PromoSectionBlock extends StatelessWidget {
       separatorBuilder: (_, __) => const SizedBox(width: 8),
       itemBuilder: (_, i) => SizedBox(width: 170, child: Stack(
           clipBehavior: Clip.none, children: [
-        ProductCard(rich: true, product: items[i], hideAvail: true),
+        ProductCard(rich: true, product: items[i], hideAvail: true, display: _display),
         PositionedDirectional(top: 0, end: 0, child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
           decoration: BoxDecoration(color: c1, borderRadius:
@@ -5131,7 +5139,7 @@ class PromoSectionBlock extends StatelessWidget {
         scrollDirection: Axis.horizontal, itemCount: items.length,
         separatorBuilder: (_, __) => const SizedBox(width: 8),
         itemBuilder: (_, i) => SizedBox(width: 160,
-            child: ProductCard(rich: true, product: items[i], hideAvail: true)),
+            child: ProductCard(rich: true, product: items[i], hideAvail: true, display: _display)),
       ));
 
   Widget _grid(List<UellowProductCard> items, Color c1, String badge) =>
@@ -5141,11 +5149,11 @@ class PromoSectionBlock extends StatelessWidget {
           crossAxisCount: 2, mainAxisSpacing: 8, crossAxisSpacing: 8,
           childAspectRatio: 0.59),   // category: +3px taller (v2.1.92)
         itemCount: items.length,
-        itemBuilder: (_, i) => ProductCard(rich: true, product: items[i], hideAvail: true),
+        itemBuilder: (_, i) => ProductCard(rich: true, product: items[i], hideAvail: true, display: _display),
       );
 
   Widget _card(UellowProductCard prod, int i, Color accent, String badge) {
-    Widget card = ProductCard(rich: true, product: prod, hideAvail: true);
+    Widget card = ProductCard(rich: true, product: prod, hideAvail: true, display: _display);
     // variant-specific overlay badge
     String? overlay;
     if (variant == 'rank') {
