@@ -803,6 +803,26 @@ class PromoMegaGridBlock extends StatelessWidget {
           itemBuilder: (_, i) =>
               _saleCard(context, items[i], rib, style, showSave, cols),
         ),
+        // v2.2.24 — optional yellow "View more" button (block link target).
+        if ((p['link'] as Map?) != null) Padding(
+          padding: const EdgeInsets.only(top: 12),
+          child: SizedBox(width: double.infinity, height: 40,
+            child: ElevatedButton(
+              onPressed: () => openBlockLink(context,
+                  (p['link'] as Map).cast<String, dynamic>()),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: rib, foregroundColor: Colors.white,
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
+              ),
+              child: Text(() {
+                final l = _tx(p, 'ctaEn', 'ctaAr', ar);
+                return l.isNotEmpty ? l : (ar ? 'عرض المزيد' : 'View more');
+              }(), style: const TextStyle(fontWeight: FontWeight.w900,
+                  fontSize: 13)),
+            )),
+        ),
       ]),
     );
   }
@@ -832,8 +852,14 @@ class PromoMegaGridBlock extends StatelessWidget {
           boxShadow: const [BoxShadow(color: Color(0x0A000000),
               blurRadius: 6, offset: Offset(0, 2))],
         ),
-        clipBehavior: Clip.antiAlias,
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        // v2.2.24 — clip the CONTENT to a radius just inside the border
+        // (15 < 16). A Container with BOTH a border and clipBehavior bleeds
+        // the white product image over the rounded corner; an inner
+        // ClipRRect keeps the image inside the curve, so the corners stay
+        // clean (esp. the dense/tinted combo the user hit).
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(15),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           // image with the badge pinned INSIDE its corner
           Expanded(child: Stack(fit: StackFit.expand, children: [
             CachedNetworkImage(imageUrl: _abs(prod.image), fit: BoxFit.cover,
@@ -895,6 +921,7 @@ class PromoMegaGridBlock extends StatelessWidget {
             ]),
           ),
         ]),
+        ),
       ),
     );
   }
