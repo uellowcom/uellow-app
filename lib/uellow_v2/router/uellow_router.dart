@@ -17,6 +17,7 @@ import '../screens/profile_screen.dart';
 import '../screens/addresses_screen.dart';
 import '../screens/order_confirmation_screen.dart';
 import '../screens/recently_viewed_screen.dart';
+import '../screens/bundles_screen.dart';
 import '../screens/webview_screen.dart';
 import '../screens/orders_list_screen.dart';
 import '../screens/barcode_scan_screen.dart';
@@ -85,6 +86,7 @@ class Routes {
   static const orderConfirm  = '/order-confirmation';
   static const webview       = '/webview';
   static const recentlyViewed = '/recently-viewed';
+  static const bundles       = '/bundles';
   static const orders        = '/orders';
   static const scan          = '/scan';
   static const helpdesk      = '/helpdesk';
@@ -216,6 +218,11 @@ class UellowRouter {
         return MaterialPageRoute(
           settings: settings,
           builder: (_) => const RecentlyViewedScreen(),
+        );
+      case Routes.bundles:
+        return MaterialPageRoute(
+          settings: settings,
+          builder: (_) => const BundlesScreen(),
         );
       case Routes.webview:
         final args = (settings.arguments as Map?) ?? const {};

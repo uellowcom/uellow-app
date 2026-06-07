@@ -614,6 +614,20 @@ class _FlashLayout extends StatelessWidget {
                       fontWeight: FontWeight.w900, letterSpacing: 0.3)),
             ]),
           )),
+        // v2.2.21 — bundle unavailable: dim veil + centered ribbon.
+        if (product.badges.contains('bundle_unavailable'))
+          Positioned.fill(child: IgnorePointer(child: Container(
+            color: Colors.white.withValues(alpha: .55),
+            alignment: Alignment.center,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+              decoration: BoxDecoration(color: const Color(0xCC111111),
+                  borderRadius: BorderRadius.circular(6)),
+              child: Text(lang == 'ar' ? 'غير متوفر' : 'UNAVAILABLE',
+                  style: const TextStyle(color: Colors.white, fontSize: 9.5,
+                      fontWeight: FontWeight.w900, letterSpacing: 0.4)),
+            ),
+          ))),
       ]),
       Padding(
         padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),

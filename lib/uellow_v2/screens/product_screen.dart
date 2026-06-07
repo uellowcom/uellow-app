@@ -966,11 +966,44 @@ class _BundleContents extends StatelessWidget {
     final savings = (bundle['savings'] as num?)?.toDouble() ?? 0;
     final total = (bundle['components_total'] as num?)?.toDouble() ?? 0;
     final count = (bundle['component_count'] as num?)?.toInt() ?? items.length;
+    // v2.2.21 — availability state from oos_behavior.
+    final unavailable = (bundle['listing_state'] ?? 'ok') == 'badge';
+    final oosNames = ((bundle['out_of_stock_items'] as List?) ?? const [])
+        .map((e) => e.toString()).toList();
+    final msg = ((bundle['unavailable_msg'] as Map?)?[ar ? 'ar' : 'en']
+        ?? '').toString();
     String fmt(num v) => v.toStringAsFixed(3);
     return Container(
       color: Colors.white, margin: const EdgeInsets.only(top: 8),
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        if (unavailable) Container(
+          margin: const EdgeInsets.only(bottom: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            color: const Color(0xFFFDECEC),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: const Color(0xFFF5C6C6)),
+          ),
+          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const Icon(Icons.error_outline_rounded, size: 18,
+                color: Color(0xFFC0392B)),
+            const SizedBox(width: 8),
+            Expanded(child: Column(crossAxisAlignment:
+                CrossAxisAlignment.start, children: [
+              Text(msg.isNotEmpty ? msg : (ar
+                      ? 'غير متوفر مؤقتاً — أحد منتجات الباقة نفد.'
+                      : 'Temporarily unavailable — an item is out of stock.'),
+                  style: const TextStyle(fontSize: 12, height: 1.35,
+                      fontWeight: FontWeight.w700, color: Color(0xFF8B2D2D))),
+              if (oosNames.isNotEmpty) Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: Text(oosNames.join('، '),
+                    style: const TextStyle(fontSize: 11,
+                        color: Color(0xFFB0524A)))),
+            ])),
+          ]),
+        ),
         Row(children: [
           const Icon(Icons.inventory_2_rounded, size: 17,
               color: Color(0xFF7C3AED)),
@@ -3893,7 +3926,13 @@ class _CtaBar extends StatelessWidget {
     // Truly out of stock = qty<=0 AND product does NOT allow backorders.
     // If the vendor enabled "continue selling when out of stock", treat
     // as normally available (Add to cart).
-    final isOut = qa != null && qa <= 0 && !product.allowOutOfStockOrder;
+    var isOut = qa != null && qa <= 0 && !product.allowOutOfStockOrder;
+    // v2.2.21 — an unavailable bundle (a component is out of stock and the
+    // bundle isn't set to keep selling) blocks the Add-to-cart bar too.
+    if (product.bundle != null &&
+        (product.bundle!['listing_state'] ?? 'ok') == 'badge') {
+      isOut = true;
+    }
     return Container(
       padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
       decoration: const BoxDecoration(

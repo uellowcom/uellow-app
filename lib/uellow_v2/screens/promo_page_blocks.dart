@@ -1673,6 +1673,24 @@ class BundleShowcaseBlock extends StatelessWidget {
         ]),
         const SizedBox(height: 14),
         content,
+        // v2.2.21 — yellow "View more" → full bundles screen.
+        if (p['show_more'] != false) Padding(
+          padding: const EdgeInsets.only(top: 12),
+          child: SizedBox(width: double.infinity, height: 40,
+            child: ElevatedButton(
+              onPressed: () => Navigator.pushNamed(context, '/bundles'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: UellowColors.yellow,
+                foregroundColor: UellowColors.darkBrown,
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
+              ),
+              child: Text(ar ? 'عرض المزيد' : 'View more',
+                  style: const TextStyle(fontWeight: FontWeight.w900,
+                      fontSize: 13)),
+            )),
+        ),
       ]),
     );
   }
@@ -1696,12 +1714,16 @@ class _BundleCard extends StatelessWidget {
     final img = (it['image'] ?? '').toString();
     final name = ((it['name'] as Map?)?[ar ? 'ar' : 'en']
         ?? (it['name'] ?? '')).toString();
-    // price + struck "components total" come from the card serializer
+    // price + struck "components total" come from the card serializer as
+    // {amount,currency,symbol,digits} — format via UellowMoney (the raw map
+    // was being toString()'d → showed "{amount: ...}" gibberish on cards).
+    final lang = UellowApi.instance.lang;
     final priceMap = (it['price'] as Map?)?.cast<String, dynamic>();
-    final price = priceMap?['formatted']?.toString()
-        ?? (it['price']?.toString() ?? '');
+    final price = priceMap != null
+        ? UellowMoney.fromJson(priceMap).formatLocalized(lang) : '';
     final cmpMap = (it['compare_price'] as Map?)?.cast<String, dynamic>();
-    final compare = cmpMap?['formatted']?.toString() ?? '';
+    final compare = cmpMap != null
+        ? UellowMoney.fromJson(cmpMap).displayAmount() : '';
     final savePct = (meta?['savings_pct'] as num?)?.toInt()
         ?? (it['discount_pct'] as num?)?.toInt() ?? 0;
     final count = (meta?['component_count'] as num?)?.toInt() ?? 0;

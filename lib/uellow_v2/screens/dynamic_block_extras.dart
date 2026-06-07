@@ -5460,7 +5460,9 @@ class PromoSectionBlock extends StatelessWidget {
         final d = items[i].discountPct;
         return Stack(clipBehavior: Clip.none, children: [
           ProductCard(rich: true, product: items[i], hideAvail: true, display: _display),
-          if (d > 0) PositionedDirectional(top: 8, start: -2, child: Container(
+          // v2.2.21 — the on-image -% ribbon now obeys the card "Discount %"
+          // toggle, so it can be hidden from the builder per block.
+          if (d > 0 && _display.discount) PositionedDirectional(top: 8, start: -2, child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: const BoxDecoration(color: Color(0xFFE63946),
               borderRadius: BorderRadius.only(topRight: Radius.circular(2),
