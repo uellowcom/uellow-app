@@ -927,7 +927,7 @@ class PromoCouponBlock extends StatelessWidget {
     Widget body;
     switch (layout) {
       case 'slider':
-        body = SizedBox(height: 212, child: ListView.separated(
+        body = SizedBox(height: 198, child: ListView.separated(
           scrollDirection: Axis.horizontal,
           padding: const EdgeInsets.symmetric(horizontal: 10),
           itemCount: coupons.length,
@@ -937,7 +937,7 @@ class PromoCouponBlock extends StatelessWidget {
         ));
         break;
       case 'carousel':
-        body = SizedBox(height: 212, child: PageView.builder(
+        body = SizedBox(height: 198, child: PageView.builder(
           controller: PageController(viewportFraction: 0.86),
           itemCount: coupons.length,
           itemBuilder: (_, i) => Padding(
@@ -1004,93 +1004,73 @@ class _CouponCard extends StatelessWidget {
     final minAmt = (c['min_amount'] as num?)?.toDouble() ?? 0;
     final claimLabel = _tx(p, 'claimEn', 'claimAr', ar);
 
-    // v2.2.13 — real coupon-ticket shape: gradient header, side notches +
-    // a dashed "tear here" perforation between the offer and the action.
-    final accentDark = Color.lerp(accent, Colors.black, .22) ?? accent;
-    const headerH = 60.0;
-    final perfColor = accent.withValues(alpha: .55);
-
-    final ticket = PhysicalShape(
-      clipper: _TicketClipper(notchDy: headerH),
-      color: cardColor,
-      elevation: 3,
-      shadowColor: Colors.black.withValues(alpha: .22),
+    // v2.2.15 — clean, simple, professional coupon card: white card, small
+    // accent tile with the discount, name + optional min-spend, a tidy code
+    // chip and one clear claim button. No heavy gradients or notches.
+    return Container(
+      width: width,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: cardColor,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFEEE8D8)),
+        boxShadow: const [BoxShadow(color: Color(0x0D000000),
+            blurRadius: 8, offset: Offset(0, 2))],
+      ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch,
           mainAxisSize: MainAxisSize.min, children: [
-        // ── header (gradient) — emoji + headline discount / name ──
-        Container(
-          height: headerH,
-          padding: const EdgeInsetsDirectional.fromSTEB(12, 0, 12, 0),
-          decoration: BoxDecoration(gradient: LinearGradient(
-              begin: Alignment.topLeft, end: Alignment.bottomRight,
-              colors: [accent, accentDark])),
-          child: Row(children: [
-            Container(
-              width: 34, height: 34,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: .22),
-                  shape: BoxShape.circle),
-              child: const Text('🎟', style: TextStyle(fontSize: 17)),
+        Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
+          Container(
+            width: 46, height: 46, alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: accent.withValues(alpha: .12),
+              borderRadius: BorderRadius.circular(12),
             ),
-            const SizedBox(width: 9),
-            Expanded(child: Column(mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.start, children: [
-              if (disc.isNotEmpty) Text(
-                  ar ? 'خصم $disc' : '$disc OFF',
-                  maxLines: 1, overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: Colors.white, fontSize: 17,
-                      fontWeight: FontWeight.w900, height: 1.05,
-                      letterSpacing: .2)),
-              Text(name.isNotEmpty ? name
-                      : (ar ? 'كوبون خصم' : 'Discount coupon'),
-                  maxLines: 1, overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                      color: Colors.white.withValues(alpha: .92),
-                      fontSize: disc.isNotEmpty ? 10.5 : 14,
-                      fontWeight: FontWeight.w700,
-                      height: 1.15)),
-            ])),
-          ]),
+            child: disc.isNotEmpty
+                ? Text(disc, textAlign: TextAlign.center,
+                    style: TextStyle(color: accent, fontSize: 15,
+                        fontWeight: FontWeight.w900, height: 1.0))
+                : Text('🎟', style: TextStyle(fontSize: 20, color: accent)),
+          ),
+          const SizedBox(width: 11),
+          Expanded(child: Column(mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(name.isNotEmpty ? name
+                    : (ar ? 'كوبون خصم' : 'Discount coupon'),
+                maxLines: 2, overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13,
+                    color: fontColor, height: 1.2)),
+            if (minAmt > 0) Padding(padding: const EdgeInsets.only(top: 2),
+              child: Text(ar ? 'بحد أدنى ${minAmt.toStringAsFixed(0)}'
+                      : 'Min spend ${minAmt.toStringAsFixed(0)}',
+                  style: TextStyle(fontSize: 10.5,
+                      color: fontColor.withValues(alpha: .6),
+                      fontWeight: FontWeight.w600))),
+          ])),
+        ]),
+        if (code.isNotEmpty) Padding(
+          padding: const EdgeInsets.only(top: 11),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 8),
+            decoration: BoxDecoration(
+              color: accent.withValues(alpha: .06),
+              borderRadius: BorderRadius.circular(9),
+              border: Border.all(color: accent.withValues(alpha: .35)),
+            ),
+            child: Row(children: [
+              Expanded(child: Text(code, maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontFamily: 'monospace', letterSpacing: 1.5,
+                      fontWeight: FontWeight.w900, fontSize: 13.5,
+                      color: codeColor))),
+              Icon(Icons.copy_rounded, size: 15,
+                  color: codeColor.withValues(alpha: .55)),
+            ]),
+          ),
         ),
-        // ── body (offer details + code + claim) ──
-        Padding(
-          padding: const EdgeInsets.fromLTRB(12, 13, 12, 12),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min, children: [
-            if (minAmt > 0) Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: Row(children: [
-                Icon(Icons.shopping_bag_outlined, size: 12, color: fontColor.withValues(alpha: .7)),
-                const SizedBox(width: 4),
-                Text(ar ? 'بحد أدنى ${minAmt.toStringAsFixed(0)}'
-                        : 'Min spend ${minAmt.toStringAsFixed(0)}',
-                    style: TextStyle(fontSize: 10.5,
-                        color: fontColor.withValues(alpha: .7),
-                        fontWeight: FontWeight.w600)),
-              ]),
-            ),
-            if (code.isNotEmpty) Container(
-              width: double.infinity,
-              margin: const EdgeInsets.only(bottom: 9),
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-              decoration: BoxDecoration(
-                color: accent.withValues(alpha: .08),
-                borderRadius: BorderRadius.circular(9),
-                border: Border.all(color: accent.withValues(alpha: .45),
-                    width: 1.2),
-              ),
-              child: Row(children: [
-                Expanded(child: Text(code, maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontFamily: 'monospace', letterSpacing: 2,
-                        fontWeight: FontWeight.w900, fontSize: 14,
-                        color: codeColor))),
-                Icon(Icons.copy_rounded, size: 14,
-                    color: codeColor.withValues(alpha: .6)),
-              ]),
-            ),
-            SizedBox(width: double.infinity, child: ElevatedButton.icon(
+        Padding(padding: const EdgeInsets.only(top: 11),
+          child: SizedBox(width: double.infinity, height: 38,
+            child: ElevatedButton(
               onPressed: () {
                 if (code.isNotEmpty) {
                   Clipboard.setData(ClipboardData(text: code));
@@ -1101,88 +1081,20 @@ class _CouponCard extends StatelessWidget {
                         : (ar ? 'تم ✓' : 'Done ✓')),
                     duration: const Duration(seconds: 1)));
               },
-              icon: Icon(code.isNotEmpty ? Icons.content_copy_rounded
-                  : Icons.check_circle_outline, size: 15, color: claimText),
-              label: Text(claimLabel.isNotEmpty ? claimLabel
-                  : (ar ? 'احصل عليه' : 'Claim'),
-                  style: TextStyle(fontWeight: FontWeight.w900, fontSize: 12.5,
-                      color: claimText)),
               style: ElevatedButton.styleFrom(
                   backgroundColor: claimColor, foregroundColor: claimText,
                   elevation: 0,
-                  padding: const EdgeInsets.symmetric(vertical: 9),
                   shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(10))),
+              child: Text(claimLabel.isNotEmpty ? claimLabel
+                  : (ar ? 'احصل عليه' : 'Claim'),
+                  style: TextStyle(fontWeight: FontWeight.w900, fontSize: 12.5,
+                      color: claimText)),
             )),
-          ]),
         ),
       ]),
     );
-
-    return SizedBox(width: width, child: Stack(children: [
-      ticket,
-      // dashed perforation aligned to the notch line ("tear here")
-      Positioned.fill(child: IgnorePointer(child: CustomPaint(
-          painter: _DashedLinePainter(dy: headerH, color: perfColor)))),
-    ]));
   }
-}
-
-// v2.2.13 — coupon-ticket outline: rounded rect with a semicircle notch
-// cut into the left and right edges at [notchDy] (the perforation line).
-class _TicketClipper extends CustomClipper<Path> {
-  _TicketClipper({required this.notchDy});
-  final double notchDy;
-  static const double radius = 12;
-  static const double notch = 9;
-  @override
-  Path getClip(Size size) {
-    final w = size.width, h = size.height;
-    const r = radius, n = notch;
-    final ny = notchDy.clamp(n + r, h - n - r);
-    final p = Path()
-      ..moveTo(r, 0)
-      ..lineTo(w - r, 0)
-      ..arcToPoint(Offset(w, r), radius: Radius.circular(r))
-      ..lineTo(w, ny - n)
-      ..arcToPoint(Offset(w, ny + n),
-          radius: Radius.circular(n), clockwise: false)
-      ..lineTo(w, h - r)
-      ..arcToPoint(Offset(w - r, h), radius: Radius.circular(r))
-      ..lineTo(r, h)
-      ..arcToPoint(Offset(0, h - r), radius: Radius.circular(r))
-      ..lineTo(0, ny + n)
-      ..arcToPoint(Offset(0, ny - n),
-          radius: Radius.circular(n), clockwise: false)
-      ..lineTo(0, r)
-      ..arcToPoint(Offset(r, 0), radius: Radius.circular(r))
-      ..close();
-    return p;
-  }
-  @override
-  bool shouldReclip(covariant _TicketClipper old) => old.notchDy != notchDy;
-}
-
-class _DashedLinePainter extends CustomPainter {
-  _DashedLinePainter({required this.dy, required this.color});
-  final double dy;
-  final Color color;
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = color
-      ..strokeWidth = 1.4
-      ..strokeCap = StrokeCap.round;
-    const dash = 5.0, gap = 4.0;
-    var x = 14.0;
-    while (x < size.width - 14) {
-      canvas.drawLine(Offset(x, dy), Offset(x + dash, dy), paint);
-      x += dash + gap;
-    }
-  }
-  @override
-  bool shouldRepaint(covariant _DashedLinePainter old) =>
-      old.dy != dy || old.color != color;
 }
 
 // ═══ 7. BANNER + CTA ════════════════════════════════════════════════════
