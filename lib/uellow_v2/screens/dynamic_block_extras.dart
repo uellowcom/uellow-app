@@ -22,6 +22,7 @@ import '../router/uellow_router.dart';
 import '../theme/uellow_theme.dart';
 import '../widgets/product_card.dart';
 import 'dynamic_page_screen.dart' show DynTheme, renderDynamicBlock;
+import 'reels_screen.dart' show openReelDialog;
 
 // ─── BLOCK ENVELOPE ─────────────────────────────────────────────────────────
 // Wraps every block. Reads four optional props:
@@ -4879,6 +4880,70 @@ class ReelsStripBlock extends StatelessWidget {
   final DynTheme t;
   final bool ar;
 
+  // v2.2.19 — tap opens the video in a fullscreen dialog with the SAME
+  // slide UI as the Reels screen (player + product + rail). Falls back to
+  // the /reels feed when the resolver didn't attach the full payload or
+  // the admin chose "screen" mode.
+  void _open(BuildContext context, Map<String, dynamic> it) {
+    final reel = (it['reel'] as Map?)?.cast<String, dynamic>();
+    if ((p['open'] ?? 'dialog').toString() == 'dialog' && reel != null) {
+      openReelDialog(context, reel);
+    } else {
+      Navigator.pushNamed(context, '/reels');
+    }
+  }
+
+  String _url(String thumb) => thumb.startsWith('http')
+      ? thumb : '${UellowApi.instance.baseUrl}$thumb';
+
+  // Shared rounded video tile (squares / cards / grid / carousel).
+  Widget _tile(BuildContext context, Map<String, dynamic> it,
+      {required double radius, bool showName = false, double playSize = 30}) {
+    final thumb = (it['thumbnail'] as String?) ?? '';
+    final name = (it['product_name'] ?? '').toString();
+    return GestureDetector(
+      onTap: () => _open(context, it),
+      child: Container(
+        clipBehavior: Clip.antiAlias,
+        decoration: BoxDecoration(
+          color: t.primary.withValues(alpha: .06),
+          borderRadius: BorderRadius.circular(radius),
+          boxShadow: const [BoxShadow(color: Color(0x26000000),
+              blurRadius: 6, offset: Offset(0, 2))],
+        ),
+        child: Stack(fit: StackFit.expand, children: [
+          if (thumb.isNotEmpty)
+            CachedNetworkImage(imageUrl: _url(thumb), fit: BoxFit.cover,
+                errorWidget: (_, __, ___) => Container(
+                    color: t.primary.withValues(alpha: .06))),
+          // bottom legibility gradient + name
+          if (showName)
+            Positioned(left: 0, right: 0, bottom: 0, height: 54,
+                child: DecoratedBox(decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [Colors.transparent,
+                                 Colors.black.withValues(alpha: .65)])))),
+          if (showName && name.isNotEmpty)
+            Positioned(left: 7, right: 7, bottom: 6, child: Text(name,
+                maxLines: 2, overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: Colors.white, fontSize: 9.5,
+                    fontWeight: FontWeight.w700, height: 1.2,
+                    shadows: [Shadow(color: Colors.black54, blurRadius: 3)]))),
+          Center(child: Container(
+            width: playSize, height: playSize,
+            decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: .88),
+                shape: BoxShape.circle),
+            child: Icon(Icons.play_arrow_rounded,
+                color: UellowColors.darkBrown, size: playSize * .66),
+          )),
+        ]),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final items = ((data['items'] as List?) ?? const [])
@@ -4886,60 +4951,121 @@ class ReelsStripBlock extends StatelessWidget {
     if (items.isEmpty) return const SizedBox.shrink();
     final bubbleSize = ((p['bubble_size'] as num?)?.toDouble() ?? 62).clamp(40, 120).toDouble();
     final ringColor = _parseColor(p['ring_color']) ?? UellowColors.yellow;
-    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      DynSectionHeader(props: p, theme: t, ar: ar,
-          fallbackEn: '🔥 Trending videos'),
-      SizedBox(
-        height: bubbleSize + 22,
-        child: ListView.separated(
+    // v2.2.19 — 5 layout styles: bubbles (classic circles) / squares
+    // (rounded rail) / cards (tall 9:16 rail) / grid (3-col wall) /
+    // carousel (large swipeable pages).
+    final style = (p['style'] ?? 'bubbles').toString();
+
+    Widget body;
+    switch (style) {
+      case 'squares':
+        final sz = bubbleSize + 16;
+        body = SizedBox(height: sz, child: ListView.separated(
           padding: const EdgeInsets.symmetric(horizontal: 12),
           scrollDirection: Axis.horizontal,
           physics: const ClampingScrollPhysics(),
           itemCount: items.length,
-          separatorBuilder: (_, __) => const SizedBox(width: 10),
-          itemBuilder: (_, i) {
-            final it = items[i];
-            final thumb = (it['thumbnail'] as String?) ?? '';
-            final fullUrl = thumb.startsWith('http')
-                ? thumb : '${UellowApi.instance.baseUrl}$thumb';
-            return GestureDetector(
-              onTap: () => Navigator.pushNamed(context, '/reels'),
-              child: SizedBox(width: bubbleSize + 4, child: Column(children: [
-                Container(
-                  width: bubbleSize, height: bubbleSize,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle, color: Colors.white,
-                    border: Border.all(color: ringColor, width: 2.5),
-                    boxShadow: const [BoxShadow(color: Color(0x33000000),
-                        blurRadius: 6, offset: Offset(0, 2))],
+          separatorBuilder: (_, __) => const SizedBox(width: 8),
+          itemBuilder: (_, i) => SizedBox(width: sz,
+              child: _tile(context, items[i], radius: 16, playSize: 26)),
+        ));
+        break;
+      case 'cards':
+        body = SizedBox(height: 192, child: ListView.separated(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          scrollDirection: Axis.horizontal,
+          physics: const ClampingScrollPhysics(),
+          itemCount: items.length,
+          separatorBuilder: (_, __) => const SizedBox(width: 8),
+          itemBuilder: (_, i) => SizedBox(width: 118,
+              child: _tile(context, items[i], radius: 14,
+                  showName: true, playSize: 28)),
+        ));
+        break;
+      case 'grid':
+        body = Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: GridView.builder(
+            shrinkWrap: true, physics: const NeverScrollableScrollPhysics(),
+            padding: EdgeInsets.zero,
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 3, crossAxisSpacing: 7, mainAxisSpacing: 7,
+                childAspectRatio: 0.68),
+            itemCount: items.length,
+            itemBuilder: (_, i) => _tile(context, items[i], radius: 12,
+                showName: true, playSize: 26),
+          ),
+        );
+        break;
+      case 'carousel':
+        body = SizedBox(height: 250, child: PageView.builder(
+          controller: PageController(viewportFraction: 0.58),
+          padEnds: false,
+          itemCount: items.length,
+          itemBuilder: (_, i) => Padding(
+            padding: EdgeInsetsDirectional.only(
+                start: i == 0 ? 12 : 5, end: 5),
+            child: _tile(context, items[i], radius: 18,
+                showName: true, playSize: 38),
+          ),
+        ));
+        break;
+      default: // bubbles — the classic circular thumbs
+        body = SizedBox(
+          height: bubbleSize + 22,
+          child: ListView.separated(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            scrollDirection: Axis.horizontal,
+            physics: const ClampingScrollPhysics(),
+            itemCount: items.length,
+            separatorBuilder: (_, __) => const SizedBox(width: 10),
+            itemBuilder: (_, i) {
+              final it = items[i];
+              final thumb = (it['thumbnail'] as String?) ?? '';
+              return GestureDetector(
+                onTap: () => _open(context, it),
+                child: SizedBox(width: bubbleSize + 4, child: Column(children: [
+                  Container(
+                    width: bubbleSize, height: bubbleSize,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle, color: Colors.white,
+                      border: Border.all(color: ringColor, width: 2.5),
+                      boxShadow: const [BoxShadow(color: Color(0x33000000),
+                          blurRadius: 6, offset: Offset(0, 2))],
+                    ),
+                    clipBehavior: Clip.antiAlias,
+                    child: Stack(fit: StackFit.expand, children: [
+                      if (thumb.isNotEmpty)
+                        CachedNetworkImage(imageUrl: _url(thumb),
+                            fit: BoxFit.cover,
+                            errorWidget: (_,__,___) => Container(
+                                color: t.primary.withValues(alpha: 0.06)))
+                      else
+                        Container(color: t.primary.withValues(alpha: 0.06)),
+                      Center(child: Container(
+                        width: 22, height: 22,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.85),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.play_arrow_rounded,
+                            color: UellowColors.darkBrown, size: 16),
+                      )),
+                    ]),
                   ),
-                  clipBehavior: Clip.antiAlias,
-                  child: Stack(fit: StackFit.expand, children: [
-                    if (thumb.isNotEmpty)
-                      CachedNetworkImage(imageUrl: fullUrl, fit: BoxFit.cover,
-                          errorWidget: (_,__,___) => Container(
-                              color: t.primary.withValues(alpha: 0.06)))
-                    else
-                      Container(color: t.primary.withValues(alpha: 0.06)),
-                    // Play badge overlay
-                    Center(child: Container(
-                      width: 22, height: 22,
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.85),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(Icons.play_arrow_rounded,
-                          color: UellowColors.darkBrown, size: 16),
-                    )),
-                  ]),
-                ),
-                if (i == 0) const SizedBox(height: 2)
-                else const SizedBox(height: 4),
-              ])),
-            );
-          },
-        ),
-      ),
+                  if (i == 0) const SizedBox(height: 2)
+                  else const SizedBox(height: 4),
+                ])),
+              );
+            },
+          ),
+        );
+    }
+
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      DynSectionHeader(props: p, theme: t, ar: ar,
+          fallbackEn: '🔥 Trending videos'),
+      body,
     ]);
   }
 }

@@ -277,6 +277,31 @@ class _ReelsScreenState extends State<ReelsScreen> {
   }
 }
 
+/// v2.2.19 — open ONE reel in a fullscreen dialog: the exact same slide
+/// UI as the Reels screen (player, product card, like/comment/share rail).
+/// Used by the home Reels Strip block. `item` must be in the
+/// /api/mobile/v2/videos/feed item format ({product, video, stats, ...}).
+Future<void> openReelDialog(BuildContext context, Map<String, dynamic> item) {
+  final ar = UellowApi.instance.lang.toLowerCase().startsWith('ar');
+  return showDialog(
+    context: context,
+    barrierColor: Colors.black,
+    useSafeArea: false,
+    builder: (ctx) => Dialog.fullscreen(
+      backgroundColor: Colors.black,
+      child: SafeArea(child: Stack(children: [
+        Positioned.fill(child: _ReelSlide(item: item, active: true, ar: ar)),
+        PositionedDirectional(top: 4, start: 4, child: IconButton(
+          icon: const Icon(Icons.close_rounded, color: Colors.white, size: 26),
+          style: IconButton.styleFrom(
+              backgroundColor: Colors.black.withValues(alpha: .35)),
+          onPressed: () => Navigator.pop(ctx),
+        )),
+      ])),
+    ),
+  );
+}
+
 // Grid tile in the search results.
 class _SearchTile extends StatelessWidget {
   const _SearchTile({required this.item, required this.ar, required this.onTap});
