@@ -933,17 +933,17 @@ class PromoCouponBlock extends StatelessWidget {
     Widget body;
     switch (layout) {
       case 'slider':
-        body = SizedBox(height: 198, child: ListView.separated(
+        body = SizedBox(height: 84, child: ListView.separated(
           scrollDirection: Axis.horizontal,
           padding: const EdgeInsets.symmetric(horizontal: 10),
           itemCount: coupons.length,
           separatorBuilder: (_, __) => const SizedBox(width: 8),
           itemBuilder: (_, i) => Align(alignment: Alignment.topCenter,
-              child: card(coupons[i], width: 250)),
+              child: card(coupons[i], width: 270)),
         ));
         break;
       case 'carousel':
-        body = SizedBox(height: 198, child: PageView.builder(
+        body = SizedBox(height: 84, child: PageView.builder(
           controller: PageController(viewportFraction: 0.86),
           itemCount: coupons.length,
           itemBuilder: (_, i) => Padding(
@@ -966,9 +966,7 @@ class PromoCouponBlock extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 10),
           child: Wrap(spacing: 8, runSpacing: 8, children: [
             for (final c in coupons)
-              SizedBox(
-                width: (MediaQuery.of(context).size.width - 28) / 2,
-                child: card(c)),
+              card(c, width: (MediaQuery.of(context).size.width - 28) / 2),
           ]),
         );
     }
@@ -1010,97 +1008,157 @@ class _CouponCard extends StatelessWidget {
     final minAmt = (c['min_amount'] as num?)?.toDouble() ?? 0;
     final claimLabel = _tx(p, 'claimEn', 'claimAr', ar);
 
-    // v2.2.15 — clean, simple, professional coupon card: white card, small
-    // accent tile with the discount, name + optional min-spend, a tidy code
-    // chip and one clear claim button. No heavy gradients or notches.
-    return Container(
+    // v2.2.18 — compact HORIZONTAL ticket like the big marketplaces:
+    // accent value-stub | punched notches + dashed perforation | name,
+    // min-spend and a small code + copy pill. Low height (76), small type.
+    final tight = (width ?? 600) < 200; // grid half-width cards
+    final stubW = tight ? 56.0 : 72.0;
+
+    void copy() {
+      if (code.isNotEmpty) Clipboard.setData(ClipboardData(text: code));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(code.isNotEmpty
+              ? (ar ? 'نُسخ الكود ✓' : 'Code copied ✓')
+              : (ar ? 'تم ✓' : 'Done ✓')),
+          duration: const Duration(seconds: 1)));
+    }
+
+    final rtl = Directionality.of(context) == TextDirection.rtl;
+    return SizedBox(
       width: width,
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
+      height: 76,
+      child: PhysicalShape(
+        clipper: _CouponTicketClipper(stub: stubW, rtl: rtl),
         color: cardColor,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFEEE8D8)),
-        boxShadow: const [BoxShadow(color: Color(0x0D000000),
-            blurRadius: 8, offset: Offset(0, 2))],
-      ),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch,
-          mainAxisSize: MainAxisSize.min, children: [
-        Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
-          Container(
-            width: 46, height: 46, alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: accent.withValues(alpha: .12),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: disc.isNotEmpty
-                ? Text(disc, textAlign: TextAlign.center,
-                    style: TextStyle(color: accent, fontSize: 15,
-                        fontWeight: FontWeight.w900, height: 1.0))
-                : Text('🎟', style: TextStyle(fontSize: 20, color: accent)),
-          ),
-          const SizedBox(width: 11),
-          Expanded(child: Column(mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(name.isNotEmpty ? name
-                    : (ar ? 'كوبون خصم' : 'Discount coupon'),
-                maxLines: 2, overflow: TextOverflow.ellipsis,
-                style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13,
-                    color: fontColor, height: 1.2)),
-            if (minAmt > 0) Padding(padding: const EdgeInsets.only(top: 2),
-              child: Text(ar ? 'بحد أدنى ${minAmt.toStringAsFixed(0)}'
-                      : 'Min spend ${minAmt.toStringAsFixed(0)}',
-                  style: TextStyle(fontSize: 10.5,
-                      color: fontColor.withValues(alpha: .6),
-                      fontWeight: FontWeight.w600))),
-          ])),
-        ]),
-        if (code.isNotEmpty) Padding(
-          padding: const EdgeInsets.only(top: 11),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 8),
-            decoration: BoxDecoration(
-              color: accent.withValues(alpha: .06),
-              borderRadius: BorderRadius.circular(9),
-              border: Border.all(color: accent.withValues(alpha: .35)),
-            ),
-            child: Row(children: [
-              Expanded(child: Text(code, maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontFamily: 'monospace', letterSpacing: 1.5,
-                      fontWeight: FontWeight.w900, fontSize: 13.5,
-                      color: codeColor))),
-              Icon(Icons.copy_rounded, size: 15,
-                  color: codeColor.withValues(alpha: .55)),
+        elevation: 1.5,
+        shadowColor: const Color(0x26000000),
+        child: GestureDetector(
+          onTap: copy,
+          child: Stack(children: [
+            Row(children: [
+              // ── value stub ──
+              Container(
+                width: stubW, color: accent, alignment: Alignment.center,
+                padding: const EdgeInsets.symmetric(horizontal: 6),
+                child: Column(mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                  FittedBox(child: Text(disc.isNotEmpty ? disc : '🎟',
+                      style: TextStyle(
+                          color: _onAccent(accent), fontSize: 16,
+                          fontWeight: FontWeight.w900, height: 1.0))),
+                  if (disc.isNotEmpty) Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Text(ar ? 'خصم' : 'OFF',
+                        style: TextStyle(
+                            color: _onAccent(accent).withValues(alpha: .85),
+                            fontSize: 7.5, letterSpacing: 1.6,
+                            fontWeight: FontWeight.w800))),
+                ]),
+              ),
+              // ── details ──
+              Expanded(child: Padding(
+                padding: const EdgeInsetsDirectional.fromSTEB(12, 9, 10, 9),
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(name.isNotEmpty ? name
+                          : (ar ? 'كوبون خصم' : 'Discount coupon'),
+                      maxLines: 1, overflow: TextOverflow.ellipsis,
+                      style: TextStyle(fontWeight: FontWeight.w800,
+                          fontSize: 11, color: fontColor, height: 1.1)),
+                  if (minAmt > 0) Padding(
+                      padding: const EdgeInsets.only(top: 1),
+                      child: Text(ar
+                              ? 'بحد أدنى ${minAmt.toStringAsFixed(0)}'
+                              : 'Min spend ${minAmt.toStringAsFixed(0)}',
+                          maxLines: 1, overflow: TextOverflow.ellipsis,
+                          style: TextStyle(fontSize: 8.5,
+                              color: fontColor.withValues(alpha: .55),
+                              fontWeight: FontWeight.w600))),
+                  const Spacer(),
+                  Row(children: [
+                    if (code.isNotEmpty) Expanded(child: Text(code,
+                        maxLines: 1, overflow: TextOverflow.ellipsis,
+                        style: TextStyle(fontFamily: 'monospace',
+                            letterSpacing: 1.2, fontWeight: FontWeight.w900,
+                            fontSize: 10.5, color: codeColor)))
+                    else const Spacer(),
+                    const SizedBox(width: 6),
+                    // small claim pill (icon-only when the card is narrow)
+                    GestureDetector(onTap: copy, child: Container(
+                      height: 24,
+                      padding: EdgeInsets.symmetric(
+                          horizontal: tight ? 7 : 10),
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(color: claimColor,
+                          borderRadius: BorderRadius.circular(999)),
+                      child: tight
+                          ? Icon(Icons.copy_rounded, size: 11,
+                              color: claimText)
+                          : Text(claimLabel.isNotEmpty ? claimLabel
+                                  : (ar ? 'نسخ' : 'Copy'),
+                              style: TextStyle(fontWeight: FontWeight.w900,
+                                  fontSize: 9.5, color: claimText)),
+                    )),
+                  ]),
+                ]),
+              )),
             ]),
-          ),
+            // dashed perforation on the stub boundary
+            PositionedDirectional(start: stubW - 0.5, top: 9, bottom: 9,
+                child: SizedBox(width: 1, child: CustomPaint(
+                    painter: _CouponDashPainter(
+                        color: fontColor.withValues(alpha: .18))))),
+          ]),
         ),
-        Padding(padding: const EdgeInsets.only(top: 11),
-          child: SizedBox(width: double.infinity, height: 38,
-            child: ElevatedButton(
-              onPressed: () {
-                if (code.isNotEmpty) {
-                  Clipboard.setData(ClipboardData(text: code));
-                }
-                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                    content: Text(code.isNotEmpty
-                        ? (ar ? 'نُسخ الكود ✓' : 'Code copied ✓')
-                        : (ar ? 'تم ✓' : 'Done ✓')),
-                    duration: const Duration(seconds: 1)));
-              },
-              style: ElevatedButton.styleFrom(
-                  backgroundColor: claimColor, foregroundColor: claimText,
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10))),
-              child: Text(claimLabel.isNotEmpty ? claimLabel
-                  : (ar ? 'احصل عليه' : 'Claim'),
-                  style: TextStyle(fontWeight: FontWeight.w900, fontSize: 12.5,
-                      color: claimText)),
-            )),
-        ),
-      ]),
+      ),
     );
   }
+
+  /// White on dark accents, dark-brown on light accents (e.g. yellow).
+  Color _onAccent(Color a) =>
+      a.computeLuminance() > 0.6 ? UellowColors.darkBrown : Colors.white;
+}
+
+/// Ticket silhouette: rounded card with two punched semicircle notches on
+/// the stub boundary — transparent cutouts, so any page/showcase
+/// background shows through naturally.
+class _CouponTicketClipper extends CustomClipper<Path> {
+  const _CouponTicketClipper({required this.stub, required this.rtl});
+  final double stub;
+  final bool rtl;
+  static const _r = 12.0;   // card corner radius
+  static const _notch = 5.0;
+  @override
+  Path getClip(Size s) {
+    final x = rtl ? s.width - stub : stub;
+    final card = Path()
+      ..addRRect(RRect.fromRectAndRadius(Offset.zero & s,
+          const Radius.circular(_r)));
+    final holes = Path()
+      ..addOval(Rect.fromCircle(center: Offset(x, 0), radius: _notch))
+      ..addOval(Rect.fromCircle(center: Offset(x, s.height), radius: _notch));
+    return Path.combine(PathOperation.difference, card, holes);
+  }
+
+  @override
+  bool shouldReclip(_CouponTicketClipper old) =>
+      old.stub != stub || old.rtl != rtl;
+}
+
+/// Tiny vertical dashed line (the "tear here" perforation).
+class _CouponDashPainter extends CustomPainter {
+  const _CouponDashPainter({required this.color});
+  final Color color;
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()..color = color..strokeWidth = 1;
+    for (double y = 0; y < size.height; y += 7) {
+      canvas.drawLine(Offset(0, y), Offset(0, y + 3.5), paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_CouponDashPainter old) => old.color != color;
 }
 
 // ═══ 7. BANNER + CTA ════════════════════════════════════════════════════
@@ -1443,17 +1501,17 @@ class PromoShowcaseBlock extends StatelessWidget {
       } else if (grid) {
         content = Wrap(spacing: 8, runSpacing: 8, children: [
           for (final c in coupons)
-            SizedBox(width: (MediaQuery.of(context).size.width - 44) / 2,
-                child: _CouponCard(c: c, p: p, ar: ar)),
+            _CouponCard(c: c, p: p, ar: ar,
+                width: (MediaQuery.of(context).size.width - 44) / 2),
         ]);
       } else {
-        content = SizedBox(height: 210, child: ListView.separated(
+        content = SizedBox(height: 84, child: ListView.separated(
           scrollDirection: Axis.horizontal,
           padding: EdgeInsets.zero,
           itemCount: coupons.length,
           separatorBuilder: (_, __) => const SizedBox(width: 8),
           itemBuilder: (_, i) => Align(alignment: Alignment.topCenter,
-              child: _CouponCard(c: coupons[i], p: p, ar: ar, width: 240)),
+              child: _CouponCard(c: coupons[i], p: p, ar: ar, width: 270)),
         ));
       }
     } else {
