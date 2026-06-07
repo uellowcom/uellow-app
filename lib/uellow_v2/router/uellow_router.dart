@@ -43,6 +43,7 @@ import '../screens/dynamic_page_screen.dart';
 import '../screens/reels_screen.dart';
 import '../screens/free_shipping_screen.dart';
 import '../screens/delivery_coverage_screen.dart';
+import '../screens/admin/admin_dashboard_screen.dart';
 
 // Shared route observer so screens (e.g. Reels) can pause heavy work when a
 // route is pushed on top of them and resume when it returns.
@@ -90,6 +91,7 @@ class Routes {
   static const reels         = '/reels';      // v2.0.83 — vertical video feed
   static const freeShipping  = '/free-shipping'; // v2.0.89
   static const deliveryCoverage = '/delivery-coverage'; // v2.1.1 — Shipping Pro lookup
+  static const admin         = '/admin';     // v2.2.10 — 🛡️ owner console
 }
 
 class UellowRouter {
@@ -142,6 +144,7 @@ class UellowRouter {
     Routes.reels:         (ctx) => const ReelsScreen(),
     Routes.freeShipping:  (ctx) => const FreeShippingScreen(),
     Routes.deliveryCoverage: (ctx) => const DeliveryCoverageScreen(),
+    Routes.admin:         (ctx) => const AdminDashboardScreen(),
   };
 
   /// Handles dynamic routes that take arguments (e.g. /product with id).

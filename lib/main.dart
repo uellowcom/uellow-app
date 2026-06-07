@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uellow/api/uellow_api.dart';
 import 'package:uellow/uellow_v2/router/uellow_router.dart';
 import 'package:uellow/uellow_v2/theme/uellow_theme.dart';
+import 'package:uellow/uellow_v2/services/admin_mode.dart';
 import 'package:uellow/uellow_v2/services/deep_link_service.dart';
 import 'package:uellow/uellow_v2/services/fcm_service.dart';
 import 'package:uellow/uellow_v2/services/push_service.dart';
@@ -21,6 +22,8 @@ Future<void> main() async {
     final saved = prefs.getString('uellow_lang_v1');
     if (saved != null && saved.isNotEmpty) UellowApi.instance.setLang(saved);
   } catch (_) {}
+  // v2.2.10 — restore the 🛡️ admin flag so admin chips show instantly.
+  unawaited(AdminMode.restore());
   // Local notifications channels + ongoing-banner support.
   unawaited(PushService.instance.init());
   // v2.1.64 — FCM: token registration + foreground display.

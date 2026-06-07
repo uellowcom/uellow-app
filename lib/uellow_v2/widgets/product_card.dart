@@ -17,7 +17,9 @@ import 'package:flutter/material.dart';
 import '../../api/uellow_api.dart';
 import '../../api/uellow_models.dart';
 import '../router/uellow_router.dart';
+import '../services/admin_mode.dart';
 import '../theme/uellow_theme.dart';
+import '../screens/admin/admin_product_sheet.dart';
 import '../screens/product_screen.dart' show MidStrikePrice;
 
 class ProductCard extends StatefulWidget {
@@ -685,6 +687,35 @@ class _Image extends StatelessWidget {
           ),
           Positioned(bottom: 8, right: 8,
             child: _HeartBtn(filled: faved, onTap: onFav)),
+          // v2.2.10 — 🛡️ admin-only chip: opens the product admin
+          // dialog (cost / variants / stock / barcode / prices).
+          ValueListenableBuilder<bool>(
+            valueListenable: AdminMode.isAdmin,
+            builder: (ctx, isAdmin, _) => !isAdmin
+                ? const SizedBox.shrink()
+                // fixed top-right; drops below the VIDEO label when present
+                : Positioned(top: product.hasVideo && !clean ? 34 : 6,
+                    right: 6,
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () =>
+                          showAdminProductSheet(ctx, product.id),
+                      child: Container(
+                        width: 26, height: 26,
+                        decoration: BoxDecoration(
+                          color: const Color(0xE6241302),
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                              color: const Color(0x66F5C320)),
+                          boxShadow: const [BoxShadow(
+                              color: Color(0x33000000), blurRadius: 4,
+                              offset: Offset(0, 2))],
+                        ),
+                        child: const Icon(Icons.shield_outlined,
+                            size: 13, color: UellowColors.yellow),
+                      ),
+                    )),
+          ),
         ],
       ),
     );

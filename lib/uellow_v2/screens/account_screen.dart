@@ -3,6 +3,7 @@
 // user's real profile / loyalty / wallet / orders. Falls back to a friendly
 // "sign in" view when no token.
 // =============================================================================
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
@@ -14,6 +15,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../api/uellow_api.dart';
 import '../router/uellow_router.dart';
+import '../services/admin_mode.dart';
 import '../theme/uellow_theme.dart';
 import '../widgets/review_prompt_dialog.dart';
 import '../widgets/uellow_bottom_nav.dart';
@@ -53,6 +55,8 @@ class _AccountScreenState extends State<AccountScreen> {
             jsonDecode(utf8.decode(r.bodyBytes)) as Map<String, dynamic>;
         if (body['success'] == true) {
           final data = body['data'] as Map<String, dynamic>;
+          // v2.2.10 — flip the global admin switch (🛡️ console access)
+          unawaited(AdminMode.set(data['is_admin'] == true));
           try {
             final sp = await SharedPreferences.getInstance();
             await sp.setString('account_overview_cache_v1', jsonEncode(data));
@@ -415,6 +419,28 @@ class _ProfileHeaderState extends State<_ProfileHeader> {
             ]),
           ),
           const Spacer(),
+          // ── 🛡️ Admin console (v2.2.10) — tiny, admin-only ──
+          ValueListenableBuilder<bool>(
+            valueListenable: AdminMode.isAdmin,
+            builder: (_, isAdmin, __) => !isAdmin
+                ? const SizedBox.shrink()
+                : Padding(
+                    padding: const EdgeInsetsDirectional.only(end: 6),
+                    child: IconButton(
+                      onPressed: () =>
+                          Navigator.pushNamed(context, '/admin'),
+                      icon: const Icon(Icons.shield_outlined,
+                          size: 19, color: UellowColors.yellowLight),
+                      style: IconButton.styleFrom(
+                        backgroundColor: UellowColors.darkBrown,
+                        visualDensity: VisualDensity.compact,
+                        shape: const RoundedRectangleBorder(
+                            borderRadius:
+                                BorderRadius.all(Radius.circular(10))),
+                      ),
+                    ),
+                  ),
+          ),
           // ── Settings (right) ────────────────────────
           IconButton(
             onPressed: () => Navigator.pushNamed(context, '/settings'),
@@ -1303,6 +1329,8 @@ class _SignOutBtn extends StatelessWidget {
         dense: true,
         onTap: () async {
           await UellowApi.instance.auth.logout();
+          // v2.2.10 — drop admin powers with the session
+          unawaited(AdminMode.set(false));
           if (context.mounted) Navigator.pushReplacementNamed(context, Routes.auth);
         },
       ),
