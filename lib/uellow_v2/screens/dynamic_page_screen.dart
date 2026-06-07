@@ -2185,21 +2185,16 @@ class _FlashHeroState extends State<_FlashHero> {
                       color: Color(0x44C0392B), blurRadius: 18,
                       offset: Offset(0, 6))],
                 ),
+                // v2.2.08 — REBUILT: the image was absolutely-positioned
+                // (LTR-fixed) and sat under the name/price — worst in
+                // Arabic. Now a clean Row: text and image in separate
+                // lanes (can never overlap), RTL-safe, image on a soft
+                // white plate.
                 child: Stack(children: [
-                  // Product image, full-bleed right side
-                  Positioned(right: -20, top: 20, bottom: 20, width: 200,
-                    child: CachedNetworkImage(
-                      imageUrl: p.image,
-                      fit: BoxFit.contain,
-                      errorWidget: (_, __, ___) =>
-                          const Icon(Icons.shopping_bag, color: Colors.white70, size: 80),
-                    ),
-                  ),
-                  // Content overlay
                   Padding(
-                    padding: const EdgeInsets.fromLTRB(18, 18, 18, 18),
+                    padding: const EdgeInsets.fromLTRB(16, 14, 16, 20),
                     child: Column(crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                        children: [
                       Row(children: [
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -2218,38 +2213,62 @@ class _FlashHeroState extends State<_FlashHero> {
                         const Spacer(),
                         _DhmsCounter(initial: widget.endsAt),
                       ]),
-                      // Product name + price
-                      SizedBox(width: 200, child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                        Text(p.name.current(widget.ar ? 'ar' : 'en'),
-                            maxLines: 2, overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(color: Colors.white,
-                                fontSize: 18, fontWeight: FontWeight.w900,
-                                height: 1.2,
-                                shadows: [Shadow(color: Colors.black54, blurRadius: 6)])),
-                        const SizedBox(height: 6),
-                        Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                      const SizedBox(height: 10),
+                      Expanded(child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                        // ── text lane ──
+                        Expanded(flex: 11, child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                          Text(p.name.current(widget.ar ? 'ar' : 'en'),
+                              maxLines: 2, overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(color: Colors.white,
+                                  fontSize: 16.5, fontWeight: FontWeight.w900,
+                                  height: 1.25,
+                                  shadows: [Shadow(color: Colors.black54, blurRadius: 6)])),
+                          const SizedBox(height: 6),
                           Text(p.price.format(),
                               style: const TextStyle(color: Colors.white,
-                                  fontSize: 22, fontWeight: FontWeight.w900,
+                                  fontSize: 21, fontWeight: FontWeight.w900,
                                   shadows: [Shadow(color: Colors.black54, blurRadius: 6)])),
-                          if (p.comparePrice != null) ...[
-                            const SizedBox(width: 6),
+                          if (p.comparePrice != null)
                             Text(p.comparePrice!.format(),
                                 style: const TextStyle(color: Colors.white70,
-                                    fontSize: 13, fontWeight: FontWeight.w600,
+                                    fontSize: 12.5, fontWeight: FontWeight.w600,
                                     decoration: TextDecoration.lineThrough)),
-                          ],
-                        ]),
-                        const SizedBox(height: 10),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                          const SizedBox(height: 10),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(20)),
+                            child: Text(widget.ar ? 'تسوّق الآن ←' : 'Shop now →',
+                                style: const TextStyle(color: Color(0xFFC0392B),
+                                    fontSize: 12, fontWeight: FontWeight.w900)),
+                          ),
+                        ])),
+                        const SizedBox(width: 12),
+                        // ── image lane (its own plate — can't overlap) ──
+                        Expanded(flex: 9, child: Container(
                           decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(20)),
-                          child: Text(widget.ar ? 'تسوّق الآن ←' : 'Shop now →',
-                              style: const TextStyle(color: Color(0xFFC0392B),
-                                  fontSize: 12, fontWeight: FontWeight.w900)),
-                        ),
+                            color: Colors.white.withValues(alpha: .92),
+                            borderRadius: BorderRadius.circular(16),
+                            boxShadow: const [BoxShadow(
+                                color: Color(0x33000000), blurRadius: 10,
+                                offset: Offset(0, 4))],
+                          ),
+                          clipBehavior: Clip.antiAlias,
+                          padding: const EdgeInsets.all(8),
+                          child: CachedNetworkImage(
+                            imageUrl: p.image,
+                            fit: BoxFit.contain,
+                            errorWidget: (_, __, ___) => const Icon(
+                                Icons.shopping_bag,
+                                color: Color(0xFFC0392B), size: 60),
+                          ),
+                        )),
                       ])),
                     ]),
                   ),

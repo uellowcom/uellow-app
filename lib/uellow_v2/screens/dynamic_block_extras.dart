@@ -2464,12 +2464,20 @@ class _ExploreMoreBlockState extends State<ExploreMoreBlock> {
     setState(() => _loading = true);
     try {
       final api = UellowApi.instance;
+      // v2.2.08 — promotion-scoped explore (campaign landing pages):
+      // load-more keeps the campaign filter.
+      final promoId = (widget.p['promotion_id'] as num?)?.toInt()
+          ?? ((widget.p['promotion_ids'] as List?)?.isNotEmpty == true
+              ? ((widget.p['promotion_ids'] as List).first as num?)?.toInt()
+              : null);
       final params = <String, String>{
         'seed': _seed.toString(),
         'page': _page.toString(),
         'per_page': _perPage.toString(),
         'sort': _sort,
         if (_activeChipId != null) 'category_id': _activeChipId.toString(),
+        if ((widget.p['source'] ?? '') == 'promotion' && promoId != null)
+          'promotion_id': promoId.toString(),
       };
       final url = Uri.parse('${api.baseUrl}/api/mobile/v2/products/explore')
           .replace(queryParameters: params);

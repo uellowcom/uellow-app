@@ -15,6 +15,7 @@ import '../../api/uellow_api.dart';
 import '../../api/uellow_models.dart';
 import '../router/uellow_router.dart';
 import '../theme/uellow_theme.dart';
+import '../widgets/flash_banner.dart' show BannerPattern;
 import '../widgets/product_card.dart';
 
 Color? promoParseColor(dynamic v) {
@@ -300,7 +301,7 @@ class PromoHeroBlock extends StatelessWidget {
     final c3 = promoParseColor(p['c3']) ?? Colors.white;
     final txt = promoParseColor(p['text_color']) ?? Colors.white;
     final anim = (p['animation'] ?? 'aurora').toString();
-    final h = ((p['height'] as num?)?.toDouble() ?? 230).clamp(150, 420)
+    final h = ((p['height'] as num?)?.toDouble() ?? 170).clamp(120, 420)
         .toDouble();
     final title = _tx(p, 'titleEn', 'titleAr', ar).isNotEmpty
         ? _tx(p, 'titleEn', 'titleAr', ar)
@@ -313,54 +314,92 @@ class PromoHeroBlock extends StatelessWidget {
     final endsRaw = (p['ends_at'] ?? promo?['ends_at'] ?? '').toString();
     final ends = DateTime.tryParse(endsRaw);
     final showCd = p['show_countdown'] != false && ends != null;
-    return SizedBox(
+    // v2.2.08 — pattern overlay (same 22 artworks as the product-page
+    // banner) + compact ADAPTIVE layout: short heroes lay logo+text side
+    // by side; tall ones stay centred. Rounded bottom for a premium feel.
+    final pattern = (p['pattern'] ?? promo?['pattern'] ?? 'none').toString();
+    final compact = h < 200;
+
+    final logoRing = Container(
+      width: compact ? 46 : 60, height: compact ? 46 : 60,
+      decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.white,
+          border: Border.all(color: Colors.white.withValues(alpha: .65),
+              width: 2.5),
+          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: .25),
+              blurRadius: 12, offset: const Offset(0, 4))]),
+      clipBehavior: Clip.antiAlias,
+      alignment: Alignment.center,
+      child: logo.isNotEmpty
+          ? CachedNetworkImage(imageUrl: _abs(logo),
+              width: compact ? 46 : 60, height: compact ? 46 : 60,
+              fit: BoxFit.cover,
+              errorWidget: (_, __, ___) => Text(emoji,
+                  style: TextStyle(fontSize: compact ? 22 : 28)))
+          : Text(emoji, style: TextStyle(fontSize: compact ? 22 : 28)),
+    );
+    final titleTxt = Text(title, maxLines: 2,
+        textAlign: compact ? TextAlign.start : TextAlign.center,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(color: txt, fontSize: compact ? 18 : 23,
+            height: 1.12, fontWeight: FontWeight.w900,
+            shadows: const [Shadow(color: Color(0x59000000), blurRadius: 8)]));
+    final subTxt = sub.isEmpty ? null : Text(sub, maxLines: 2,
+        textAlign: compact ? TextAlign.start : TextAlign.center,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(color: txt.withValues(alpha: .92),
+            fontSize: compact ? 11.5 : 13, fontWeight: FontWeight.w600));
+    final cd = !showCd ? null : Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+          color: Colors.black.withValues(alpha: .18),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.white.withValues(alpha: .25))),
+      child: PromoCountdown(endsAt: ends, color: txt, compact: compact),
+    );
+
+    return Container(
       height: h,
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        borderRadius: const BorderRadius.vertical(
+            bottom: Radius.circular(24)),
+        boxShadow: [BoxShadow(color: c2.withValues(alpha: .35),
+            blurRadius: 18, offset: const Offset(0, 8))],
+      ),
       child: Stack(fit: StackFit.expand, children: [
         _AnimatedPromoBg(style: anim, c1: c1, c2: c2, c3: c3),
-        // soft dark veil for text legibility
-        Container(color: Colors.black.withValues(alpha: .12)),
+        if (pattern != 'none')
+          CustomPaint(painter: BannerPattern(style: pattern),
+              child: const SizedBox.expand()),
+        // soft veil for legibility
+        Container(decoration: BoxDecoration(gradient: LinearGradient(
+            begin: Alignment.topCenter, end: Alignment.bottomCenter,
+            colors: [Colors.black.withValues(alpha: .04),
+                     Colors.black.withValues(alpha: .22)]))),
         SafeArea(bottom: false, child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 14, 20, 16),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              // logo (image or emoji) in a glowing ring
-              Container(
-                width: 64, height: 64,
-                decoration: BoxDecoration(shape: BoxShape.circle,
-                    color: Colors.white,
-                    boxShadow: [BoxShadow(
-                        color: Colors.black.withValues(alpha: .25),
-                        blurRadius: 14, offset: const Offset(0, 4))]),
-                clipBehavior: Clip.antiAlias,
-                alignment: Alignment.center,
-                child: logo.isNotEmpty
-                    ? CachedNetworkImage(imageUrl: _abs(logo),
-                        width: 64, height: 64, fit: BoxFit.cover,
-                        errorWidget: (_, __, ___) => Text(emoji,
-                            style: const TextStyle(fontSize: 30)))
-                    : Text(emoji, style: const TextStyle(fontSize: 30)),
-              ),
-              const SizedBox(height: 10),
-              Text(title, textAlign: TextAlign.center, maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(color: txt, fontSize: 24, height: 1.15,
-                      fontWeight: FontWeight.w900,
-                      shadows: const [Shadow(color: Color(0x59000000),
-                          blurRadius: 8)])),
-              if (sub.isNotEmpty) ...[
-                const SizedBox(height: 4),
-                Text(sub, textAlign: TextAlign.center, maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(color: txt.withValues(alpha: .92),
-                        fontSize: 13, fontWeight: FontWeight.w600)),
-              ],
-              if (showCd) ...[
-                const SizedBox(height: 12),
-                PromoCountdown(endsAt: ends, color: txt),
-              ],
-            ],
-          ),
+          padding: const EdgeInsets.fromLTRB(18, 10, 18, 14),
+          child: compact
+              ? Row(children: [
+                  logoRing,
+                  const SizedBox(width: 12),
+                  Expanded(child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                    titleTxt,
+                    if (subTxt != null) ...[
+                      const SizedBox(height: 2), subTxt],
+                    if (cd != null) ...[const SizedBox(height: 7), cd],
+                  ])),
+                ])
+              : Column(mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                  logoRing,
+                  const SizedBox(height: 8),
+                  titleTxt,
+                  if (subTxt != null) ...[const SizedBox(height: 3), subTxt],
+                  if (cd != null) ...[const SizedBox(height: 10), cd],
+                ]),
         )),
       ]),
     );
@@ -418,7 +457,9 @@ class PromoCarouselBlock extends StatefulWidget {
 }
 
 class _PromoCarouselBlockState extends State<PromoCarouselBlock> {
-  final _ctrl = PageController(viewportFraction: .82);
+  // v2.2.08 — narrower card (was .82 → unreadably wide) with taller
+  // proportions so the product data reads clearly.
+  final _ctrl = PageController(viewportFraction: .60);
   Timer? _auto;
   int _page = 0;
 
@@ -446,7 +487,7 @@ class _PromoCarouselBlockState extends State<PromoCarouselBlock> {
     if (items.isEmpty) return const SizedBox.shrink();
     final c1 = promoParseColor(widget.p['c1']) ?? UellowColors.yellow;
     return Column(children: [
-      SizedBox(height: 300, child: PageView.builder(
+      SizedBox(height: 312, child: PageView.builder(
         controller: _ctrl,
         onPageChanged: (i) => _page = i,
         itemCount: items.length,
