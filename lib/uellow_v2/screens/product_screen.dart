@@ -489,7 +489,9 @@ class _Gallery extends StatelessWidget {
           // Cart button with live count badge
           _CartBadgeBtn(onTap: () => Navigator.pushNamed(context, '/cart')),
         ])),
-        Positioned(bottom: 14, left: 0, right: 0, child: _Dots(
+        // v2.2.24 — raised a touch so the dots clear the flush flash-sale
+        // banner sitting directly under the gallery.
+        Positioned(bottom: 22, left: 0, right: 0, child: _Dots(
           count: hasItems ? items.length : 1, active: page)),
       ]),
     );

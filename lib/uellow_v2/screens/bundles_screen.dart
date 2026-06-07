@@ -29,6 +29,11 @@ class _BundlesScreenState extends State<BundlesScreen> {
   bool _hasMore = true;
   bool _loadedOnce = false;
   String _sort = 'featured';
+  // v2.2.24 — bundle-level filters.
+  double? _minPrice, _maxPrice;
+  int _minSavings = 0, _minItems = 0;
+  bool get _hasFilters =>
+      _minPrice != null || _maxPrice != null || _minSavings > 0 || _minItems > 0;
 
   static const _sorts = [
     ('featured', 'Featured', 'مميّزة'),
@@ -56,9 +61,16 @@ class _BundlesScreenState extends State<BundlesScreen> {
     if (_loading || !_hasMore) return;
     setState(() => _loading = true);
     try {
+      final qp = <String, String>{
+        'page': '$_page', 'per_page': '12', 'sort': _sort,
+        if (_minPrice != null) 'min_price': _minPrice!.toStringAsFixed(2),
+        if (_maxPrice != null) 'max_price': _maxPrice!.toStringAsFixed(2),
+        if (_minSavings > 0) 'min_savings': '$_minSavings',
+        if (_minItems > 0) 'min_items': '$_minItems',
+      };
       final r = await http.get(
-        Uri.parse('${UellowApi.instance.baseUrl}/api/mobile/v2/bundles'
-            '?page=$_page&per_page=12&sort=$_sort'),
+        Uri.parse('${UellowApi.instance.baseUrl}/api/mobile/v2/bundles')
+            .replace(queryParameters: qp),
         headers: const {'Accept': 'application/json'},
       ).timeout(const Duration(seconds: 12));
       final body = jsonDecode(utf8.decode(r.bodyBytes)) as Map<String, dynamic>;
@@ -88,6 +100,102 @@ class _BundlesScreenState extends State<BundlesScreen> {
     _load();
   }
 
+  void _reload() {
+    setState(() {
+      _items.clear(); _page = 1; _hasMore = true; _loadedOnce = false;
+    });
+    _load();
+  }
+
+  Future<void> _openFilters(bool ar) async {
+    final minC = TextEditingController(text: _minPrice?.toStringAsFixed(0) ?? '');
+    final maxC = TextEditingController(text: _maxPrice?.toStringAsFixed(0) ?? '');
+    int save = _minSavings, items = _minItems;
+    await showModalBottomSheet(
+      context: context, isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius:
+          BorderRadius.vertical(top: Radius.circular(18))),
+      builder: (ctx) => StatefulBuilder(builder: (ctx, setSheet) {
+        Widget chipRow(String label, List<int> opts, int val,
+                void Function(int) on, String suffix) =>
+            Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(label, style: const TextStyle(fontSize: 12.5,
+                  fontWeight: FontWeight.w800, color: UellowColors.ink)),
+              const SizedBox(height: 6),
+              Wrap(spacing: 8, children: opts.map((o) {
+                final on0 = val == o;
+                return GestureDetector(
+                  onTap: () => setSheet(() => on(o)),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 7),
+                    decoration: BoxDecoration(
+                      color: on0 ? const Color(0xFF7C3AED) : const Color(0xFFF1ECFB),
+                      borderRadius: BorderRadius.circular(999)),
+                    child: Text(o == 0 ? (ar ? 'الكل' : 'Any') : '$o$suffix',
+                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800,
+                            color: on0 ? Colors.white : const Color(0xFF7C3AED))),
+                  ),
+                );
+              }).toList()),
+              const SizedBox(height: 16),
+            ]);
+        return Padding(
+          padding: EdgeInsets.fromLTRB(16, 14, 16,
+              16 + MediaQuery.of(ctx).viewInsets.bottom),
+          child: Column(mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(children: [
+              Text(ar ? 'فلترة الباقات' : 'Filter bundles',
+                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900,
+                      color: UellowColors.ink)),
+              const Spacer(),
+              TextButton(onPressed: () => setSheet(() {
+                minC.clear(); maxC.clear(); save = 0; items = 0;
+              }), child: Text(ar ? 'مسح' : 'Clear')),
+            ]),
+            const SizedBox(height: 8),
+            Text(ar ? 'نطاق السعر' : 'Price range',
+                style: const TextStyle(fontSize: 12.5,
+                    fontWeight: FontWeight.w800, color: UellowColors.ink)),
+            const SizedBox(height: 6),
+            Row(children: [
+              Expanded(child: TextField(controller: minC,
+                  keyboardType: TextInputType.number,
+                  decoration: InputDecoration(hintText: ar ? 'من' : 'min',
+                      isDense: true, border: const OutlineInputBorder()))),
+              const SizedBox(width: 10),
+              Expanded(child: TextField(controller: maxC,
+                  keyboardType: TextInputType.number,
+                  decoration: InputDecoration(hintText: ar ? 'إلى' : 'max',
+                      isDense: true, border: const OutlineInputBorder()))),
+            ]),
+            const SizedBox(height: 16),
+            chipRow(ar ? 'أقل نسبة توفير' : 'Min savings',
+                [0, 10, 20, 30, 50], save, (v) => save = v, '%'),
+            chipRow(ar ? 'أقل عدد قطع' : 'Min items',
+                [0, 2, 3, 4, 5], items, (v) => items = v, ar ? '' : '+'),
+            SizedBox(width: double.infinity, height: 46, child: ElevatedButton(
+              onPressed: () {
+                _minPrice = double.tryParse(minC.text.trim());
+                _maxPrice = double.tryParse(maxC.text.trim());
+                _minSavings = save; _minItems = items;
+                Navigator.pop(ctx); _reload();
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF7C3AED),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12))),
+              child: Text(ar ? 'تطبيق' : 'Apply',
+                  style: const TextStyle(fontWeight: FontWeight.w900)),
+            )),
+          ]),
+        );
+      }),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final ar = UellowApi.instance.lang.toLowerCase().startsWith('ar');
@@ -98,6 +206,17 @@ class _BundlesScreenState extends State<BundlesScreen> {
         backgroundColor: Colors.white,
         foregroundColor: UellowColors.darkBrown,
         elevation: 0.5,
+        actions: [
+          IconButton(
+            tooltip: ar ? 'فلاتر' : 'Filters',
+            icon: Stack(clipBehavior: Clip.none, children: [
+              const Icon(Icons.tune_rounded),
+              if (_hasFilters) const Positioned(right: -1, top: -1, child:
+                  CircleAvatar(radius: 4, backgroundColor: Color(0xFF7C3AED))),
+            ]),
+            onPressed: () => _openFilters(ar),
+          ),
+        ],
       ),
       body: Column(children: [
         // ── sort / filter chips ──
