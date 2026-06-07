@@ -711,6 +711,8 @@ class PromoMegaGridBlock extends StatelessWidget {
   final Map<String, dynamic> p;
   final Map<String, dynamic> data;
   final bool ar;
+  // v2.2.11 — per-element card display map from the builder (b.props.card).
+  CardDisplay get _d => CardDisplay.fromMap(p['card'] as Map?);
 
   @override
   Widget build(BuildContext context) {
@@ -780,7 +782,7 @@ class PromoMegaGridBlock extends StatelessWidget {
             CachedNetworkImage(imageUrl: _abs(prod.image), fit: BoxFit.cover,
                 errorWidget: (_, __, ___) =>
                     const ColoredBox(color: Color(0xFFF4F4F4))),
-            if (d > 0) PositionedDirectional(top: 6, start: 6,
+            if (d > 0 && _d.discount) PositionedDirectional(top: 6, start: 6,
               child: Container(
                 padding: const EdgeInsets.symmetric(
                     horizontal: 7, vertical: 3),
@@ -797,20 +799,20 @@ class PromoMegaGridBlock extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(9, 8, 9, 9),
             child: Column(crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-              Text(prod.name.current(lang), maxLines: cols == 3 ? 1 : 2,
+              if (_d.name) Text(prod.name.current(lang), maxLines: cols == 3 ? 1 : 2,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(fontSize: cols == 3 ? 10.5 : 12,
                       fontWeight: FontWeight.w700,
                       color: UellowColors.ink, height: 1.3)),
               const SizedBox(height: 5),
-              FittedBox(fit: BoxFit.scaleDown,
+              if (_d.price) FittedBox(fit: BoxFit.scaleDown,
                   alignment: AlignmentDirectional.centerStart,
                   child: Row(mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.end, children: [
                 Text(prod.price.formatLocalized(lang), style: TextStyle(
                     fontSize: cols == 3 ? 12.5 : 14.5,
                     fontWeight: FontWeight.w900, color: rib)),
-                if (prod.comparePrice != null) ...[
+                if (prod.comparePrice != null && _d.compare) ...[
                   const SizedBox(width: 5),
                   Text(prod.comparePrice!.formatLocalized(lang),
                       style: const TextStyle(fontSize: 10,
@@ -818,7 +820,7 @@ class PromoMegaGridBlock extends StatelessWidget {
                           decoration: TextDecoration.lineThrough)),
                 ],
               ])),
-              if (showSave && saved != null) Padding(
+              if (showSave && _d.save && saved != null) Padding(
                 padding: const EdgeInsets.only(top: 4),
                 child: Container(
                   padding: const EdgeInsets.symmetric(
@@ -1237,6 +1239,8 @@ class PromoMasonryBlock extends StatelessWidget {
   final Map<String, dynamic> p;
   final Map<String, dynamic> data;
   final bool ar;
+  // v2.2.11 — per-element card display map from the builder (b.props.card).
+  CardDisplay get _d => CardDisplay.fromMap(p['card'] as Map?);
   @override
   Widget build(BuildContext context) {
     final items = promoItems(data);
@@ -1283,13 +1287,13 @@ class PromoMasonryBlock extends StatelessWidget {
             padding: const EdgeInsets.all(9),
             child: Column(crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-              Text(prod.name.current(ar ? 'ar' : 'en'), maxLines: 2,
+              if (_d.name) Text(prod.name.current(ar ? 'ar' : 'en'), maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(fontSize: 12,
                       fontWeight: FontWeight.w700,
                       color: UellowColors.ink, height: 1.3)),
-              const SizedBox(height: 4),
-              Text(prod.price.formatLocalized(ar ? 'ar' : 'en'),
+              if (_d.name) const SizedBox(height: 4),
+              if (_d.price) Text(prod.price.formatLocalized(ar ? 'ar' : 'en'),
                   style: TextStyle(fontSize: 14,
                       fontWeight: FontWeight.w900, color: c1)),
             ]),
