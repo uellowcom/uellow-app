@@ -16,7 +16,7 @@ import '../../api/uellow_models.dart';
 import '../router/uellow_router.dart';
 import 'dynamic_block_extras.dart'
     show blockMargin, blockRadius, blockOverlay, blockOverlayCustom,
-         pickLocalizedImage;
+         pickLocalizedImage, openBlockLink;
 import 'product_screen.dart' show MidStrikePrice;
 import '../theme/uellow_theme.dart';
 import '../widgets/flash_banner.dart' show BannerPattern;
@@ -681,8 +681,34 @@ class _PromoCarouselBlockState extends State<PromoCarouselBlock> {
   Widget build(BuildContext context) {
     final items = promoItems(widget.data);
     if (items.isEmpty) return const SizedBox.shrink();
-    final c1 = promoParseColor(widget.p['c1']) ?? UellowColors.yellow;
-    return Column(children: [
+    final p = widget.p; final ar = widget.ar;
+    final c1 = promoParseColor(p['c1']) ?? UellowColors.yellow;
+    // v2.2.21 — optional title / subtitle / "View more" (block link).
+    final title = _tx(p, 'titleEn', 'titleAr', ar);
+    final sub = _tx(p, 'subEn', 'subAr', ar);
+    final fontColor = promoParseColor(p['font_color']) ?? UellowColors.ink;
+    final link = (p['link'] as Map?)?.cast<String, dynamic>();
+    final moreLabel = _tx(p, 'ctaEn', 'ctaAr', ar);
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      if (title.isNotEmpty || sub.isNotEmpty || link != null) Padding(
+        padding: const EdgeInsets.fromLTRB(14, 2, 14, 8),
+        child: Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+            if (title.isNotEmpty) Text(title, style: TextStyle(
+                fontSize: 15.5, fontWeight: FontWeight.w900, color: fontColor)),
+            if (sub.isNotEmpty) Text(sub, style: const TextStyle(
+                fontSize: 11.5, color: UellowColors.muted)),
+          ])),
+          if (link != null) GestureDetector(
+            onTap: () => openBlockLink(context, link),
+            child: Text(ar ? (moreLabel.isEmpty ? 'عرض الكل' : moreLabel)
+                    : (moreLabel.isEmpty ? 'See all' : moreLabel),
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800,
+                    color: c1)),
+          ),
+        ]),
+      ),
       SizedBox(height: 312, child: PageView.builder(
         controller: _ctrl,
         onPageChanged: (i) => _page = i,
@@ -706,6 +732,23 @@ class _PromoCarouselBlockState extends State<PromoCarouselBlock> {
                 borderRadius: BorderRadius.circular(3)),
           ),
       ]),
+      // v2.2.21 — yellow "View more" button (when a link target is set).
+      if (link != null) Padding(
+        padding: const EdgeInsets.fromLTRB(14, 10, 14, 0),
+        child: SizedBox(height: 40, child: ElevatedButton(
+          onPressed: () => openBlockLink(context, link),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: c1, foregroundColor: UellowColors.darkBrown,
+            elevation: 0,
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12)),
+          ),
+          child: Text(ar ? (moreLabel.isEmpty ? 'عرض المزيد' : moreLabel)
+                  : (moreLabel.isEmpty ? 'View more' : moreLabel),
+              style: const TextStyle(fontWeight: FontWeight.w900,
+                  fontSize: 13)),
+        )),
+      ),
     ]);
   }
 }

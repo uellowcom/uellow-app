@@ -205,6 +205,7 @@ class UellowRouter {
             brandName: args['brand_name'] as String?,
             feedSort: args['sort'] as String?,
             feedTitle: args['title'] as String?,
+            filters: (args['filters'] as Map?)?.cast<String, dynamic>(),
           ),
         );
       case Routes.orderConfirm:
@@ -300,6 +301,16 @@ class UellowRouter {
   static void goSearchResults(BuildContext context, String query) =>
       Navigator.of(context).pushNamed(Routes.collection,
           arguments: {'search': query});
+
+  /// v2.2.21 — open the shop pre-filtered to a builder "Filtered set" link.
+  static void goFilteredCollection(BuildContext context,
+      Map<String, dynamic> filters, [String? title]) =>
+      Navigator.of(context).pushNamed(Routes.collection, arguments: {
+        'filters': filters,
+        if (filters['category_id'] != null)
+          'category_id': (filters['category_id'] as num).toInt(),
+        if (title != null) 'title': title,
+      });
 
   static void goBrand(BuildContext context, int brandValueId, String name) =>
       Navigator.of(context).pushNamed(Routes.collection,

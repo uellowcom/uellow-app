@@ -329,6 +329,12 @@ void _openLink(BuildContext c, Map<String, dynamic>? link) {
       final id = int.tryParse(value) ?? 0;
       if (id > 0) UellowRouter.goCollection(c, id);
       break;
+    case 'filters':
+      // v2.2.21 — open the shop pre-filtered to the admin's chosen set.
+      UellowRouter.goFilteredCollection(c,
+          (link['filters'] as Map?)?.cast<String, dynamic>() ?? const {},
+          link['label']?.toString());
+      break;
     case 'url':
       launchUrl(Uri.parse(value), mode: LaunchMode.externalApplication);
       break;

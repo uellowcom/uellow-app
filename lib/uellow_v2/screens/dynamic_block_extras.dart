@@ -2373,6 +2373,12 @@ void _openLink(BuildContext c, Map<String, dynamic>? link) {
       final id = int.tryParse(value) ?? 0;
       if (id > 0) UellowRouter.goCollection(c, id);
       break;
+    case 'filters':
+      // v2.2.21 — pre-filtered shop (builder "Filtered set" link).
+      UellowRouter.goFilteredCollection(c,
+          (link['filters'] as Map?)?.cast<String, dynamic>() ?? const {},
+          link['label']?.toString());
+      break;
     case 'screen':
       const map = {
         'shop': Routes.category, 'cart': Routes.cart, 'wishlist': Routes.wishlist,
@@ -3016,10 +3022,16 @@ class _ChipsBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final acc = accent ?? dark;
+    // v2.2.21 — chip name is now bilingual {en,ar}; fall back to a plain
+    // string for older cached payloads.
+    String chipName(dynamic n) {
+      if (n is Map) return (n[ar ? 'ar' : 'en'] ?? n['en'] ?? '').toString();
+      return (n ?? '').toString();
+    }
     final entries = <(String, int?)>[
       (ar ? 'الكل' : 'All', null),
       for (final c in chips)
-        ((c['name']?.toString() ?? ''), (c['id'] as num?)?.toInt()),
+        (chipName(c['name']), (c['id'] as num?)?.toInt()),
     ];
     // Segmented = one rounded track holding all chips.
     if (style == 'segmented') {

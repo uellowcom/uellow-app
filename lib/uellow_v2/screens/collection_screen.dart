@@ -29,6 +29,7 @@ class CollectionScreen extends StatefulWidget {
   const CollectionScreen({
     super.key, this.categoryId, this.searchQuery,
     this.brandValueId, this.brandName, this.feedSort, this.feedTitle,
+    this.filters,
   });
   final int? categoryId;
   final String? searchQuery;
@@ -38,6 +39,10 @@ class CollectionScreen extends StatefulWidget {
   // (newest/discount/popular…) + a header title, no category needed.
   final String? feedSort;
   final String? feedTitle;
+  // v2.2.21 — filtered-set link: a raw filter map (value_ids, min_price,
+  // max_price, min_discount, min_rating, on_sale, free_shipping, sort,
+  // category_id) applied straight to the products query.
+  final Map<String, dynamic>? filters;
   @override
   State<CollectionScreen> createState() => _CollectionScreenState();
 }
@@ -67,6 +72,9 @@ class _CollectionScreenState extends State<CollectionScreen> {
     super.initState();
     if (widget.feedSort != null && widget.feedSort!.isNotEmpty) {
       _sort = widget.feedSort!;
+    } else if (widget.filters?['sort'] is String &&
+        (widget.filters!['sort'] as String).isNotEmpty) {
+      _sort = widget.filters!['sort'] as String;   // v2.2.21 filtered link
     }
     _loadFilterSpec();
     _scroll.addListener(_onScroll);
@@ -116,16 +124,30 @@ class _CollectionScreenState extends State<CollectionScreen> {
       } else {
         // v2.0.80 — value_ids + new optional filters (min/max price,
         // min rating) flowing through to the products controller.
+        // v2.2.21 — base query from a filtered-set link (if any), then the
+        // user's in-screen filter tweaks override on top.
+        final fl = widget.filters ?? const {};
+        final qp = <String, String>{
+          'page': '$_page', 'per_page': '20',
+        };
+        // link-level filters first
+        fl.forEach((k, v) {
+          if (v == null) return;
+          if (v is List) { if (v.isNotEmpty) qp[k] = v.join(','); }
+          else if (v is bool) { if (v) qp[k] = '1'; }
+          else { final s = v.toString(); if (s.isNotEmpty) qp[k] = s; }
+        });
+        // in-screen controls win
+        qp['sort'] = _sort;
+        if (widget.categoryId != null) qp['category_id'] = '${widget.categoryId}';
+        if (_selectedValueIds.isNotEmpty) {
+          qp['value_ids'] = _selectedValueIds.join(',');
+        }
+        if (_minPrice != null) qp['min_price'] = _minPrice!.toStringAsFixed(2);
+        if (_maxPrice != null) qp['max_price'] = _maxPrice!.toStringAsFixed(2);
+        if (_minRating > 0) qp['min_rating'] = '$_minRating';
         final uri = Uri.parse('${UellowApi.instance.baseUrl}/api/mobile/v2/products')
-            .replace(queryParameters: {
-              if (widget.categoryId != null) 'category_id': '${widget.categoryId}',
-              'page': '$_page', 'per_page': '20', 'sort': _sort,
-              if (_selectedValueIds.isNotEmpty)
-                'value_ids': _selectedValueIds.join(','),
-              if (_minPrice != null) 'min_price': '${_minPrice!.toStringAsFixed(2)}',
-              if (_maxPrice != null) 'max_price': '${_maxPrice!.toStringAsFixed(2)}',
-              if (_minRating > 0) 'min_rating': '$_minRating',
-            });
+            .replace(queryParameters: qp);
         final r = await http.get(uri, headers: {'Accept': 'application/json'});
         final body = jsonDecode(utf8.decode(r.bodyBytes)) as Map<String, dynamic>;
         page = UellowPage.fromJson(body, (m) => UellowProductCard.fromJson(m));
