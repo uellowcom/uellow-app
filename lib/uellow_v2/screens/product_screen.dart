@@ -268,6 +268,10 @@ class _ProductScreenState extends State<ProductScreen> {
       SliverToBoxAdapter(child: KeyedSubtree(
           key: _kOverview, child: _Title(p: p))),
       SliverToBoxAdapter(child: _PriceRow(p: p)),
+      // v2.2.20 — when this product is a BUNDLE, list everything inside it
+      // with each component's own price + the total savings.
+      if (p.bundle != null)
+        SliverToBoxAdapter(child: _BundleContents(bundle: p.bundle!)),
       // v2.1.71 — order per latest spec: Brand → Seller → Variation.
       // Brand block now sits ABOVE the variation/attributes block.
       if (p.brand != null) SliverToBoxAdapter(child: _BrandBlock(brand: p.brand!)),
@@ -944,6 +948,117 @@ class MidStrikePrice extends StatelessWidget {
 }
 
 // ─── Brand block ───────────────────────────────────────────────────
+
+// v2.2.20 — "What's inside" for a bundle product: each component with its
+// own price + the savings vs buying separately.
+class _BundleContents extends StatelessWidget {
+  const _BundleContents({required this.bundle});
+  final Map<String, dynamic> bundle;
+  @override
+  Widget build(BuildContext context) {
+    final ar = UellowApi.instance.lang.toLowerCase().startsWith('ar');
+    final items = ((bundle['items'] as List?) ?? const [])
+        .cast<dynamic>().map((e) => (e as Map).cast<String, dynamic>())
+        .toList();
+    if (items.isEmpty) return const SizedBox.shrink();
+    final showPrices = bundle['show_components_price'] != false;
+    final savePct = (bundle['savings_pct'] as num?)?.toInt() ?? 0;
+    final savings = (bundle['savings'] as num?)?.toDouble() ?? 0;
+    final total = (bundle['components_total'] as num?)?.toDouble() ?? 0;
+    final count = (bundle['component_count'] as num?)?.toInt() ?? items.length;
+    String fmt(num v) => v.toStringAsFixed(3);
+    return Container(
+      color: Colors.white, margin: const EdgeInsets.only(top: 8),
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          const Icon(Icons.inventory_2_rounded, size: 17,
+              color: Color(0xFF7C3AED)),
+          const SizedBox(width: 8),
+          Text(ar ? 'محتويات الباقة ($count)' : "What's inside ($count)",
+              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w900,
+                  color: UellowColors.ink)),
+          const Spacer(),
+          if (savePct > 0) Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+            decoration: BoxDecoration(color: const Color(0xFF16A34A),
+                borderRadius: BorderRadius.circular(6)),
+            child: Text(ar ? 'وفّر $savePct%' : 'SAVE $savePct%',
+                style: const TextStyle(color: Colors.white, fontSize: 10,
+                    fontWeight: FontWeight.w900)),
+          ),
+        ]),
+        const SizedBox(height: 12),
+        for (final it in items) Padding(
+          padding: const EdgeInsets.only(bottom: 10),
+          child: InkWell(
+            onTap: () {
+              final pid = (it['product_id'] as num?)?.toInt() ?? 0;
+              if (pid > 0) UellowRouter.goProduct(context, pid);
+            },
+            child: Row(children: [
+              ClipRRect(borderRadius: BorderRadius.circular(8),
+                child: CachedNetworkImage(
+                  imageUrl: () {
+                    final im = (it['image'] ?? '').toString();
+                    return im.startsWith('http')
+                        ? im : '${UellowApi.instance.baseUrl}$im';
+                  }(),
+                  width: 46, height: 46, fit: BoxFit.cover,
+                  errorWidget: (_, __, ___) => Container(width: 46, height: 46,
+                      color: const Color(0xFFF1ECFB)),
+                )),
+              const SizedBox(width: 10),
+              Container(
+                margin: const EdgeInsetsDirectional.only(end: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(color: const Color(0xFFEDE9FE),
+                    borderRadius: BorderRadius.circular(5)),
+                child: Text('×${(it['qty'] as num?)?.toInt() ?? 1}',
+                    style: const TextStyle(fontSize: 11,
+                        fontWeight: FontWeight.w900,
+                        color: Color(0xFF7C3AED))),
+              ),
+              Expanded(child: Text(
+                  ((it['name'] as Map?)?[ar ? 'ar' : 'en'] ?? '').toString(),
+                  maxLines: 2, overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 12.5,
+                      fontWeight: FontWeight.w600, color: UellowColors.ink))),
+              if (showPrices) Padding(
+                padding: const EdgeInsetsDirectional.only(start: 8),
+                child: Text(fmt((it['line_total'] as num?)?.toDouble() ?? 0),
+                    style: const TextStyle(fontSize: 11.5,
+                        fontWeight: FontWeight.w700,
+                        color: UellowColors.muted)),
+              ),
+            ]),
+          ),
+        ),
+        if (showPrices && savings > 0) ...[
+          const Divider(height: 16),
+          Row(children: [
+            Text(ar ? 'لو اشتريتها منفصلة' : 'Bought separately',
+                style: const TextStyle(fontSize: 12,
+                    color: UellowColors.muted)),
+            const Spacer(),
+            Text(fmt(total), style: const TextStyle(fontSize: 12,
+                decoration: TextDecoration.lineThrough,
+                color: UellowColors.muted)),
+          ]),
+          const SizedBox(height: 4),
+          Row(children: [
+            Text(ar ? 'توفيرك مع الباقة' : 'You save with the bundle',
+                style: const TextStyle(fontSize: 12.5,
+                    fontWeight: FontWeight.w800, color: Color(0xFF16A34A))),
+            const Spacer(),
+            Text(fmt(savings), style: const TextStyle(fontSize: 13,
+                fontWeight: FontWeight.w900, color: Color(0xFF16A34A))),
+          ]),
+        ],
+      ]),
+    );
+  }
+}
 
 class _BrandBlock extends StatelessWidget {
   const _BrandBlock({required this.brand});

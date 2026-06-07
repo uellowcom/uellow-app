@@ -501,6 +501,8 @@ class UellowProductFull extends UellowProductCard {
   // allowOutOfStockOrder is inherited from UellowProductCard now
   final DateTime? flashEndsAt;
   final UellowText? flashTitle;
+  // v2.2.20 — bundle payload when this product IS a bundle, else null.
+  final Map<String, dynamic>? bundle;
 
   UellowProductFull({
     required int id, required UellowText name, required String slug,
@@ -526,6 +528,7 @@ class UellowProductFull extends UellowProductCard {
     this.ranks = const [],
     this.priceHistory,
     this.flashEndsAt, this.flashTitle,
+    this.bundle,
   }) : super(
             id: id, name: name, slug: slug, image: image, price: price,
             comparePrice: comparePrice, discountPct: discountPct,
@@ -596,6 +599,7 @@ class UellowProductFull extends UellowProductCard {
         flashTitle: (j['flash_sale'] as Map?)?['title'] != null
             ? UellowText.fromJson((j['flash_sale'] as Map)['title'])
             : null,
+        bundle: (j['bundle'] as Map?)?.cast<String, dynamic>(),
       );
 }
 

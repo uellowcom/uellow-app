@@ -15,7 +15,9 @@ import '../../api/uellow_api.dart';
 import '../../api/uellow_models.dart';
 import '../router/uellow_router.dart';
 import 'dynamic_block_extras.dart'
-    show blockMargin, blockOverlay, blockOverlayCustom, pickLocalizedImage;
+    show blockMargin, blockRadius, blockOverlay, blockOverlayCustom,
+         pickLocalizedImage;
+import 'product_screen.dart' show MidStrikePrice;
 import '../theme/uellow_theme.dart';
 import '../widgets/flash_banner.dart' show BannerPattern;
 import '../widgets/product_card.dart';
@@ -1599,6 +1601,188 @@ class PromoShowcaseBlock extends StatelessWidget {
         const SizedBox(height: 14),
         content,
       ]),
+    );
+  }
+}
+
+// ═══ 8b. BUNDLE SHOWCASE — published bundles as save-as-a-set cards ══════
+class BundleShowcaseBlock extends StatelessWidget {
+  const BundleShowcaseBlock({super.key, required this.p, required this.data,
+      required this.ar});
+  final Map<String, dynamic> p;
+  final Map<String, dynamic> data;
+  final bool ar;
+
+  Color _c(String k, Color fb) => promoParseColor(p[k]) ?? fb;
+
+  @override
+  Widget build(BuildContext context) {
+    final items = ((data['items'] as List?) ?? const []).cast<dynamic>()
+        .map((e) => (e as Map).cast<String, dynamic>()).toList();
+    if (items.isEmpty) return const SizedBox.shrink();
+    final c1 = _c('c1', const Color(0xFF7C3AED));
+    final c2 = _c('c2', const Color(0xFF4C1D95));
+    final tc = _c('text_color', Colors.white);
+    final sc = _c('sub_color', const Color(0xFFEDE9FE));
+    final saveColor = _c('savings_color', const Color(0xFF16A34A));
+    final showSavings = p['show_savings'] != false;
+    final title = _tx(p, 'titleEn', 'titleAr', ar);
+    final sub = _tx(p, 'subEn', 'subAr', ar);
+    final emoji = (p['emoji'] ?? '📦').toString();
+    final grid = (p['layout'] ?? 'rail').toString() == 'grid';
+    final display = CardDisplay.fromMap(p['card'] as Map?);
+
+    Widget card(Map<String, dynamic> it, double width) => _BundleCard(
+        it: it, ar: ar, width: width, saveColor: saveColor,
+        showSavings: showSavings, display: display);
+
+    Widget content;
+    if (grid) {
+      content = Wrap(spacing: 8, runSpacing: 8, children: [
+        for (final it in items)
+          card(it, (MediaQuery.of(context).size.width - 44) / 2),
+      ]);
+    } else {
+      content = SizedBox(height: 250, child: ListView.separated(
+        scrollDirection: Axis.horizontal, padding: EdgeInsets.zero,
+        itemCount: items.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 8),
+        itemBuilder: (_, i) => card(items[i], 164),
+      ));
+    }
+
+    return Container(
+      margin: blockMargin(p, 10, 4, 10, 8),
+      padding: const EdgeInsets.fromLTRB(14, 14, 14, 16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(colors: [c1, c2],
+            begin: Alignment.topLeft, end: Alignment.bottomRight),
+        borderRadius: blockRadius(p, 20),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(emoji, style: const TextStyle(fontSize: 26)),
+          const SizedBox(width: 10),
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+            if (title.isNotEmpty) Text(title, style: TextStyle(color: tc,
+                fontSize: 17, fontWeight: FontWeight.w900, height: 1.15)),
+            if (sub.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 2),
+                child: Text(sub, style: TextStyle(color: sc, fontSize: 12))),
+          ])),
+        ]),
+        const SizedBox(height: 14),
+        content,
+      ]),
+    );
+  }
+}
+
+class _BundleCard extends StatelessWidget {
+  const _BundleCard({required this.it, required this.ar, required this.width,
+      required this.saveColor, required this.showSavings,
+      required this.display});
+  final Map<String, dynamic> it;
+  final bool ar;
+  final double width;
+  final Color saveColor;
+  final bool showSavings;
+  final CardDisplay display;
+
+  @override
+  Widget build(BuildContext context) {
+    final meta = (it['bundle_meta'] as Map?)?.cast<String, dynamic>();
+    final pid = (it['id'] as num?)?.toInt() ?? 0;
+    final img = (it['image'] ?? '').toString();
+    final name = ((it['name'] as Map?)?[ar ? 'ar' : 'en']
+        ?? (it['name'] ?? '')).toString();
+    // price + struck "components total" come from the card serializer
+    final priceMap = (it['price'] as Map?)?.cast<String, dynamic>();
+    final price = priceMap?['formatted']?.toString()
+        ?? (it['price']?.toString() ?? '');
+    final cmpMap = (it['compare_price'] as Map?)?.cast<String, dynamic>();
+    final compare = cmpMap?['formatted']?.toString() ?? '';
+    final savePct = (meta?['savings_pct'] as num?)?.toInt()
+        ?? (it['discount_pct'] as num?)?.toInt() ?? 0;
+    final count = (meta?['component_count'] as num?)?.toInt() ?? 0;
+    final fullUrl = img.startsWith('http')
+        ? img : '${UellowApi.instance.baseUrl}$img';
+
+    return GestureDetector(
+      onTap: () { if (pid > 0) UellowRouter.goProduct(context, pid); },
+      child: Container(
+        width: width,
+        clipBehavior: Clip.antiAlias,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          boxShadow: const [BoxShadow(color: Color(0x1A000000),
+              blurRadius: 8, offset: Offset(0, 3))],
+        ),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min, children: [
+          // cover + badges
+          Stack(children: [
+            AspectRatio(aspectRatio: 1, child: img.isNotEmpty
+                ? CachedNetworkImage(imageUrl: fullUrl, fit: BoxFit.cover,
+                    errorWidget: (_, __, ___) => Container(
+                        color: const Color(0xFFF1ECFB)))
+                : Container(color: const Color(0xFFF1ECFB),
+                    child: const Icon(Icons.inventory_2_rounded,
+                        color: Color(0xFF7C3AED), size: 34))),
+            PositionedDirectional(top: 6, start: 6, child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2.5),
+              decoration: BoxDecoration(color: const Color(0xFF7C3AED),
+                  borderRadius: BorderRadius.circular(5)),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                const Icon(Icons.inventory_2_rounded, size: 9,
+                    color: Colors.white),
+                const SizedBox(width: 3),
+                Text(count > 0
+                        ? (ar ? '$count قطع' : '$count items')
+                        : (ar ? 'باقة' : 'BUNDLE'),
+                    style: const TextStyle(color: Colors.white, fontSize: 8,
+                        fontWeight: FontWeight.w900)),
+              ]),
+            )),
+            if (showSavings && savePct > 0)
+              PositionedDirectional(top: 6, end: 6, child: Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 6, vertical: 2.5),
+                decoration: BoxDecoration(color: saveColor,
+                    borderRadius: BorderRadius.circular(5)),
+                child: Text(ar ? 'وفّر $savePct%' : 'SAVE $savePct%',
+                    style: const TextStyle(color: Colors.white, fontSize: 8.5,
+                        fontWeight: FontWeight.w900)),
+              )),
+          ]),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(9, 7, 9, 9),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+              if (display.name) SizedBox(height: 32, child: Text(name,
+                  maxLines: 2, overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 11, height: 1.2,
+                      fontWeight: FontWeight.w700,
+                      color: UellowColors.ink))),
+              const SizedBox(height: 4),
+              if (display.price) Row(crossAxisAlignment:
+                  CrossAxisAlignment.center, children: [
+                Flexible(child: Text(price, maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 14,
+                        fontWeight: FontWeight.w900,
+                        color: Color(0xFF7C3AED)))),
+                if (display.compare && compare.isNotEmpty) ...[
+                  const SizedBox(width: 5),
+                  Flexible(child: MidStrikePrice(text: compare,
+                      fontSize: 9.5, color: Colors.black54)),
+                ],
+              ]),
+            ]),
+          ),
+        ]),
+      ),
     );
   }
 }

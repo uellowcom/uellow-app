@@ -297,6 +297,8 @@ Widget _renderBlock(BuildContext c, Map<String, dynamic> b, DynTheme t) {
       })); break;
     case 'promo-showcase':
       inner = PromoShowcaseBlock(p: p, data: data, ar: ar); break;
+    case 'bundle-showcase':
+      inner = BundleShowcaseBlock(p: p, data: data, ar: ar); break;
     case 'new-customer-zone':
       inner = NewCustomerZoneBlock(p: p, data: data, ar: ar); break;
     default:               return const SizedBox.shrink();

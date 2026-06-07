@@ -595,6 +595,25 @@ class _FlashLayout extends StatelessWidget {
             ]),
           ),
         ),
+        // v2.2.20 — bundle badge (purple) top-start.
+        if (product.badges.contains('bundle') && display.badges)
+          PositionedDirectional(top: 6, start: 6, child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2.5),
+            decoration: BoxDecoration(
+              color: const Color(0xFF7C3AED),
+              borderRadius: BorderRadius.circular(5),
+              boxShadow: const [BoxShadow(color: Color(0x33000000),
+                  blurRadius: 4, offset: Offset(0, 2))],
+            ),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              const Icon(Icons.inventory_2_rounded, size: 9,
+                  color: Colors.white),
+              const SizedBox(width: 3),
+              Text(lang == 'ar' ? 'باقة' : 'BUNDLE',
+                  style: const TextStyle(color: Colors.white, fontSize: 8,
+                      fontWeight: FontWeight.w900, letterSpacing: 0.3)),
+            ]),
+          )),
       ]),
       Padding(
         padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
