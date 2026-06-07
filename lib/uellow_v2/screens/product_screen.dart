@@ -1616,7 +1616,9 @@ class _CompactDeliveryState extends State<_CompactDelivery> {
       }
     } catch (_) {/* guest or 401 */}
     try {
-      final fix = await FirstLaunchService.lastFix();
+      // v2.2.16 — staleness-aware: re-detects silently when the cached
+      // fix is old, so travelling users stop seeing their OLD location.
+      final fix = await FirstLaunchService.freshFix();
       if (fix != null && fix.address.isNotEmpty) {
         // Nominatim: "House, Street, City, Region, Country" — country is
         // the LAST piece; the city sits a couple of pieces before it.

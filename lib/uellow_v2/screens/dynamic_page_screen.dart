@@ -371,7 +371,7 @@ class _Hero extends StatelessWidget {
     return GestureDetector(
       onTap: () => _openLink(context, link),
       child: Container(
-        margin: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+        margin: blockMargin(p),
         height: 180,
         clipBehavior: Clip.antiAlias,
         decoration: BoxDecoration(
@@ -506,7 +506,7 @@ class _SearchBarBlock extends StatelessWidget {
       child: Container(
         // v2.0.67 — minimal bottom margin so a Tab-Nav block immediately
         // below the search bar sits flush (the user wanted zero gap).
-        margin: const EdgeInsets.fromLTRB(14, 8, 14, 2),
+        margin: blockMargin(p, 14, 8, 14, 2),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         decoration: BoxDecoration(
           color: Colors.white,
@@ -554,7 +554,7 @@ class _CountdownBlockState extends State<_CountdownBlock> {
     final m = (_left.inMinutes % 60).toString().padLeft(2, '0');
     final s = (_left.inSeconds % 60).toString().padLeft(2, '0');
     return Container(
-      margin: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+      margin: blockMargin(widget.p),
       padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
       decoration: BoxDecoration(
         gradient: const LinearGradient(colors: [Color(0xFFC0392B), Color(0xFFE74C3C)]),
@@ -817,7 +817,7 @@ class _CategoriesBlock extends StatelessWidget {
           ])
         : null;
     return Container(
-      margin: const EdgeInsets.fromLTRB(0, 8, 0, 8),
+      margin: blockMargin(p, 0, 8, 0, 8),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         if (showTitle)
           DynSectionHeader(
@@ -1239,7 +1239,7 @@ class _Banner1 extends StatelessWidget {
     return GestureDetector(
       onTap: () => _openLink(context, link),
       child: Container(
-        margin: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+        margin: blockMargin(p),
         height: 90,
         clipBehavior: Clip.antiAlias,
         decoration: BoxDecoration(
@@ -1322,7 +1322,7 @@ class _VendorsBlock extends StatelessWidget {
         .map((e) => (e as Map).cast<String, dynamic>()).toList();
     if (items.isEmpty) return const SizedBox.shrink();
     return Container(
-      margin: const EdgeInsets.fromLTRB(0, 8, 0, 8),
+      margin: blockMargin(p, 0, 8, 0, 8),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Padding(padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
           child: Text(title, style: TextStyle(
@@ -1395,7 +1395,7 @@ class _LoyaltyBlock extends StatelessWidget {
     return GestureDetector(
       onTap: () => Navigator.pushNamed(context, wallet ? Routes.wallet : Routes.loyalty),
       child: Container(
-        margin: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+        margin: blockMargin(p),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         decoration: BoxDecoration(
           gradient: wallet
@@ -1444,7 +1444,7 @@ class _CouponsBlock extends StatelessWidget {
     return GestureDetector(
       onTap: () => Navigator.pushNamed(context, Routes.coupons),
       child: Container(
-        margin: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+        margin: blockMargin(p),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         decoration: BoxDecoration(
           color: t.primary.withValues(alpha: 0.15),
@@ -1475,7 +1475,7 @@ class _NewsletterBlock extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+      margin: blockMargin(p),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: Colors.white,
@@ -1529,7 +1529,7 @@ class _AppPromoBlock extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+      margin: blockMargin(p),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         gradient: t.heroGradient(),
@@ -1568,7 +1568,7 @@ class _BeenaBlock extends StatelessWidget {
     return GestureDetector(
       onTap: () => Navigator.pushNamed(context, Routes.beena),
       child: Container(
-        margin: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+        margin: blockMargin(p),
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
           gradient: LinearGradient(colors: [t.dark, Colors.black87]),
@@ -1604,7 +1604,7 @@ class _ReviewsBlock extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+      margin: blockMargin(p),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: Colors.white, borderRadius: BorderRadius.circular(12),
@@ -1658,7 +1658,7 @@ class _VideoBlock extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+      margin: blockMargin(p),
       height: 180,
       decoration: BoxDecoration(
         color: Colors.black, borderRadius: BorderRadius.circular(12)),

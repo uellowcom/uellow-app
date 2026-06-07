@@ -522,7 +522,10 @@ class _TopBar extends StatelessWidget {
               const Icon(Icons.search, size: 18, color: UellowColors.muted),
               const SizedBox(width: 10),
               Expanded(child: Text(
-                'ابحث عن منتج، ماركة، أو ﺗﺎﺟﺮ…',
+                // v2.2.16 — was hardcoded Arabic regardless of language.
+                UellowApi.instance.lang == 'ar'
+                    ? 'ابحث عن منتج، ماركة، أو تاجر…'
+                    : 'Search products, brands, vendors…',
                 style: TextStyle(color: UellowColors.muted.withOpacity(.9), fontSize: 13),
               )),
             ]),

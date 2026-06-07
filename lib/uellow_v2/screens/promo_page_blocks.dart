@@ -14,6 +14,7 @@ import 'package:flutter/services.dart';
 import '../../api/uellow_api.dart';
 import '../../api/uellow_models.dart';
 import '../router/uellow_router.dart';
+import 'dynamic_block_extras.dart' show blockMargin;
 import '../theme/uellow_theme.dart';
 import '../widgets/flash_banner.dart' show BannerPattern;
 import '../widgets/product_card.dart';
@@ -615,7 +616,7 @@ class PromoCountdownBlock extends StatelessWidget {
     if (ends == null) return const SizedBox.shrink();
     final label = _tx(p, 'titleEn', 'titleAr', ar);
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 10),
+      margin: blockMargin(p, 10, 0, 10, 0),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(color: c1,
           borderRadius: BorderRadius.circular(14)),
@@ -1132,7 +1133,7 @@ class PromoBannerCtaBlock extends StatelessWidget {
       onTap: onTap,
       child: Container(
         height: height,
-        margin: EdgeInsets.symmetric(horizontal: fullscreen ? 0 : 10),
+        margin: fullscreen ? EdgeInsets.zero : blockMargin(p, 10, 0, 10, 0),
         clipBehavior: Clip.antiAlias,
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(fullscreen ? 0 : 16),
@@ -1497,7 +1498,7 @@ class PromoShowcaseBlock extends StatelessWidget {
     ]);
 
     return Container(
-      margin: const EdgeInsets.fromLTRB(10, 4, 10, 8),
+      margin: blockMargin(p, 10, 4, 10, 8),
       padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
       decoration: BoxDecoration(
         gradient: LinearGradient(begin: Alignment.topLeft,

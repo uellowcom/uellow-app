@@ -32,6 +32,22 @@ import 'dynamic_page_screen.dart' show DynTheme, renderDynamicBlock;
 //   title_gap   : px between title and content (default 8)
 //   pad_y       : px vertical padding of the block (default 8)
 // =============================================================================
+/// v2.2.16 — standard block-root margin that collapses to zero when the
+/// builder's "Full bleed" option is on, so the block touches the screen
+/// edges with no margin at all.
+EdgeInsets blockMargin(Map<String, dynamic> p,
+    [double l = 12, double t = 8, double r = 12, double b = 8]) {
+  if (p['full_bleed'] == true) return EdgeInsets.zero;
+  return EdgeInsets.fromLTRB(l, t, r, b);
+}
+
+/// v2.2.16 — full-bleed-aware corner radius (edge-to-edge looks wrong
+/// with rounded corners against the screen edge).
+BorderRadius blockRadius(Map<String, dynamic> p, double r) {
+  if (p['full_bleed'] == true) return BorderRadius.zero;
+  return BorderRadius.circular(r);
+}
+
 class BlockEnvelope extends StatelessWidget {
   const BlockEnvelope({
     super.key,
@@ -46,7 +62,11 @@ class BlockEnvelope extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final padY = (props['pad_y'] as num?)?.toDouble() ?? 8.0;
+    // v2.2.16 — "Full bleed": the block touches the screen edges on all
+    // sides — no envelope padding, no bg-frame inset/rounding, and block
+    // root margins collapse too (see blockMargin / fullBleed helpers).
+    final bleed = props['full_bleed'] == true;
+    final padY = bleed ? 0.0 : (props['pad_y'] as num?)?.toDouble() ?? 8.0;
     final bgColor = _hex(props['bg_color']);
     final pattern = (props['bg_pattern'] as String?) ?? 'none';
     final bgImage = (props['bg_image'] as String?) ?? '';
@@ -54,10 +74,10 @@ class BlockEnvelope extends StatelessWidget {
     // v2.0.69 — when background is set, give the content breathing room and
     // round the colored panel so product rows don't sit flush against its
     // edges. Both knobs are admin-configurable.
-    final innerRadius = ((props['bg_radius'] as num?)?.toDouble() ?? 14).clamp(0, 32).toDouble();
-    final innerInsetX = ((props['bg_inset_x'] as num?)?.toDouble() ?? 10).clamp(0, 40).toDouble();
-    final innerPadX  = ((props['bg_pad_x'] as num?)?.toDouble() ?? 6).clamp(0, 40).toDouble();
-    final innerPadY  = ((props['bg_pad_y'] as num?)?.toDouble() ?? 8).clamp(0, 40).toDouble();
+    final innerRadius = bleed ? 0.0 : ((props['bg_radius'] as num?)?.toDouble() ?? 14).clamp(0, 32).toDouble();
+    final innerInsetX = bleed ? 0.0 : ((props['bg_inset_x'] as num?)?.toDouble() ?? 10).clamp(0, 40).toDouble();
+    final innerPadX  = bleed ? 0.0 : ((props['bg_pad_x'] as num?)?.toDouble() ?? 6).clamp(0, 40).toDouble();
+    final innerPadY  = bleed ? 0.0 : ((props['bg_pad_y'] as num?)?.toDouble() ?? 8).clamp(0, 40).toDouble();
 
     // v2.2.07 — strip the inherited bottom inset (extendBody injects the
     // nav height into MediaQuery.padding): inner shrinkWrap grids/lists
@@ -94,9 +114,9 @@ class BlockEnvelope extends StatelessWidget {
 
     // v2.1.56 — optional asymmetric bottom padding (`pad_bottom`); the
     // Explore More block uses 0 so nothing trails the Load-more button.
-    final padBottom = (props['pad_bottom'] as num?)?.toDouble() ?? padY;
+    final padBottom = bleed ? 0.0 : (props['pad_bottom'] as num?)?.toDouble() ?? padY;
     // v2.1.61 — independent gap BEFORE the block too.
-    final padTop = (props['pad_top'] as num?)?.toDouble() ?? padY;
+    final padTop = bleed ? 0.0 : (props['pad_top'] as num?)?.toDouble() ?? padY;
     return Padding(
       padding: EdgeInsets.only(top: padTop, bottom: padBottom),
       child: content,
@@ -1452,7 +1472,7 @@ class DiscountStripBlock extends StatelessWidget {
     );
     if (!hasBg) return inner;
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 10),
+      margin: blockMargin(p, 10, 0, 10, 0),
       padding: const EdgeInsets.symmetric(vertical: 8),
       decoration: BoxDecoration(
         color: bgStrip,
@@ -3836,7 +3856,7 @@ class BestsellersBlock extends StatelessWidget {
     }
 
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 10),
+      margin: blockMargin(p, 10, 0, 10, 0),
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         gradient: LinearGradient(begin: Alignment.topCenter,

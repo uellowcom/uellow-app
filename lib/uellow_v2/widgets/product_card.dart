@@ -42,23 +42,58 @@ class CardDisplay {
     this.video = true,
     this.priceWatch = true,
     this.badges = true,
+    this.infoHeight,
+    this.infoBg,
   });
 
   final bool name, brand, price, compare, discount, save, rating, wishlist,
       promo, rank, video, priceWatch, badges;
+  // v2.2.16 — per-block control of the card's BOTTOM (info) area: hiding
+  // rows used to leave a blank white strip; now the builder can fix the
+  // area's height (`_info_h`, px; null/0 = auto) and recolour it
+  // (`_info_bg`, hex) — both live in the same `card` map.
+  final double? infoHeight;
+  final Color? infoBg;
 
   /// Build from the builder's `card` map. A missing key = visible (true).
   factory CardDisplay.fromMap(Map? m) {
     if (m == null || m.isEmpty) return const CardDisplay();
     bool v(String k) => m[k] == null ? true : m[k] == true;
+    final h = (m['_info_h'] is num) ? (m['_info_h'] as num).toDouble() : 0.0;
     return CardDisplay(
       name: v('name'), brand: v('brand'), price: v('price'),
       compare: v('compare'), discount: v('discount'), save: v('save'),
       rating: v('rating'), wishlist: v('wishlist'), promo: v('promo'),
       rank: v('rank'), video: v('video'), priceWatch: v('price_watch'),
       badges: v('badges'),
+      infoHeight: h > 0 ? h : null,
+      infoBg: _hex(m['_info_bg']),
     );
   }
+
+  static Color? _hex(dynamic s) {
+    if (s is! String || s.isEmpty) return null;
+    var h = s.replaceFirst('#', '');
+    if (h.length == 6) h = 'FF$h';
+    final v = int.tryParse(h, radix: 16);
+    return v == null ? null : Color(v);
+  }
+}
+
+/// v2.2.16 — wraps a card's info section per [CardDisplay]: fixed height
+/// (overflow quietly clipped) and/or background colour. Identity when
+/// neither is set, so untouched blocks render exactly as before.
+Widget cardInfoWrap(CardDisplay d, Widget info) {
+  var w = info;
+  if (d.infoBg != null) w = ColoredBox(color: d.infoBg!, child: w);
+  if (d.infoHeight != null) {
+    w = SizedBox(
+      height: d.infoHeight,
+      child: SingleChildScrollView(
+          physics: const NeverScrollableScrollPhysics(), child: w),
+    );
+  }
+  return w;
 }
 
 class ProductCard extends StatefulWidget {
@@ -148,10 +183,12 @@ class _ProductCardState extends State<ProductCard> {
     return GestureDetector(
       onTap: widget.onTap ?? () => UellowRouter.goProduct(context, product.id),
       child: Container(
-        decoration: const BoxDecoration(
-          color: Colors.white,
+        decoration: BoxDecoration(
+          // v2.2.16 — bottom-area colour from the builder (also paints any
+          // leftover space below the info rows in fixed-height grids).
+          color: d.infoBg ?? Colors.white,
           borderRadius: UellowRadius.all_lg,
-          boxShadow: [
+          boxShadow: const [
             BoxShadow(color: Color(0x0A000000), blurRadius: 8, offset: Offset(0, 2)),
           ],
         ),
@@ -253,7 +290,9 @@ class _StdLayout extends StatelessWidget {
         _Image(product: product, hasDiscount: hasDiscount,
             discountPct: discountPct, faved: faved, onFav: onFav,
             hideFreeShip: hideFreeShip, display: display),
-        Padding(
+        // v2.2.16 — info area wrapped so the builder can fix its height
+        // and colour (see cardInfoWrap).
+        cardInfoWrap(display, Padding(
           padding: EdgeInsets.fromLTRB(8, compact ? 4 : 6, 8, compact ? 6 : 8),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -369,7 +408,7 @@ class _StdLayout extends StatelessWidget {
               ],
             ],
           ),
-        ),
+        )),
       ],
     );
   }
@@ -989,7 +1028,8 @@ class _RichLayout extends StatelessWidget {
         _Image(product: product, hasDiscount: hasDiscount,
             discountPct: discountPct, faved: faved, onFav: onFav,
             clean: true, extraBadges: overflow, display: display),
-        Padding(
+        // v2.2.16 — info area wrapped for builder height/colour control.
+        cardInfoWrap(display, Padding(
           padding: const EdgeInsets.fromLTRB(8, 4, 8, 6),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             // ── name (2 lines) — promo coin inline BEFORE the name.
@@ -1115,7 +1155,7 @@ class _RichLayout extends StatelessWidget {
               ),
             ])),
           ]),
-        ),
+        )),
       ],
     );
   }

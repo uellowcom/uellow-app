@@ -937,7 +937,9 @@ class _EmptyAddressCtaState extends State<_EmptyAddressCta> {
     final ar = UellowApi.instance.lang == 'ar';
     // Ensure we either have a cached fix from first-launch or a fresh one
     // before opening the picker, so its map opens at the right spot.
-    var fix = await FirstLaunchService.lastFix();
+    // v2.2.16 — staleness-aware (a forever-cached fix kept pointing at the
+    // user's OLD location after travel).
+    var fix = await FirstLaunchService.freshFix();
     fix ??= await FirstLaunchService.refreshNow();
     if (!mounted) return;
     setState(() => _busy = false);

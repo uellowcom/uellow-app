@@ -25,6 +25,7 @@ class FirstLaunchService {
   static const _kLatKey = 'uellow_geo_lat_v1';
   static const _kLngKey = 'uellow_geo_lng_v1';
   static const _kAddrKey = 'uellow_geo_addr_v1';
+  static const _kTsKey = 'uellow_geo_ts_v1';
 
   /// Called once from Splash after the country picker has been resolved.
   /// Idempotent — subsequent calls are no-ops.
@@ -62,6 +63,7 @@ class FirstLaunchService {
       );
       await prefs.setDouble(_kLatKey, pos.latitude);
       await prefs.setDouble(_kLngKey, pos.longitude);
+      await prefs.setInt(_kTsKey, DateTime.now().millisecondsSinceEpoch);
       // Reverse-geocode (Nominatim, no key needed). Failure is non-fatal —
       // we still have the coords so the checkout map can self-geocode.
       try {
@@ -134,10 +136,39 @@ class FirstLaunchService {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setDouble(_kLatKey, pos.latitude);
       await prefs.setDouble(_kLngKey, pos.longitude);
+      await prefs.setInt(_kTsKey, DateTime.now().millisecondsSinceEpoch);
       if (addr.isNotEmpty) await prefs.setString(_kAddrKey, addr);
       return (lat: pos.latitude, lng: pos.longitude, address: addr);
     } catch (_) {
       return null;
     }
+  }
+
+  /// v2.2.16 — staleness-aware fix. The first-launch fix used to live
+  /// FOREVER, so a user who travelled kept seeing their old location in
+  /// the "Deliver to" block even after restarting the app. Returns the
+  /// cached fix while it is younger than [maxAge]; otherwise silently
+  /// re-detects — but ONLY when permission is already granted (never
+  /// prompts) — and updates the cache. Falls back to the stale cache if
+  /// GPS fails.
+  static Future<({double lat, double lng, String address})?> freshFix(
+      {Duration maxAge = const Duration(minutes: 30)}) async {
+    final prefs = await SharedPreferences.getInstance();
+    final ts = prefs.getInt(_kTsKey) ?? 0;
+    final cached = await lastFix();
+    if (cached != null &&
+        DateTime.now().millisecondsSinceEpoch - ts < maxAge.inMilliseconds) {
+      return cached;
+    }
+    try {
+      final lp = await Geolocator.checkPermission();
+      if (lp != LocationPermission.always &&
+          lp != LocationPermission.whileInUse) {
+        return cached;
+      }
+    } catch (_) {
+      return cached;
+    }
+    return await refreshNow() ?? cached;
   }
 }
