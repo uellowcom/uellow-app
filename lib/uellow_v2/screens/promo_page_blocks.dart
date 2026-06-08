@@ -1843,15 +1843,20 @@ class _BundleCard extends StatelessWidget {
               const SizedBox(height: 4),
               if (display.price) Row(crossAxisAlignment:
                   CrossAxisAlignment.center, children: [
-                Flexible(child: Text(price, maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                // v2.2.32 — scale the price down to fit instead of cutting it
+                // with an ellipsis (large bundle totals were truncated).
+                Flexible(child: FittedBox(fit: BoxFit.scaleDown,
+                    alignment: AlignmentDirectional.centerStart,
+                    child: Text(price, maxLines: 1, softWrap: false,
                     style: const TextStyle(fontSize: 14,
                         fontWeight: FontWeight.w900,
-                        color: Color(0xFF7C3AED)))),
+                        color: Color(0xFF7C3AED))))),
                 if (display.compare && compare.isNotEmpty) ...[
                   const SizedBox(width: 5),
-                  Flexible(child: MidStrikePrice(text: compare,
-                      fontSize: 9.5, color: Colors.black54)),
+                  Flexible(child: FittedBox(fit: BoxFit.scaleDown,
+                      alignment: AlignmentDirectional.centerStart,
+                      child: MidStrikePrice(text: compare,
+                      fontSize: 9.5, color: Colors.black54))),
                 ],
               ]),
             ]),

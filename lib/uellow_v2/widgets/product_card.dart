@@ -636,7 +636,12 @@ class _FlashLayout extends StatelessWidget {
           // the end of the row (never crowds the new price).
           // v2.1.56 — struck-through old price sits RIGHT NEXT to the
           // current price (tiny gap), no longer pushed to the row end.
-          Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
+          // v2.2.32 — auto-shrink the whole price row so long SAR/EGP amounts
+          // never overlap/overflow in compact cards.
+          FittedBox(fit: BoxFit.scaleDown,
+              alignment: AlignmentDirectional.centerStart,
+              child: Row(crossAxisAlignment: CrossAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min, children: [
             Text(product.price.amount.toStringAsFixed(3),
                 style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w900,
                     color: UellowColors.danger, letterSpacing: -0.2, height: 1.0)),
@@ -646,11 +651,11 @@ class _FlashLayout extends StatelessWidget {
                     color: Color(0xFFC62828))),
             if (hasDiscount && display.compare) ...[
               const SizedBox(width: 4),
-              Flexible(child: MidStrikePrice(
+              MidStrikePrice(
                   text: product.comparePrice!.amount.toStringAsFixed(3),
-                  fontSize: 9, color: UellowColors.muted)),
+                  fontSize: 9, color: UellowColors.muted),
             ],
-          ]),
+          ])),
           if (hasDiscount && display.save) ...[
             const SizedBox(height: 5),
             // v2.0.65 — centered "Save X.XXX KD" pill in the flash card.
@@ -1104,8 +1109,12 @@ class _RichLayout extends StatelessWidget {
               ],
             ])),
             const SizedBox(height: 2),
-            // ── price row ──
-            if (display.price) Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
+            // ── price row ── v2.2.32: auto-shrink so long SAR/EGP amounts
+            // don't overlap/overflow.
+            if (display.price) FittedBox(fit: BoxFit.scaleDown,
+                alignment: AlignmentDirectional.centerStart,
+                child: Row(crossAxisAlignment: CrossAxisAlignment.center,
+                    mainAxisSize: MainAxisSize.min, children: [
               Text(product.price.amount.toStringAsFixed(3),
                   style: const TextStyle(fontSize: 13.5,
                       fontWeight: FontWeight.w900,
@@ -1117,9 +1126,9 @@ class _RichLayout extends StatelessWidget {
               if (hasDiscount) ...[
                 if (display.compare) ...[
                   const SizedBox(width: 5),
-                  Flexible(child: MidStrikePrice(
+                  MidStrikePrice(
                       text: product.comparePrice!.amount.toStringAsFixed(3),
-                      fontSize: 9, color: Colors.black87)),
+                      fontSize: 9, color: Colors.black87),
                 ],
                 if (display.discount) ...[
                   const SizedBox(width: 4),
@@ -1133,7 +1142,7 @@ class _RichLayout extends StatelessWidget {
                   ),
                 ],
               ],
-            ]),
+            ])),
             const SizedBox(height: 2),
             // ── FULL 5 stars + (count) + price-intelligence indicator ──
             if (display.rating) SizedBox(height: 14, child: Row(children: [
