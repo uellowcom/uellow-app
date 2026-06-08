@@ -394,32 +394,27 @@ class _MapBoxState extends State<_MapBox> {
 <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet"/>
 <style>
 .uic{display:flex;flex-direction:column;align-items:center}
-/* real flaticon image markers on a clean white disc + soft shadow */
-.ricon{width:46px;height:46px;border-radius:50%;background:#fff;display:flex;
-  align-items:center;justify-content:center;border:2px solid #fff;
-  box-shadow:0 4px 9px rgba(0,0,0,.30);}
-.ricon img{width:32px;height:32px;object-fit:contain;display:block}
+/* v2.2.34 — bare flaticon markers (no surrounding disc/circle), just a soft
+   drop-shadow on the icon itself for legibility on the map. */
+.ricon{width:46px;height:46px;display:flex;
+  align-items:center;justify-content:center;}
+.ricon img{width:44px;height:44px;object-fit:contain;display:block;
+  filter:drop-shadow(0 2px 3px rgba(0,0,0,.35))}
 .ricon.done{filter:grayscale(1);opacity:.55}
 .shadow{width:16px;height:5px;border-radius:50%;background:rgba(0,0,0,.22);
   filter:blur(2px);margin-top:1px;}
 .uic .lbl{margin-top:5px;background:#fff;border-radius:10px;padding:2px 8px;font-size:10px;
   font-weight:800;color:#233330;white-space:nowrap;box-shadow:0 2px 5px rgba(0,0,0,.22);
   font-family:-apple-system,Segoe UI,Tahoma,Arial,sans-serif}
-/* live courier — 3D glossy disc + sonar pulse */
+/* v2.2.34 — live courier: bare delivery-van icon (no disc/circle/pulse),
+   just a gentle bob + drop-shadow so it reads as "moving". */
 .carwrap{position:relative;width:50px;height:50px;display:flex;align-items:center;justify-content:center}
-.carwrap .pulse{position:absolute;width:50px;height:50px;border-radius:50%;
-  background:rgba(232,168,23,.4);animation:pz 1.4s ease-out infinite}
-.carwrap .pulse2{position:absolute;width:50px;height:50px;border-radius:50%;
-  background:rgba(232,168,23,.3);animation:pz 1.4s ease-out .7s infinite}
-@keyframes pz{0%{transform:scale(.4);opacity:.85}100%{transform:scale(1.5);opacity:0}}
-.carwrap .disc{position:relative;z-index:2;width:42px;height:42px;border-radius:50%;
-  display:flex;align-items:center;justify-content:center;background:#F5C320;
-  border:2px solid #fff;
-  box-shadow:0 5px 9px rgba(0,0,0,.35);animation:bob 1.1s ease-in-out infinite}
-.carwrap .disc img{width:28px;height:28px;object-fit:contain;display:block}
-/* delivery-van glyph (Material Icons) — gentle bob so it feels alive */
-.carwrap .disc .mi{font-family:'Material Icons Round';font-size:25px;color:#412402;
-  line-height:1;font-weight:normal;font-style:normal}
+.carwrap .disc{position:relative;z-index:2;width:46px;height:46px;
+  display:flex;align-items:center;justify-content:center;
+  animation:bob 1.1s ease-in-out infinite}
+.carwrap .disc .mi{font-family:'Material Icons Round';font-size:40px;color:#412402;
+  line-height:1;font-weight:normal;font-style:normal;
+  filter:drop-shadow(0 2px 3px rgba(0,0,0,.4))}
 @keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-3px)}}
 </style>
 <script>
@@ -447,8 +442,8 @@ else if(pts.length==1){map.setView(pts[0],15);}
   // the live courier — driver image disc + double sonar pulse.
   String _carPin(dynamic lat, dynamic lng, String label) {
     return "L.marker([$lat,$lng],{zIndexOffset:1000,icon:L.divIcon({className:'',iconSize:[90,68],iconAnchor:[45,34],"
-        "html:'<div class=\"uic\"><div class=\"carwrap\"><div class=\"pulse\"></div>"
-        "<div class=\"pulse2\"></div><div class=\"disc\"><span class=\"mi\">local_shipping</span></div></div>"
+        "html:'<div class=\"uic\"><div class=\"carwrap\">"
+        "<div class=\"disc\"><span class=\"mi\">local_shipping</span></div></div>"
         "<span class=\"lbl\">${_esc(label)}</span></div>'})}).addTo(map);";
   }
 

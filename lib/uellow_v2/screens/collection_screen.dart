@@ -815,23 +815,16 @@ class _FilterSheetState extends State<_FilterSheet> {
   // v2.0.80 — in-dialog sort chips so the user can re-order without
   // leaving the sheet (was only outside in the SortBar).
   Widget _sortCard(bool ar) {
-    final sorts = ar
-      ? const [
-          ['popular',    '🏆 الأكثر مبيعاً'],
-          ['newest',     '✨ الأحدث'],
-          ['top_rated',  '⭐ الأعلى تقييماً'],
-          ['price_asc',  '⬆️ السعر تصاعدي'],
-          ['price_desc', '⬇️ السعر تنازلي'],
-        ]
-      : const [
-          ['popular',    '🏆 Bestsellers'],
-          ['newest',     '✨ Newest'],
-          ['top_rated',  '⭐ Top rated'],
-          ['price_asc',  '⬆️ Price low–high'],
-          ['price_desc', '⬇️ Price high–low'],
-        ];
+    // v2.2.34 — professional sort list: icon + label rows with a radio mark.
+    final sorts = <List<dynamic>>[
+      ['popular',    Icons.local_fire_department_rounded, ar ? 'الأكثر مبيعاً' : 'Bestsellers'],
+      ['newest',     Icons.auto_awesome_rounded,          ar ? 'الأحدث' : 'Newest'],
+      ['top_rated',  Icons.star_rounded,                  ar ? 'الأعلى تقييماً' : 'Top rated'],
+      ['price_asc',  Icons.arrow_upward_rounded,          ar ? 'السعر: من الأقل' : 'Price: low to high'],
+      ['price_desc', Icons.arrow_downward_rounded,        ar ? 'السعر: من الأعلى' : 'Price: high to low'],
+    ];
     return Container(
-      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 6),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(14),
@@ -839,37 +832,56 @@ class _FilterSheetState extends State<_FilterSheet> {
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
-          const Icon(Icons.sort, size: 16, color: UellowColors.darkBrown),
+          const Icon(Icons.swap_vert_rounded, size: 17, color: UellowColors.darkBrown),
           const SizedBox(width: 6),
           Text(ar ? 'الترتيب' : 'Sort by',
               style: const TextStyle(fontSize: 12.5,
                   fontWeight: FontWeight.w900, color: UellowColors.ink,
                   letterSpacing: 0.2)),
         ]),
-        const SizedBox(height: 10),
-        Wrap(spacing: 6, runSpacing: 6, children: [
-          for (final s in sorts)
-            GestureDetector(
-              onTap: () => setState(() => _sort = s[0]),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-                decoration: BoxDecoration(
-                  color: _sort == s[0] ? UellowColors.yellow : Colors.white,
-                  border: Border.all(
-                      color: _sort == s[0] ? UellowColors.yellow : UellowColors.border,
-                      width: _sort == s[0] ? 0 : 1),
-                  borderRadius: BorderRadius.circular(999),
-                ),
-                child: Text(s[1],
-                    style: TextStyle(
-                      fontSize: 11.5,
-                      fontWeight: FontWeight.w800,
-                      color: _sort == s[0] ? UellowColors.darkBrown : UellowColors.ink,
-                    )),
-              ),
-            ),
-        ]),
+        const SizedBox(height: 6),
+        for (var i = 0; i < sorts.length; i++) ...[
+          _sortRow(sorts[i][0] as String, sorts[i][1] as IconData,
+              sorts[i][2] as String),
+          if (i < sorts.length - 1)
+            Divider(height: 1, thickness: 1,
+                color: UellowColors.border.withValues(alpha: 0.5)),
+        ],
       ]),
+    );
+  }
+
+  Widget _sortRow(String code, IconData icon, String label) {
+    final on = _sort == code;
+    return InkWell(
+      onTap: () => setState(() => _sort = code),
+      borderRadius: BorderRadius.circular(10),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 2),
+        child: Row(children: [
+          Container(width: 30, height: 30, alignment: Alignment.center,
+            decoration: BoxDecoration(
+                color: on ? UellowColors.yellow : UellowColors.yellowFaint,
+                borderRadius: BorderRadius.circular(9)),
+            child: Icon(icon, size: 17, color: UellowColors.darkBrown)),
+          const SizedBox(width: 12),
+          Expanded(child: Text(label, style: TextStyle(
+              fontSize: 13,
+              fontWeight: on ? FontWeight.w900 : FontWeight.w600,
+              color: on ? UellowColors.darkBrown : UellowColors.ink))),
+          // radio mark
+          Container(width: 20, height: 20,
+            decoration: BoxDecoration(shape: BoxShape.circle,
+              border: Border.all(
+                  color: on ? UellowColors.darkBrown : UellowColors.border,
+                  width: 2)),
+            child: on
+                ? Center(child: Container(width: 10, height: 10,
+                    decoration: const BoxDecoration(shape: BoxShape.circle,
+                        color: UellowColors.darkBrown)))
+                : null),
+        ]),
+      ),
     );
   }
 
@@ -911,8 +923,8 @@ class _FilterSheetState extends State<_FilterSheet> {
             physics: const NeverScrollableScrollPhysics(),
             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: 3, crossAxisSpacing: 8, mainAxisSpacing: 8,
-              // v2.2.34 — taller tile to fit logo + name line under it.
-              childAspectRatio: 1.15,
+              // v2.2.34 — square-ish image-only brand tile (badge in corner).
+              childAspectRatio: 1.0,
             ),
             itemCount: values.length,
             itemBuilder: (_, i) => _brandTile(values[i]),
@@ -951,28 +963,26 @@ class _FilterSheetState extends State<_FilterSheet> {
               color: Color(0x0A000000),
               blurRadius: 4, offset: Offset(0, 1))],
         ),
+        // v2.2.34 — image-ONLY tile with the product count as a corner badge.
         child: Stack(children: [
-          if (on) Positioned(top: 0, right: 0, child: Container(
-            width: 18, height: 18, alignment: Alignment.center,
+          Positioned.fill(child: (logo != null && logo.isNotEmpty)
+              ? Image.network(logo, fit: BoxFit.contain,
+                  errorBuilder: (_, __, ___) => _brandTextFallback(name))
+              : _brandTextFallback(name)),
+          // product-count badge — top corner, on the side.
+          if (cnt > 0) PositionedDirectional(top: -2, end: -2, child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+            decoration: BoxDecoration(
+                color: on ? UellowColors.darkBrown : UellowColors.ink,
+                borderRadius: BorderRadius.circular(999)),
+            child: Text('$cnt', style: const TextStyle(fontSize: 9,
+                fontWeight: FontWeight.w900, color: Colors.white)))),
+          // selected check — bottom corner so it doesn't clash with the badge.
+          if (on) PositionedDirectional(bottom: -2, start: -2, child: Container(
+            width: 16, height: 16, alignment: Alignment.center,
             decoration: const BoxDecoration(
                 color: UellowColors.darkBrown, shape: BoxShape.circle),
-            child: const Icon(Icons.check, size: 11, color: UellowColors.yellowLight))),
-          Column(mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            Expanded(child: (logo != null && logo.isNotEmpty)
-                ? Image.network(logo, fit: BoxFit.contain,
-                    errorBuilder: (_, __, ___) => _brandTextFallback(name))
-                : _brandTextFallback(name)),
-            // v2.2.34 — brand name under the logo, small + NOT bold.
-            const SizedBox(height: 2),
-            Text(name, textAlign: TextAlign.center, maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 9.5,
-                    fontWeight: FontWeight.w400, color: UellowColors.text)),
-            if (cnt > 0) Text('$cnt', textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 9,
-                    fontWeight: FontWeight.w700, color: UellowColors.muted)),
-          ]),
+            child: const Icon(Icons.check, size: 10, color: UellowColors.yellowLight))),
         ]),
       ),
     );

@@ -338,6 +338,8 @@ class _ProductScreenState extends State<ProductScreen> {
           key: _kRelated, child: _RelatedInfinite(
           productId: p.id,
           categoryId: p.categories.isNotEmpty ? p.categories.first.id : null))),
+      // v2.2.34 — Beena (Yellow Brain) recommendations after the related set.
+      SliverToBoxAdapter(child: _BeenaPicks(excludeId: p.id)),
       const SliverToBoxAdapter(child: SizedBox(height: 80)),
     ]),
       // v2.1.59 — floating section tabs: hidden at the top, slide in on
@@ -1824,7 +1826,26 @@ class _CompactDeliveryState extends State<_CompactDelivery> {
   List<Map<String, dynamic>> _etaLines = const [];
 
   @override
-  void initState() { super.initState(); _loadAddress(); _loadEta(); }
+  void initState() {
+    super.initState();
+    _loadAddress();
+    _loadEta();
+    // v2.2.34 — reload when the user changes their default/active address
+    // anywhere in the app (root fix: location now follows the address).
+    UellowApi.instance.addressVersion.addListener(_onAddressChanged);
+  }
+
+  void _onAddressChanged() {
+    if (!mounted) return;
+    _loadAddress();
+    _loadEta();
+  }
+
+  @override
+  void dispose() {
+    UellowApi.instance.addressVersion.removeListener(_onAddressChanged);
+    super.dispose();
+  }
 
   Future<void> _loadEta() async {
     try {
@@ -3912,6 +3933,70 @@ class _RatingBar extends StatelessWidget {
           style: const TextStyle(fontSize: 10,
               color: UellowColors.muted, fontWeight: FontWeight.w800))),
     ]);
+  }
+}
+
+// ─── Beena (Yellow Brain) recommendations — horizontal rail ──────────
+class _BeenaPicks extends StatefulWidget {
+  const _BeenaPicks({required this.excludeId});
+  final int excludeId;
+  @override
+  State<_BeenaPicks> createState() => _BeenaPicksState();
+}
+
+class _BeenaPicksState extends State<_BeenaPicks> {
+  List<UellowProductCard> _items = const [];
+  bool _loading = true;
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+  Future<void> _load() async {
+    try {
+      final picks = await UellowApi.instance.products.topSelling();
+      if (!mounted) return;
+      setState(() {
+        _items = picks.where((p) => p.id != widget.excludeId).take(12).toList();
+        _loading = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+  @override
+  Widget build(BuildContext context) {
+    if (_loading || _items.isEmpty) return const SizedBox.shrink();
+    final ar = UellowApi.instance.lang == 'ar';
+    return Container(
+      color: Colors.white, margin: const EdgeInsets.only(top: 8),
+      padding: const EdgeInsets.fromLTRB(16, 16, 0, 14),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Container(width: 26, height: 26, alignment: Alignment.center,
+            decoration: BoxDecoration(color: UellowColors.yellowFaint,
+                borderRadius: BorderRadius.circular(8)),
+            child: const Text('🧠', style: TextStyle(fontSize: 15))),
+          const SizedBox(width: 8),
+          Expanded(child: Text(ar ? 'ترشيحات يلو برين' : 'Picked by Yellow Brain',
+              style: UT.h3)),
+          const SizedBox(width: 8),
+        ]),
+        const SizedBox(height: 2),
+        Padding(padding: const EdgeInsetsDirectional.only(end: 16),
+          child: Text(ar ? 'اختارها لك بينا بناءً على الأكثر رواجاً'
+              : 'Beena picked these from what shoppers love most',
+              style: UT.subtitle)),
+        const SizedBox(height: 12),
+        SizedBox(height: 268, child: ListView.separated(
+          scrollDirection: Axis.horizontal,
+          itemCount: _items.length,
+          separatorBuilder: (_, __) => const SizedBox(width: 8),
+          itemBuilder: (_, i) => SizedBox(width: 158,
+              child: ProductCard(rich: true, surface: 'beena', product: _items[i])),
+        )),
+      ]),
+    );
   }
 }
 

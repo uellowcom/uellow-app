@@ -24,7 +24,11 @@ class _AddressesScreenState extends State<AddressesScreen> {
     super.initState();
     _future = UellowApi.instance.addresses.list();
   }
-  void _reload() => setState(() => _future = UellowApi.instance.addresses.list());
+  void _reload() {
+    // v2.2.34 — notify address-derived widgets (e.g. product delivery block).
+    UellowApi.instance.bumpAddress();
+    setState(() => _future = UellowApi.instance.addresses.list());
+  }
 
   @override
   Widget build(BuildContext context) {

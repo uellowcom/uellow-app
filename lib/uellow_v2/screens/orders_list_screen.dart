@@ -236,18 +236,27 @@ class _OrderCard extends StatelessWidget {
                     ? c : UellowColors.border)),
           ],
         ]),
-        const SizedBox(height: 12),
-        SizedBox(width: double.infinity, child: ElevatedButton.icon(
-          onPressed: () => Navigator.pushNamed(context, '/order',
-              arguments: {'id': order.id}),
-          icon: const Icon(Icons.local_shipping_outlined, size: 16),
-          label: Text(ar ? 'تتبع الطلب' : 'Track order',
-              style: const TextStyle(fontWeight: FontWeight.w900)),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: UellowColors.yellow,
-            foregroundColor: UellowColors.darkBrown, elevation: 0,
-            padding: const EdgeInsets.symmetric(vertical: 11)),
-        )),
+        const SizedBox(height: 10),
+        // v2.2.34 — compact track button aligned to the end (was full-width).
+        Align(
+          alignment: AlignmentDirectional.centerEnd,
+          child: TextButton.icon(
+            onPressed: () => Navigator.pushNamed(context, '/order',
+                arguments: {'id': order.id}),
+            icon: const Icon(Icons.local_shipping_outlined, size: 15),
+            label: Text(ar ? 'تتبع الطلب' : 'Track order',
+                style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 12.5)),
+            style: TextButton.styleFrom(
+              backgroundColor: UellowColors.yellowFaint,
+              foregroundColor: UellowColors.darkBrown,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+              minimumSize: Size.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(999)),
+            ),
+          ),
+        ),
       ]),
     );
   }

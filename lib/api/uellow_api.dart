@@ -169,6 +169,12 @@ class UellowApi {
   /// notifier so changing the language flips Directionality / Locale
   /// app-wide without a manual restart.
   final ValueNotifier<String> langNotifier = ValueNotifier<String>('en');
+  // v2.2.34 — bumped whenever the user changes the default/active delivery
+  // address (set-default, add, edit, delete, country switch). Widgets that
+  // display address-derived info (e.g. the product delivery block) listen to
+  // this and reload, so the location updates app-wide without a restart.
+  final ValueNotifier<int> addressVersion = ValueNotifier<int>(0);
+  void bumpAddress() => addressVersion.value++;
   void setLang(String code) {
     final next = code.toLowerCase().startsWith('ar') ? 'ar' : 'en';
     if (langNotifier.value != next) langNotifier.value = next;

@@ -90,10 +90,40 @@ class _VendorScreenState extends State<VendorScreen> {
   }
 
   Future<void> _toggleFollow() async {
+    final ar = UellowApi.instance.lang == 'ar';
+    final want = !_following;
+    // optimistic UI
+    setState(() => _following = want);
+    // v2.2.34 — persist on the SERVER (was local-only, so it never really
+    // followed). Keep the local cache as a fast offline hint.
+    bool ok = false;
+    try {
+      final r = await UellowApi.instance.postRaw(
+          '/api/mobile/v2/vendors/${widget.vendorId}/follow',
+          body: {'follow': want}, auth: true);
+      ok = r['success'] == true;
+      if (ok && r['data'] is Map && (r['data'] as Map)['following'] is bool) {
+        final srv = (r['data'] as Map)['following'] as bool;
+        if (srv != _following && mounted) setState(() => _following = srv);
+      }
+    } catch (_) {
+      ok = false;
+    }
+    if (!ok) {
+      // revert on failure (likely a guest / not signed in)
+      if (mounted) setState(() => _following = !want);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            duration: const Duration(seconds: 2),
+            content: Text(ar
+                ? 'سجّل الدخول لمتابعة المتجر'
+                : 'Sign in to follow this store')));
+      }
+      return;
+    }
     final prefs = await SharedPreferences.getInstance();
     final followed = prefs.getStringList('followed_vendors') ?? <String>[];
     final id = '${widget.vendorId}';
-    setState(() => _following = !_following);
     if (_following) {
       if (!followed.contains(id)) followed.add(id);
     } else {
@@ -101,7 +131,6 @@ class _VendorScreenState extends State<VendorScreen> {
     }
     await prefs.setStringList('followed_vendors', followed);
     if (!mounted) return;
-    final ar = UellowApi.instance.lang == 'ar';
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         duration: const Duration(seconds: 1),
         content: Text(_following

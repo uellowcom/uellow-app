@@ -605,6 +605,9 @@ class _ReelSlideState extends State<_ReelSlide> with RouteAware {
           ),
         ),
       ),
+      // v2.2.34 — transient red "muted" hint under the sound button.
+      if (_ctrl != null && _ctrl!.value.isInitialized)
+        const Positioned(top: 88, right: 8, child: _MuteHint()),
       // Bottom-left product details + engagement stats
       Positioned(left: 16, right: 92, bottom: 28, child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -985,6 +988,73 @@ class _CommentsSheetState extends State<_CommentsSheet> {
             ]),
           )),
         ]),
+      ),
+    );
+  }
+}
+
+// v2.2.34 — transient red "muted" hint shown near the sound button. Appears
+// for a few seconds whenever the reel is muted (so the user knows to tap to
+// unmute), then fades out.
+class _MuteHint extends StatefulWidget {
+  const _MuteHint();
+  @override
+  State<_MuteHint> createState() => _MuteHintState();
+}
+
+class _MuteHintState extends State<_MuteHint> {
+  bool _show = false;
+  Timer? _t;
+  @override
+  void initState() {
+    super.initState();
+    reelsMuted.addListener(_onMute);
+    if (reelsMuted.value) _flash();
+  }
+  void _onMute() {
+    if (reelsMuted.value) {
+      _flash();
+    } else {
+      _t?.cancel();
+      if (mounted) setState(() => _show = false);
+    }
+  }
+  void _flash() {
+    if (!mounted) return;
+    setState(() => _show = true);
+    _t?.cancel();
+    _t = Timer(const Duration(seconds: 3),
+        () { if (mounted) setState(() => _show = false); });
+  }
+  @override
+  void dispose() {
+    reelsMuted.removeListener(_onMute);
+    _t?.cancel();
+    super.dispose();
+  }
+  @override
+  Widget build(BuildContext context) {
+    final ar = UellowApi.instance.lang.toLowerCase().startsWith('ar');
+    return AnimatedOpacity(
+      opacity: _show ? 1 : 0,
+      duration: const Duration(milliseconds: 300),
+      child: IgnorePointer(
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            color: const Color(0xFFE11D2E),
+            borderRadius: BorderRadius.circular(999),
+            boxShadow: const [BoxShadow(color: Color(0x33000000),
+                blurRadius: 4, offset: Offset(0, 1))],
+          ),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            const Icon(Icons.volume_off_rounded, size: 12, color: Colors.white),
+            const SizedBox(width: 3),
+            Text(ar ? 'الصوت مكتوم' : 'Muted',
+                style: const TextStyle(color: Colors.white,
+                    fontSize: 10, fontWeight: FontWeight.w900)),
+          ]),
+        ),
       ),
     );
   }

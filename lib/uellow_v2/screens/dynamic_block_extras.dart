@@ -2477,7 +2477,9 @@ class _ExploreMoreBlockState extends State<ExploreMoreBlock> {
     {'en':'Trending #1 in Phones today',            'ar':'الأكثر رواجاً #1 في الهواتف اليوم'},
   ];
 
-  int  get _perPage     => (widget.p['per_page']   as num?)?.toInt() ?? 12;
+  // v2.2.34 — clamp so a block configured with a tiny per_page (e.g. 3)
+  // doesn't make "Load more" fetch only 3 items at a time.
+  int  get _perPage     => ((widget.p['per_page'] as num?)?.toInt() ?? 12).clamp(12, 40);
   int  get _autoLimit   => (widget.p['auto_pages'] as num?)?.toInt() ?? 3;
   int  get _sponsoredEvery => (widget.p['sponsored_every'] as num?)?.toInt() ?? 5;
   int  get _columns     {
@@ -2628,9 +2630,14 @@ class _ExploreMoreBlockState extends State<ExploreMoreBlock> {
   Widget build(BuildContext context) {
     final t = widget.t;
     final ar = widget.ar;
-    final title = (ar
+    // v2.2.34 — renamed from "Explore More". Custom block titles are kept;
+    // only the old default is replaced.
+    var title = (ar
         ? (widget.p['titleAr'] ?? widget.p['titleEn'])
-        : (widget.p['titleEn'] ?? widget.p['titleAr']))?.toString() ?? 'Explore More';
+        : (widget.p['titleEn'] ?? widget.p['titleAr']))?.toString() ?? '';
+    if (title.isEmpty || title == 'Explore More' || title == 'اكتشف المزيد') {
+      title = ar ? 'اخترنا لك' : 'Selected for you';
+    }
     final sub = (ar
         ? (widget.p['subAr'] ?? widget.p['subEn'])
         : (widget.p['subEn'] ?? widget.p['subAr']))?.toString() ?? '';
