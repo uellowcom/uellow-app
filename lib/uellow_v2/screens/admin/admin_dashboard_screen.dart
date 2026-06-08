@@ -59,7 +59,15 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 setState(() => _future = AdminApi.instance.dashboard()),
             child: CustomScrollView(slivers: [
               SliverToBoxAdapter(child: _Header(d: d, ar: ar)),
-              SliverToBoxAdapter(child: _QuickLinks(ar: ar)),
+              // ── Management (the "menu") ──────────────────────────────
+              SliverToBoxAdapter(child: _SectionTitle(
+                  icon: Icons.grid_view_rounded,
+                  title: ar ? 'الإدارة' : 'Management')),
+              SliverToBoxAdapter(child: _ManagementGrid(ar: ar)),
+              // ── Insights (the dashboard) ─────────────────────────────
+              SliverToBoxAdapter(child: _SectionTitle(
+                  icon: Icons.insights_rounded,
+                  title: ar ? 'التحليلات' : 'Insights')),
               SliverToBoxAdapter(child: _ChartCard(
                   daily: (d['daily'] as List?) ?? const [], ar: ar)),
               SliverToBoxAdapter(child: _PosCard(
@@ -235,59 +243,87 @@ class _CircleBtn extends StatelessWidget {
   );
 }
 
-// ─── quick links row ─────────────────────────────────────────────────────
-class _QuickLinks extends StatelessWidget {
-  const _QuickLinks({required this.ar});
+// ─── section title ───────────────────────────────────────────────────────
+class _SectionTitle extends StatelessWidget {
+  const _SectionTitle({required this.icon, required this.title});
+  final IconData icon;
+  final String title;
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.fromLTRB(18, 18, 18, 2),
+    child: Row(children: [
+      Icon(icon, size: 16, color: UellowColors.darkBrown),
+      const SizedBox(width: 7),
+      Text(title, style: const TextStyle(fontSize: 13.5,
+          fontWeight: FontWeight.w900, color: UellowColors.darkBrown)),
+    ]),
+  );
+}
+
+// ─── management grid (the admin "menu") ──────────────────────────────────
+class _ManagementGrid extends StatelessWidget {
+  const _ManagementGrid({required this.ar});
   final bool ar;
   @override
   Widget build(BuildContext context) {
-    final items = [
+    final items = <(IconData, String, String, Color, VoidCallback)>[
       (Icons.receipt_long_rounded, ar ? 'الطلبات' : 'Orders',
+          ar ? 'كل الطلبات والحالات' : 'All orders & statuses',
           const Color(0xFF2563EB),
           () => Navigator.push(context, MaterialPageRoute(
               builder: (_) => const AdminOrdersScreen()))),
       (Icons.point_of_sale_rounded, ar ? 'سجل البوس' : 'POS Log',
+          ar ? 'الجلسات والمبيعات' : 'Sessions & sales',
           const Color(0xFF7C3AED),
           () => Navigator.push(context, MaterialPageRoute(
               builder: (_) => const AdminPosScreen()))),
       (Icons.inventory_2_rounded, ar ? 'المنتجات' : 'Products',
+          ar ? 'الأسعار والمخزون' : 'Prices & stock',
           const Color(0xFF059669),
           () => Navigator.push(context, MaterialPageRoute(
               builder: (_) => const AdminProductsScreen()))),
     ];
     return Padding(
-      padding: const EdgeInsets.fromLTRB(14, 14, 14, 0),
-      child: Row(children: [
-        for (var i = 0; i < items.length; i++) ...[
-          if (i > 0) const SizedBox(width: 10),
-          Expanded(child: InkWell(
-            onTap: items[i].$4,
-            borderRadius: BorderRadius.circular(16),
-            child: Container(
-              padding: const EdgeInsets.symmetric(vertical: 14),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: const [BoxShadow(color: Color(0x14000000),
-                    blurRadius: 10, offset: Offset(0, 4))],
-              ),
-              child: Column(children: [
-                Container(width: 42, height: 42,
-                  decoration: BoxDecoration(
-                    color: items[i].$3.withValues(alpha: .1),
-                    borderRadius: BorderRadius.circular(13)),
-                  child: Icon(items[i].$1, color: items[i].$3, size: 22)),
-                const SizedBox(height: 7),
-                Text(items[i].$2, style: const TextStyle(fontSize: 11.5,
-                    fontWeight: FontWeight.w800,
-                    color: UellowColors.darkBrown)),
-              ]),
-            ),
-          )),
-        ],
-      ]),
+      padding: const EdgeInsets.fromLTRB(14, 8, 14, 0),
+      child: GridView.count(
+        crossAxisCount: 2, shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        crossAxisSpacing: 10, mainAxisSpacing: 10, childAspectRatio: 1.55,
+        children: [for (final it in items) _tile(it)],
+      ),
     );
   }
+
+  Widget _tile((IconData, String, String, Color, VoidCallback) it) =>
+      InkWell(
+        onTap: it.$5,
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: const [BoxShadow(color: Color(0x14000000),
+                blurRadius: 10, offset: Offset(0, 4))],
+          ),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+            Container(width: 40, height: 40,
+              decoration: BoxDecoration(
+                color: it.$4.withValues(alpha: .12),
+                borderRadius: BorderRadius.circular(12)),
+              child: Icon(it.$1, color: it.$4, size: 21)),
+            Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(it.$2, style: const TextStyle(fontSize: 13.5,
+                  fontWeight: FontWeight.w900,
+                  color: UellowColors.darkBrown)),
+              const SizedBox(height: 1),
+              Text(it.$3, style: const TextStyle(fontSize: 10.5,
+                  color: UellowColors.muted, fontWeight: FontWeight.w600)),
+            ]),
+          ]),
+        ),
+      );
 }
 
 // ─── 14-day revenue bar chart (pure CustomPaint — no dependency) ────────
