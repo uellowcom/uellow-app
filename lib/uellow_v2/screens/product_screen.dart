@@ -1864,9 +1864,13 @@ class _CompactDeliveryState extends State<_CompactDelivery> {
     try {
       final addrs = await UellowApi.instance.addresses.list();
       if (addrs.isNotEmpty) {
+        // v2.2.30 — show the CURRENT default address first so changing the
+        // default updates the "Deliver to" line (it used to stick to the
+        // last-selected id, which kept showing the OLD location). Only fall
+        // back to the last-selected id when there is no default.
         final savedId = await UellowApi.instance.tokenStore.readAddressId();
-        final pick = addrs.firstWhere((a) => a.id == savedId,
-            orElse: () => addrs.firstWhere((a) => a.isDefault,
+        final pick = addrs.firstWhere((a) => a.isDefault,
+            orElse: () => addrs.firstWhere((a) => a.id == savedId,
                 orElse: () => addrs.first));
         final parts = [pick.country, pick.city]
             .where((s) => s.isNotEmpty).toList();

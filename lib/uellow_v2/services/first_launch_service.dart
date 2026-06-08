@@ -152,7 +152,7 @@ class FirstLaunchService {
   /// prompts) — and updates the cache. Falls back to the stale cache if
   /// GPS fails.
   static Future<({double lat, double lng, String address})?> freshFix(
-      {Duration maxAge = const Duration(minutes: 30)}) async {
+      {Duration maxAge = const Duration(minutes: 10)}) async {
     final prefs = await SharedPreferences.getInstance();
     final ts = prefs.getInt(_kTsKey) ?? 0;
     final cached = await lastFix();
