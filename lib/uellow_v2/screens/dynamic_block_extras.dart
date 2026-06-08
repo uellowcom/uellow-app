@@ -356,7 +356,14 @@ class DynSectionHeader extends StatelessWidget {
                     ? (props['titleAr'] ?? props['titleEn'])
                     : (props['titleEn'] ?? props['titleAr']))
                 ?.toString() ?? '';
-            if (cid > 0) {
+            // v2.2.29 — sources that own a dedicated screen route there so
+            // "More" actually shows the right products (e.g. free shipping
+            // used to fall through to a generic discount collection).
+            if (src == 'free_shipping') {
+              Navigator.pushNamed(context, '/free-shipping');
+            } else if (src == 'bundles') {
+              Navigator.pushNamed(context, '/bundles');
+            } else if (cid > 0) {
               Navigator.pushNamed(context, '/collection',
                   arguments: {'category_id': cid, 'title': title});
             } else if (src == 'bestsellers') {
