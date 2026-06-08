@@ -22,8 +22,13 @@ Future<void> main() async {
     final saved = prefs.getString('uellow_lang_v1');
     if (saved != null && saved.isNotEmpty) UellowApi.instance.setLang(saved);
   } catch (_) {}
-  // v2.2.10 — restore the 🛡️ admin flag so admin chips show instantly.
+  // v2.2.27 — admin flag is memory-only: start as non-admin, scrub any
+  // legacy persisted flag, and force back to non-admin on EVERY auth change
+  // (login / logout / 401) so the admin console can never bleed across an
+  // account switch on a shared device. Real admins are re-confirmed live by
+  // /account/overview + /admin/check.
   unawaited(AdminMode.restore());
+  UellowApi.instance.onAuthChanged.listen((_) => AdminMode.reset());
   // Local notifications channels + ongoing-banner support.
   unawaited(PushService.instance.init());
   // v2.1.64 — FCM: token registration + foreground display.

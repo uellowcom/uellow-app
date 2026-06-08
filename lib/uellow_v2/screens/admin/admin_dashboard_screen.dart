@@ -28,6 +28,13 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   void initState() {
     super.initState();
     _future = AdminApi.instance.dashboard();
+    // v2.2.27 — defense-in-depth: re-confirm admin with the server on open
+    // and bounce anyone who isn't (handles stale flags / deep links). The
+    // data endpoints are already server-gated, this just closes the UI.
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final okAdmin = await AdminMode.verify();
+      if (!okAdmin && mounted) Navigator.of(context).maybePop();
+    });
   }
 
   @override

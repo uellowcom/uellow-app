@@ -1,9 +1,15 @@
 // =============================================================================
-// AdminMode (v2.2.10) — global "is this user an admin?" switch.
+// AdminMode (v2.2.27) — global "is this user an admin?" switch.
 //
-// Set from /account/overview's `is_admin` flag (and persisted so the
-// shield icon / product-card admin chips appear instantly on next
-// launch). Every admin-only widget listens to [AdminMode.isAdmin].
+// SECURITY: this flag is **memory-only** and defaults to false on every
+// cold start. It is NOT persisted — a persisted `true` used to survive an
+// account switch on a shared device, exposing the admin console UI to a
+// normal user (the data endpoints were always server-gated, but the
+// console shell + entry chips must never appear). It is set true ONLY by a
+// live server response (/account/overview is_admin, re-checked by
+// /admin/check when the console opens) and is force-reset to false on every
+// auth change (login / logout / 401). Every admin-only widget listens to
+// [AdminMode.isAdmin].
 // =============================================================================
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -14,23 +20,41 @@ class AdminMode {
   AdminMode._();
 
   static final ValueNotifier<bool> isAdmin = ValueNotifier<bool>(false);
-  static const _key = 'uellow_is_admin_v1';
+  static const _legacyKey = 'uellow_is_admin_v1';
 
-  /// Restore the cached flag at startup (before overview loads).
+  /// Startup: always begin as a non-admin and scrub any legacy persisted
+  /// flag from older builds (which is the cross-account leak vector).
   static Future<void> restore() async {
+    isAdmin.value = false;
     try {
       final sp = await SharedPreferences.getInstance();
-      isAdmin.value = sp.getBool(_key) ?? false;
+      if (sp.containsKey(_legacyKey)) await sp.remove(_legacyKey);
     } catch (_) {}
   }
 
-  /// Called whenever /account/overview returns. Persists the flag.
+  /// Called whenever /account/overview returns. Memory-only — never cached.
   static Future<void> set(bool value) async {
     if (isAdmin.value != value) isAdmin.value = value;
+  }
+
+  /// Force back to non-admin (auth change / logout / token cleared).
+  static void reset() {
+    if (isAdmin.value) isAdmin.value = false;
+  }
+
+  /// Defense-in-depth: ask the server directly. Returns true only when the
+  /// authenticated caller really is an admin. Any error → false.
+  static Future<bool> verify() async {
     try {
-      final sp = await SharedPreferences.getInstance();
-      await sp.setBool(_key, value);
-    } catch (_) {}
+      final r = await UellowApi.instance
+          .getRaw('/api/mobile/v2/admin/check', auth: true);
+      final v = ((r['data'] as Map?)?['is_admin']) == true;
+      await set(v);
+      return v;
+    } catch (_) {
+      reset();
+      return false;
+    }
   }
 }
 
