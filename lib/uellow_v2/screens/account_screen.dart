@@ -11,6 +11,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../version.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../api/uellow_api.dart';
@@ -132,7 +133,11 @@ class _AccountScreenState extends State<AccountScreen> {
     final ar = UellowApi.instance.lang == 'ar';
     return RefreshIndicator(
       onRefresh: () async => setState(() => _future = _fetch()),
-      child: ListView(padding: EdgeInsets.zero, children: [
+      // v2.2.34 — bottom padding so the Sign-out button + version footer are
+      // not hidden behind the bottom nav bar (extendBody:true draws through it).
+      child: ListView(padding: EdgeInsets.only(
+          bottom: 24 + kBottomNavigationBarHeight +
+              MediaQuery.of(context).padding.bottom), children: [
         _ProfileHeader(user: user, isGuest: isGuest),
         // v2.1.57 — targeted announcement strip (admin-controlled).
         if (isGuest) _GuestSigninBanner(),
@@ -1338,10 +1343,38 @@ class _SignOutBtn extends StatelessWidget {
   }
 }
 
-class _Version extends StatelessWidget {
+// v2.2.34 — app version + selected country at the very bottom of حسابي.
+class _Version extends StatefulWidget {
   const _Version();
   @override
-  Widget build(BuildContext context) => const SizedBox(height: 30);
+  State<_Version> createState() => _VersionState();
+}
+
+class _VersionState extends State<_Version> {
+  String _country = '';
+  @override
+  void initState() {
+    super.initState();
+    SharedPreferences.getInstance().then((p) {
+      if (mounted) {
+        setState(() => _country =
+            (p.getString('uellow_country_code_v1') ?? '').toUpperCase());
+      }
+    });
+  }
+  @override
+  Widget build(BuildContext context) {
+    final ar = UellowApi.instance.lang == 'ar';
+    final country = _country.isEmpty ? '' : ' • ${ar ? "الدولة" : "Country"}: $_country';
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(14, 4, 14, 26),
+      child: Center(child: Text(
+        'Uellow • ${ar ? "الإصدار" : "v"} $kAppVersion$country',
+        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600,
+            color: UellowColors.muted),
+      )),
+    );
+  }
 }
 
 // ─── Recently viewed rail ──────────────────────────────────────────

@@ -1287,6 +1287,19 @@ class _PaymentMethodGrid extends StatelessWidget {
                 backgroundColor: const Color(0xFFF79E1B).withValues(alpha: 0.9))),
           ])),
         ]);
+      case 'taly':
+        // v2.2.34 — guaranteed-visible installments mark (the network logo
+        // sometimes failed to load). "4×" conveys the 4-payment plan.
+        return Row(mainAxisSize: MainAxisSize.min, children: const [
+          Icon(Icons.calendar_month_rounded, size: 18,
+              color: UellowColors.darkBrown),
+          SizedBox(width: 4),
+          Text('4×', style: TextStyle(fontWeight: FontWeight.w900,
+              color: UellowColors.darkBrown, fontSize: 14)),
+          SizedBox(width: 3),
+          Text('Taly', style: TextStyle(fontWeight: FontWeight.w800,
+              color: UellowColors.muted, fontSize: 12)),
+        ]);
       case 'apple_pay':
         return Row(mainAxisSize: MainAxisSize.min, children: const [
           Icon(Icons.apple, size: 20, color: Colors.black),

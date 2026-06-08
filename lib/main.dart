@@ -6,6 +6,7 @@ import 'package:uellow/api/uellow_api.dart';
 import 'package:uellow/uellow_v2/router/uellow_router.dart';
 import 'package:uellow/uellow_v2/theme/uellow_theme.dart';
 import 'package:uellow/uellow_v2/services/admin_mode.dart';
+import 'package:uellow/version.dart';
 import 'package:uellow/uellow_v2/services/deep_link_service.dart';
 import 'package:uellow/uellow_v2/services/fcm_service.dart';
 import 'package:uellow/uellow_v2/services/push_service.dart';
@@ -15,7 +16,7 @@ final GlobalKey<NavigatorState> rootNavigatorKey = GlobalKey<NavigatorState>();
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await UellowApi.init();
-  UellowApi.instance.setAppMeta(appVersion: '2.0.22', platform: 'android');
+  UellowApi.instance.setAppMeta(appVersion: kAppVersion, platform: 'android');
   // Hydrate language from prefs before first paint so Directionality is right.
   try {
     final prefs = await SharedPreferences.getInstance();

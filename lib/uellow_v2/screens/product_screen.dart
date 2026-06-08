@@ -1404,7 +1404,10 @@ class _Attributes extends StatelessWidget {
   // than 2 values and the user taps "More".
   final VoidCallback? onMore;
 
-  static const int _maxInline = 2;
+  static const int _maxInline = 4;
+  // v2.2.34 — show at most this many attribute TYPES (e.g. Color, Size);
+  // a 3rd attribute type is hidden (the full buy sheet still has everything).
+  static const int _maxTypes = 2;
 
   @override
   Widget build(BuildContext context) {
@@ -1412,7 +1415,7 @@ class _Attributes extends StatelessWidget {
       final n = line.attributeName.current(UellowApi.instance.lang).toLowerCase();
       return !(n.contains('brand') || n.contains('ماركة')
           || n.contains('علامة') || n.contains('trademark'));
-    }).toList();
+    }).take(_maxTypes).toList();
     if (relevant.isEmpty) return const SizedBox.shrink();
     // Variations live in their own dedicated card — no gap with the
     // delivery card directly below.

@@ -12,6 +12,7 @@ import '../screens/checkout_screen.dart';
 import '../screens/account_screen.dart';
 import '../screens/category_screen.dart';
 import '../screens/collection_screen.dart';
+import 'package:uellow/api/uellow_api.dart';
 import '../screens/settings_screen.dart';
 import '../screens/profile_screen.dart';
 import '../screens/addresses_screen.dart';
@@ -146,7 +147,11 @@ class UellowRouter {
       return BarcodeScanScreen(returnRaw: raw);
     },
     Routes.reels:         (ctx) => const ReelsScreen(),
-    Routes.freeShipping:  (ctx) => const FreeShippingScreen(),
+    // v2.2.34 — free-shipping now uses the full collection screen
+    // (categories + filters + infinite scroll + the standard product card).
+    Routes.freeShipping:  (ctx) => CollectionScreen(
+        filters: const {'free_shipping': 1, 'sort': 'newest'},
+        feedTitle: UellowApi.instance.lang == 'ar' ? 'شحن مجاني' : 'Free Shipping'),
     Routes.deliveryCoverage: (ctx) => const DeliveryCoverageScreen(),
     Routes.admin:         (ctx) => const AdminDashboardScreen(),
     Routes.newCustomer:   (ctx) => const NewCustomerScreen(),

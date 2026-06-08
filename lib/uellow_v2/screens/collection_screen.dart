@@ -911,7 +911,8 @@ class _FilterSheetState extends State<_FilterSheet> {
             physics: const NeverScrollableScrollPhysics(),
             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: 3, crossAxisSpacing: 8, mainAxisSpacing: 8,
-              childAspectRatio: 1.7,
+              // v2.2.34 — taller tile to fit logo + name line under it.
+              childAspectRatio: 1.15,
             ),
             itemCount: values.length,
             itemBuilder: (_, i) => _brandTile(values[i]),
@@ -962,10 +963,15 @@ class _FilterSheetState extends State<_FilterSheet> {
                 ? Image.network(logo, fit: BoxFit.contain,
                     errorBuilder: (_, __, ___) => _brandTextFallback(name))
                 : _brandTextFallback(name)),
-            const SizedBox(height: 4),
-            if (cnt > 0) Text('$cnt', textAlign: TextAlign.center,
+            // v2.2.34 — brand name under the logo, small + NOT bold.
+            const SizedBox(height: 2),
+            Text(name, textAlign: TextAlign.center, maxLines: 1,
+                overflow: TextOverflow.ellipsis,
                 style: const TextStyle(fontSize: 9.5,
-                    fontWeight: FontWeight.w800, color: UellowColors.muted)),
+                    fontWeight: FontWeight.w400, color: UellowColors.text)),
+            if (cnt > 0) Text('$cnt', textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 9,
+                    fontWeight: FontWeight.w700, color: UellowColors.muted)),
           ]),
         ]),
       ),
