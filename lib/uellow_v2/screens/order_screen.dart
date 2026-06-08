@@ -351,7 +351,7 @@ class _MapBoxState extends State<_MapBox> {
     // stage index (mirrors the journey strip) → grey out completed pins.
     final act = switch (stage) {
       'placed' || 'at_warehouse' => 0,
-      'at_carrier' => 1,
+      'at_carrier' || 'with_courier' => 1,
       'in_transit' || 'arriving' => 2,
       'delivered' => 3,
       _ => 0,
@@ -413,10 +413,14 @@ class _MapBoxState extends State<_MapBox> {
   background:rgba(232,168,23,.3);animation:pz 1.4s ease-out .7s infinite}
 @keyframes pz{0%{transform:scale(.4);opacity:.85}100%{transform:scale(1.5);opacity:0}}
 .carwrap .disc{position:relative;z-index:2;width:42px;height:42px;border-radius:50%;
-  display:flex;align-items:center;justify-content:center;background:#fff;
-  border:2px solid #F5C320;
-  box-shadow:0 5px 9px rgba(0,0,0,.35)}
+  display:flex;align-items:center;justify-content:center;background:#F5C320;
+  border:2px solid #fff;
+  box-shadow:0 5px 9px rgba(0,0,0,.35);animation:bob 1.1s ease-in-out infinite}
 .carwrap .disc img{width:28px;height:28px;object-fit:contain;display:block}
+/* delivery-van glyph (Material Icons) — gentle bob so it feels alive */
+.carwrap .disc .mi{font-family:'Material Icons Round';font-size:25px;color:#412402;
+  line-height:1;font-weight:normal;font-style:normal}
+@keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-3px)}}
 </style>
 <script>
 var map=L.map('m',{zoomControl:true,attributionControl:true,scrollWheelZoom:false});
@@ -444,7 +448,7 @@ else if(pts.length==1){map.setView(pts[0],15);}
   String _carPin(dynamic lat, dynamic lng, String label) {
     return "L.marker([$lat,$lng],{zIndexOffset:1000,icon:L.divIcon({className:'',iconSize:[90,68],iconAnchor:[45,34],"
         "html:'<div class=\"uic\"><div class=\"carwrap\"><div class=\"pulse\"></div>"
-        "<div class=\"pulse2\"></div><div class=\"disc\"><img src=\"${MapIcons.driver}\"/></div></div>"
+        "<div class=\"pulse2\"></div><div class=\"disc\"><span class=\"mi\">local_shipping</span></div></div>"
         "<span class=\"lbl\">${_esc(label)}</span></div>'})}).addTo(map);";
   }
 
@@ -541,7 +545,8 @@ class _JourneyStripState extends State<_JourneyStrip>
     switch ((widget.tracking['stage'] as String?) ?? 'placed') {
       case 'placed':
       case 'at_warehouse': return 0;
-      case 'at_carrier':   return 1;
+      case 'at_carrier':
+      case 'with_courier': return 1;
       case 'in_transit':
       case 'arriving':     return 2;
       case 'delivered':    return 3;
@@ -816,6 +821,7 @@ class _Summary extends StatelessWidget {
         if (order.tax.amount > 0)
           _r(ar ? 'الضريبة' : 'Tax', order.tax.format()),
         _r(ar ? 'التوصيل' : 'Delivery', order.shipping.format()),
+        _paymentMethodRow(order, ar),
         const Divider(height: 18),
         Row(children: [
           Expanded(child: Text(ar ? 'المدفوع' : 'Paid', style: const TextStyle(
@@ -826,6 +832,45 @@ class _Summary extends StatelessWidget {
       ]),
     );
   }
+  // v2.2.13 — payment method + "paid"/"online pay" badge.
+  Widget _paymentMethodRow(UellowOrderDetail order, bool ar) {
+    final pm = order.payment;
+    final labelMap = pm['label'] is Map ? Map<String, dynamic>.from(pm['label'] as Map) : null;
+    final label = labelMap == null ? ''
+        : ((ar ? labelMap['ar'] : labelMap['en']) as String? ?? '');
+    if (label.isEmpty) return const SizedBox.shrink();
+    final paid = pm['paid'] == true || order.isPaid;
+    final isOnline = pm['is_online'] == true;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(children: [
+        Expanded(child: Text(ar ? 'طريقة الدفع' : 'Payment method',
+            style: const TextStyle(fontSize: 12.5, color: UellowColors.text))),
+        Flexible(child: Text(label, textAlign: TextAlign.end, overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700,
+                color: UellowColors.text))),
+        if (paid) ...[
+          const SizedBox(width: 6),
+          _payBadge(ar ? 'مدفوع' : 'Paid', UellowColors.successDk,
+              const Color(0xFFE6F4EA)),
+        ] else if (isOnline) ...[
+          const SizedBox(width: 6),
+          _payBadge(ar ? 'دفع إلكتروني' : 'Online pay', UellowColors.darkBrown,
+              UellowColors.yellowFaint),
+        ],
+      ]),
+    );
+  }
+  Widget _payBadge(String t, Color fg, Color bg) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+    decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(20)),
+    child: Row(mainAxisSize: MainAxisSize.min, children: [
+      Icon(Icons.check_circle, size: 12, color: fg),
+      const SizedBox(width: 3),
+      Text(t, style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w900, color: fg)),
+    ]),
+  );
+
   Widget _r(String l, String v, {bool good = false}) => Padding(
     padding: const EdgeInsets.symmetric(vertical: 4),
     child: Row(children: [
