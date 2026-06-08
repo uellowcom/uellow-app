@@ -290,6 +290,12 @@ class _ProductScreenState extends State<ProductScreen> {
           _galleryPage = 0;   // jump gallery back to the new color image
         }),
         onSize: (s) => setState(() => _selectedSize = s),
+        // v2.2.29 — "More" opens the full variation picker (the buy sheet).
+        onMore: () => showModalBottomSheet(
+          context: context, isScrollControlled: true,
+          backgroundColor: Colors.transparent,
+          builder: (_) => _BuySheet(product: p, initialQty: 1, isBuyNow: false),
+        ),
       )),
       SliverToBoxAdapter(child: _CompactDelivery(
           freeShipping: p.badges.contains('free_shipping'),
@@ -1386,7 +1392,7 @@ class _Attributes extends StatelessWidget {
   const _Attributes({
     required this.productId,
     required this.attributes, required this.selectedColor, required this.selectedSize,
-    required this.onColor, required this.onSize,
+    required this.onColor, required this.onSize, this.onMore,
   });
   final int productId;
   final List<UellowAttributeLine> attributes;
@@ -1394,6 +1400,11 @@ class _Attributes extends StatelessWidget {
   final String selectedSize;
   final ValueChanged<int> onColor;
   final ValueChanged<String> onSize;
+  // v2.2.29 — opens the full buy sheet (all variations) when a line has more
+  // than 2 values and the user taps "More".
+  final VoidCallback? onMore;
+
+  static const int _maxInline = 2;
 
   @override
   Widget build(BuildContext context) {
@@ -1418,14 +1429,66 @@ class _Attributes extends StatelessWidget {
   }
 
   Widget _colorBlock(UellowAttributeLine line) {
+    final total = line.values.length;
+    final shown = total > _maxInline ? _maxInline : total;
+    final extra = total - shown;
     return _wrap(title: line.attributeName.current(UellowApi.instance.lang),
         child: SizedBox(height: 86, child: ListView.separated(
           scrollDirection: Axis.horizontal,
-          itemCount: line.values.length,
+          itemCount: shown + (extra > 0 ? 1 : 0),
           separatorBuilder: (_, __) => const SizedBox(width: 6),
-          itemBuilder: (_, i) => _imageSwatch(line.values[i], selectedColor == i,
-              () => onColor(i)),
+          itemBuilder: (_, i) => (i < shown)
+              ? _imageSwatch(line.values[i], selectedColor == i,
+                  () => onColor(i))
+              : _moreTile(extra),
         )));
+  }
+
+  // v2.2.29 — "+N more" tile/chip → opens the full buy sheet.
+  Widget _moreTile(int extra) {
+    final ar = UellowApi.instance.lang == 'ar';
+    return GestureDetector(
+      onTap: onMore,
+      child: Container(
+        width: 64, padding: const EdgeInsets.all(3),
+        child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+          Container(width: 54, height: 54,
+            decoration: BoxDecoration(
+              color: UellowColors.yellowSoft,
+              border: Border.all(color: UellowColors.yellow),
+              borderRadius: BorderRadius.circular(8)),
+            child: const Icon(Icons.grid_view_rounded, size: 20,
+                color: UellowColors.darkBrown)),
+          const SizedBox(height: 4),
+          Text(ar ? '+$extra المزيد' : '+$extra more',
+              maxLines: 1, overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w800,
+                  color: UellowColors.darkBrown)),
+        ]),
+      ),
+    );
+  }
+
+  Widget _moreChip(int extra) {
+    final ar = UellowApi.instance.lang == 'ar';
+    return GestureDetector(
+      onTap: onMore,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: UellowColors.yellowSoft,
+          border: Border.all(color: UellowColors.yellow),
+          borderRadius: BorderRadius.circular(8)),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          const Icon(Icons.grid_view_rounded, size: 14,
+              color: UellowColors.darkBrown),
+          const SizedBox(width: 5),
+          Text(ar ? '+$extra المزيد' : '+$extra more',
+              style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w800,
+                  color: UellowColors.darkBrown)),
+        ]),
+      ),
+    );
   }
 
   Widget _imageSwatch(UellowAttributeValue v, bool on, VoidCallback onTap) {
@@ -1468,18 +1531,27 @@ class _Attributes extends StatelessWidget {
   }
 
   Widget _sizeBlock(UellowAttributeLine line, {bool withSmartFit = false}) {
+    final total = line.values.length;
+    final shown = total > _maxInline ? _maxInline : total;
+    final extra = total - shown;
     return _wrap(title: line.attributeName.current(UellowApi.instance.lang),
         smartFit: withSmartFit, child: Wrap(spacing: 6, runSpacing: 6, children: [
-          for (var v in line.values)
+          for (var v in line.values.take(shown))
             _sizeChip(v.name.current(UellowApi.instance.lang),
                 v.name.current(UellowApi.instance.lang) == selectedSize),
+          if (extra > 0) _moreChip(extra),
         ]));
   }
 
   Widget _generic(UellowAttributeLine line) {
+    final total = line.values.length;
+    final shown = total > _maxInline ? _maxInline : total;
+    final extra = total - shown;
     return _wrap(title: line.attributeName.current(UellowApi.instance.lang),
-        child: Wrap(spacing: 6, children: [
-          for (var v in line.values) _sizeChip(v.name.current(UellowApi.instance.lang), false),
+        child: Wrap(spacing: 6, runSpacing: 6, children: [
+          for (var v in line.values.take(shown))
+            _sizeChip(v.name.current(UellowApi.instance.lang), false),
+          if (extra > 0) _moreChip(extra),
         ]));
   }
 

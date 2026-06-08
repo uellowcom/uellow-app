@@ -71,8 +71,11 @@ class UellowApiException implements Exception {
   bool get isNetwork => code == 'NETWORK_ERROR';
   bool get isServer => statusCode >= 500;
 
+  // v2.2.29 — return the user-friendly message (no raw "UellowApiException(
+  // network_error,0) connection reset by peer" leaking into the UI). The
+  // technical detail is still available via .code / .statusCode for logs.
   @override
-  String toString() => 'UellowApiException($code, $statusCode): $message';
+  String toString() => message;
 }
 
 // =============================================================================
@@ -290,12 +293,14 @@ class UellowApi {
               message: 'Unsupported HTTP method $method',
               statusCode: 0);
       }
-    } on SocketException catch (e) {
+    } on SocketException {
+      // v2.2.29 — clean, professional copy (no raw "connection reset by
+      // peer" / errno noise).
       throw UellowApiException(
         code: 'NETWORK_ERROR',
         message: lang == 'ar'
-            ? 'لا يوجد اتصال بالإنترنت: ${e.message}'
-            : 'No internet connection: ${e.message}',
+            ? 'تعذّر الاتصال بالإنترنت. تأكد من اتصالك وحاول مرة أخرى.'
+            : "Can't reach the internet. Check your connection and try again.",
         statusCode: 0,
       );
     } on TimeoutException {
@@ -308,10 +313,12 @@ class UellowApi {
             : '⏳ Taking longer than usual — please retry or pull to refresh',
         statusCode: 0,
       );
-    } on HttpException catch (e) {
+    } on HttpException {
       throw UellowApiException(
         code: 'NETWORK_ERROR',
-        message: e.message,
+        message: lang == 'ar'
+            ? 'تعذّر الاتصال بالإنترنت. تأكد من اتصالك وحاول مرة أخرى.'
+            : "Can't reach the internet. Check your connection and try again.",
         statusCode: 0,
       );
     }

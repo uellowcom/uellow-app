@@ -5627,10 +5627,13 @@ class _NewUserBlockState extends State<NewUserBlock> {
   }
 
   void _collect() {
+    // v2.2.29 — open the dedicated New-Customer landing (first-order zone)
+    // instead of dropping the user on the generic coupons list. Guests are
+    // sent to sign-in first, then land on the zone.
     UellowApi.instance.tokenStore.readToken().then((tok) {
       if (!mounted) return;
       Navigator.pushNamed(context,
-          (tok == null || tok.isEmpty) ? '/auth' : '/coupons');
+          (tok == null || tok.isEmpty) ? '/auth' : '/new-customer');
     });
   }
 
@@ -5666,8 +5669,7 @@ class _NewUserBlockState extends State<NewUserBlock> {
             begin: Alignment.topLeft, end: Alignment.bottomRight,
             colors: [c1, c2]),
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [BoxShadow(color: c1.withValues(alpha: 0.35),
-            blurRadius: 12, offset: const Offset(0, 5))],
+        // v2.2.29 — outer shadow removed per request.
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         // header

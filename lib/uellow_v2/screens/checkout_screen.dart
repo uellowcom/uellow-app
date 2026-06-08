@@ -1074,10 +1074,7 @@ class _ShippingMethodList extends StatelessWidget {
           ?? (descMap?['en'] as String?) ?? '';
       final zone = m['zone'] as Map?;
       final cutoff = zone?['cutoff_time'] as String? ?? '';
-      // v2.0.97 — informational per-zone delivery window (no pricing impact).
-      final winMap = zone?['delivery_window'] as Map?;
-      final window = (winMap?[lang] as String?)
-          ?? (winMap?['en'] as String?) ?? '';
+      // v2.2.29 — per-zone delivery window line removed from the UI.
       // v2.1.55 — schedule/cutoff awareness: out-of-hours methods (e.g.
       // express after 9 PM) render dimmed with a professional
       // "unavailable now" chip.
@@ -1149,22 +1146,7 @@ class _ShippingMethodList extends StatelessWidget {
                 child: Text(lang == 'ar' ? 'اطلب قبل $cutoff' : 'Order before $cutoff',
                     style: const TextStyle(fontSize: 11, color: UellowColors.muted)),
               ),
-              // v2.1.96 — full delivery window, small font, wraps to as
-              // many lines as needed (was ellipsized to one line).
-              if (window.isNotEmpty) Padding(
-                padding: const EdgeInsets.only(top: 2),
-                child: Row(crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                  const Padding(padding: EdgeInsets.only(top: 1.5),
-                      child: Icon(Icons.schedule, size: 10,
-                          color: UellowColors.muted)),
-                  const SizedBox(width: 3),
-                  Expanded(child: Text(window,   // v2.1.97 — no label prefix
-                      softWrap: true,
-                      style: const TextStyle(fontSize: 9.5, height: 1.35,
-                          color: UellowColors.muted))),
-                ]),
-              ),
+              // v2.2.29 — delivery-window line (clock icon) removed per request.
             ])),
             // v2.1.51 — free shipping (flags / threshold / coupon) shows
             // a clear green "FREE SHIPPING" instead of 0.000.
