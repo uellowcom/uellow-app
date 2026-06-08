@@ -503,6 +503,8 @@ class UellowProductFull extends UellowProductCard {
   final UellowText? flashTitle;
   // v2.2.20 — bundle payload when this product IS a bundle, else null.
   final Map<String, dynamic>? bundle;
+  // v2.2.26 — Brain BNPL installments offer (margin-guarded), else null.
+  final Map<String, dynamic>? installments;
 
   UellowProductFull({
     required int id, required UellowText name, required String slug,
@@ -528,7 +530,7 @@ class UellowProductFull extends UellowProductCard {
     this.ranks = const [],
     this.priceHistory,
     this.flashEndsAt, this.flashTitle,
-    this.bundle,
+    this.bundle, this.installments,
   }) : super(
             id: id, name: name, slug: slug, image: image, price: price,
             comparePrice: comparePrice, discountPct: discountPct,
@@ -600,6 +602,7 @@ class UellowProductFull extends UellowProductCard {
             ? UellowText.fromJson((j['flash_sale'] as Map)['title'])
             : null,
         bundle: (j['bundle'] as Map?)?.cast<String, dynamic>(),
+        installments: (j['installments'] as Map?)?.cast<String, dynamic>(),
       );
 }
 

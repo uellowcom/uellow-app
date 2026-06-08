@@ -268,6 +268,9 @@ class _ProductScreenState extends State<ProductScreen> {
       SliverToBoxAdapter(child: KeyedSubtree(
           key: _kOverview, child: _Title(p: p))),
       SliverToBoxAdapter(child: _PriceRow(p: p)),
+      // v2.2.26 — Brain: margin-aware installments nudge (Tabby/Tamara).
+      if (p.installments != null && p.installments!['available'] == true)
+        SliverToBoxAdapter(child: _InstallmentsCard(data: p.installments!)),
       // v2.2.20 — when this product is a BUNDLE, list everything inside it
       // with each component's own price + the total savings.
       if (p.bundle != null)
@@ -950,6 +953,46 @@ class MidStrikePrice extends StatelessWidget {
 }
 
 // ─── Brand block ───────────────────────────────────────────────────
+
+// v2.2.26 — Brain: installments (BNPL) nudge — only shown when the backend
+// deems the product eligible (price + margin). Pure UI.
+class _InstallmentsCard extends StatelessWidget {
+  const _InstallmentsCard({required this.data});
+  final Map<String, dynamic> data;
+  @override
+  Widget build(BuildContext context) {
+    final ar = UellowApi.instance.lang.toLowerCase().startsWith('ar');
+    final label = ((data['label'] as Map?)?[ar ? 'ar' : 'en'] ?? '').toString();
+    final provider = (data['provider'] ?? 'both').toString();
+    final pv = provider == 'tabby' ? 'Tabby'
+        : provider == 'tamara' ? 'Tamara' : 'Tabby · Tamara';
+    return Container(
+      color: Colors.white, margin: const EdgeInsets.only(top: 8),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 11),
+        decoration: BoxDecoration(
+          color: const Color(0xFFEEF2FF),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: const Color(0xFFC7D2FE)),
+        ),
+        child: Row(children: [
+          const Text('💳', style: TextStyle(fontSize: 20)),
+          const SizedBox(width: 10),
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+            Text(label.isNotEmpty ? label
+                    : (ar ? 'قسّمها بدون فوائد' : 'Split, interest-free'),
+                style: const TextStyle(fontSize: 12.5, height: 1.35,
+                    fontWeight: FontWeight.w800, color: Color(0xFF3730A3))),
+            Text(ar ? 'عبر $pv' : 'via $pv', style: const TextStyle(
+                fontSize: 10.5, color: Color(0xFF6366F1))),
+          ])),
+        ]),
+      ),
+    );
+  }
+}
 
 // v2.2.20 — "What's inside" for a bundle product: each component with its
 // own price + the savings vs buying separately.

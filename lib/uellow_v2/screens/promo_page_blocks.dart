@@ -16,7 +16,7 @@ import '../../api/uellow_models.dart';
 import '../router/uellow_router.dart';
 import 'dynamic_block_extras.dart'
     show blockMargin, blockRadius, blockOverlay, blockOverlayCustom,
-         pickLocalizedImage, openBlockLink;
+         pickLocalizedImage, openBlockLink, brainHeaderMore;
 import 'product_screen.dart' show MidStrikePrice;
 import '../theme/uellow_theme.dart';
 import '../widgets/flash_banner.dart' show BannerPattern;
@@ -1728,7 +1728,7 @@ class BundleShowcaseBlock extends StatelessWidget {
         borderRadius: blockRadius(p, 20),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
           Text(emoji, style: const TextStyle(fontSize: 26)),
           const SizedBox(width: 10),
           Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start,
@@ -1738,27 +1738,12 @@ class BundleShowcaseBlock extends StatelessWidget {
             if (sub.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 2),
                 child: Text(sub, style: TextStyle(color: sc, fontSize: 12))),
           ])),
+          // v2.2.26 — standardized header "View more" button (in header only).
+          if (p['show_more'] != false)
+            brainHeaderMore(ar, () => Navigator.pushNamed(context, '/bundles')),
         ]),
         const SizedBox(height: 14),
         content,
-        // v2.2.21 — yellow "View more" → full bundles screen.
-        if (p['show_more'] != false) Padding(
-          padding: const EdgeInsets.only(top: 12),
-          child: SizedBox(width: double.infinity, height: 40,
-            child: ElevatedButton(
-              onPressed: () => Navigator.pushNamed(context, '/bundles'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: UellowColors.yellow,
-                foregroundColor: UellowColors.darkBrown,
-                elevation: 0,
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12)),
-              ),
-              child: Text(ar ? 'عرض المزيد' : 'View more',
-                  style: const TextStyle(fontWeight: FontWeight.w900,
-                      fontSize: 13)),
-            )),
-        ),
       ]),
     );
   }

@@ -290,6 +290,28 @@ class _PatternPainter extends CustomPainter {
 }
 
 // ─── SECTION HEADER (reusable, respects show_title + title_gap) ─────────────
+/// v2.2.26 — the ONE standard header "View more" pill, reused across blocks
+/// (Mega Sale, bundles, reels, carousel…) for a consistent shape everywhere.
+Widget brainHeaderMore(bool ar, VoidCallback onTap,
+    {Color bg = UellowColors.yellow, Color fg = UellowColors.darkBrown,
+    String? label}) {
+  return GestureDetector(
+    onTap: onTap,
+    child: Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+      decoration: BoxDecoration(color: bg,
+          borderRadius: BorderRadius.circular(999)),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Text(label ?? (ar ? 'عرض المزيد' : 'View more'),
+            style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w900,
+                color: fg)),
+        const SizedBox(width: 3),
+        Icon(ar ? Icons.chevron_left : Icons.chevron_right, size: 15, color: fg),
+      ]),
+    ),
+  );
+}
+
 class DynSectionHeader extends StatelessWidget {
   const DynSectionHeader({
     super.key,
@@ -3076,7 +3098,9 @@ class _ChipsBar extends StatelessWidget {
               blurRadius: 4, offset: Offset(0, 1))] : null,
         ),
         child: Text(label, style: TextStyle(
-            color: sel ? Colors.white : dark.withValues(alpha: .75),
+            // v2.2.26 — selected chip text → black (white was unreadable on
+            // the yellow accent).
+            color: sel ? UellowColors.darkBrown : dark.withValues(alpha: .75),
             fontSize: 11.5, fontWeight: FontWeight.w800)),
       ));
 
@@ -3123,7 +3147,7 @@ class _ChipsBar extends StatelessWidget {
                   blurRadius: sel ? 8 : 5, offset: const Offset(0, 2))],
             ),
             child: Text(label, style: TextStyle(
-                color: sel ? Colors.white : dark, fontSize: 12,
+                color: sel ? UellowColors.darkBrown : dark, fontSize: 12,
                 fontWeight: FontWeight.w900)),
           )));
       default: // pill
@@ -3136,7 +3160,7 @@ class _ChipsBar extends StatelessWidget {
               borderRadius: BorderRadius.circular(20),
             ),
             child: Text(label, style: TextStyle(
-                color: sel ? Colors.white : dark, fontSize: 11.5,
+                color: sel ? UellowColors.darkBrown : dark, fontSize: 11.5,
                 fontWeight: FontWeight.w800)),
           )));
     }
@@ -5078,28 +5102,17 @@ class ReelsStripBlock extends StatelessWidget {
     }
 
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      // v2.2.26 — "More" button moved INTO the header (standard pill).
       DynSectionHeader(props: p, theme: t, ar: ar,
-          fallbackEn: '🔥 Trending videos'),
+          fallbackEn: '🔥 Trending videos',
+          trailing: p['show_more'] != false
+              ? brainHeaderMore(ar,
+                  () => Navigator.pushNamed(context, '/reels'),
+                  bg: _parseColor(p['btn_color']) ?? UellowColors.yellow,
+                  fg: _parseColor(p['btn_text_color']) ?? UellowColors.darkBrown,
+                  label: ar ? 'المزيد' : 'More')
+              : null),
       body,
-      // v2.2.24 — yellow "View more" button → full Reels screen (on by
-      // default; hide with show_more:false).
-      if (p['show_more'] != false) Padding(
-        padding: const EdgeInsets.fromLTRB(12, 10, 12, 2),
-        child: SizedBox(height: 40, child: ElevatedButton(
-          onPressed: () => Navigator.pushNamed(context, '/reels'),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: _parseColor(p['btn_color']) ?? UellowColors.yellow,
-            foregroundColor: _parseColor(p['btn_text_color'])
-                ?? UellowColors.darkBrown,
-            elevation: 0,
-            shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12)),
-          ),
-          child: Text(ar ? 'المزيد من الفيديوهات' : 'View more videos',
-              style: const TextStyle(fontWeight: FontWeight.w900,
-                  fontSize: 13)),
-        )),
-      ),
     ]);
   }
 }
@@ -5491,19 +5504,10 @@ class PromoSectionBlock extends StatelessWidget {
         childAspectRatio: 0.584),  // mega: +1px more (v2.1.98)
       itemCount: items.length,
       itemBuilder: (_, i) {
-        final d = items[i].discountPct;
-        return Stack(clipBehavior: Clip.none, children: [
-          ProductCard(rich: true, product: items[i], hideAvail: true, display: _display),
-          // v2.2.21 — the on-image -% ribbon now obeys the card "Discount %"
-          // toggle, so it can be hidden from the builder per block.
-          if (d > 0 && _display.discount) PositionedDirectional(top: 8, start: -2, child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: const BoxDecoration(color: Color(0xFFE63946),
-              borderRadius: BorderRadius.only(topRight: Radius.circular(2),
-                  bottomRight: Radius.circular(9), bottomLeft: Radius.circular(9))),
-            child: Text('-$d%', style: const TextStyle(color: Colors.white,
-                fontSize: 13, fontWeight: FontWeight.w900)))),
-        ]);
+        // v2.2.26 — on-image -% ribbon removed per request (the discount
+        // still shows on the card's price row inside ProductCard).
+        return ProductCard(rich: true, product: items[i], hideAvail: true,
+            display: _display);
       },
     );
   }
