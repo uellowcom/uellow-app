@@ -61,6 +61,11 @@ android {
             // Signing with the debug keys for now, so `flutter run --release` works.
             signingConfig = (System.getenv('UELLOW_SIGN') == 'upload')
                 ? signingConfigs.upload : signingConfigs.debug
+            // v2.2.38 — upload native debug symbols so Play can symbolicate
+            // crashes/ANRs (clears the "no debug symbols" warning).
+            ndk {
+                debugSymbolLevel 'FULL'
+            }
         }
     }
 }
