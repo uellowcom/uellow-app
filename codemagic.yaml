@@ -1,12 +1,12 @@
 # Codemagic CI — iOS build + auto-upload to App Store Connect
-# يبني على ماك سحابي، يوقّع تلقائياً بالـAPI Key، ويرفع لـTestFlight/App Store.
+# يبني على ماك سحابي، يوقّع تلقائياً بالـAPI Key، ويرفع لـTestFlight.
 #
 # قبل أول تشغيل، من Codemagic UI:
-#   1) Teams > Integrations > App Store Connect > اربط الـAPI Key (.p8 + Key ID + Issuer ID).
-#      سمّيه بنفس اسم الـintegration المستخدم تحت (uellow_appstore).
-#   2) متغيّرات البيئة مش محتاجة باسوورد — التوقيع كله بالـAPI Key.
+#   Teams > Integrations > App Store Connect > أضف الـAPI Key (.p8 + Key ID + Issuer ID)
+#   وسمّ التكامل بالضبط: uellow_appstore
 #
-# Bundle ID الحالي في المشروع: com.uellow.uellow  (لو مختلف على متجرك، عدّله تحت في bundle_identifier)
+# التوقيع كله بالـAPI Key — مفيش باسوورد ولا متغيّرات مطلوبة منك.
+# Bundle ID الحالي في المشروع: com.uellow.uellow  (لو مختلف على متجرك، عدّل bundle_identifier تحت)
 
 workflows:
   ios-appstore:
@@ -14,7 +14,7 @@ workflows:
     instance_type: mac_mini_m2
     max_build_duration: 90
     integrations:
-      app_store_connect: uellow_appstore   # اسم الـintegration اللي ربطته في Codemagic
+      app_store_connect: uellow_appstore   # نفس اسم التكامل المربوط في Codemagic
     environment:
       flutter: 3.29.3                       # نفس إصدار الأسطول (16KB + Dart 3.7.2)
       xcode: latest
@@ -22,9 +22,6 @@ workflows:
       ios_signing:
         distribution_type: app_store
         bundle_identifier: com.uellow.uellow
-      vars:
-        BUNDLE_ID: "com.uellow.uellow"
-        APP_STORE_APPLE_ID: ""              # (اختياري) Apple ID الرقمي للتطبيق من App Store Connect
     scripts:
       - name: Flutter packages get
         script: |
@@ -32,25 +29,22 @@ workflows:
       - name: Install CocoaPods
         script: |
           cd ios && pod install --repo-update
-      - name: Set build number (آخر بناء على المتجر + 1)
-        script: |
-          BN=$(app-store-connect get-latest-app-store-build-number "$APP_STORE_APPLE_ID" 2>/dev/null || echo "")
-          if [ -z "$BN" ]; then BN=$(($BUILD_NUMBER)); fi
-          echo "Using build number: $((BN + 1))"
-          flutter build ipa --release \
-            --build-number=$((BN + 1)) \
-            --export-options-plist=/Users/builder/export_options.plist || true
-      - name: Build signed IPA
+      - name: Set up code signing profiles
         script: |
           xcode-project use-profiles
+      - name: Build signed IPA
+        script: |
+          VERSION_NAME=$(grep '^version:' pubspec.yaml | sed 's/version: //; s/+.*//')
+          echo "Building $VERSION_NAME (build $BUILD_NUMBER)"
           flutter build ipa --release \
-            --build-name=$(grep '^version:' pubspec.yaml | sed 's/version: //; s/+.*//')
+            --build-name="$VERSION_NAME" \
+            --build-number="$BUILD_NUMBER" \
+            --export-options-plist=/Users/builder/export_options.plist
     artifacts:
       - build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log
-      - flutter_drive.log
     publishing:
       app_store_connect:
         auth: integration
         submit_to_testflight: true          # ينزل أوتوماتيك على TestFlight
-        submit_to_app_store: false          # خليه false لحد ما تجرّبه؛ خلّيه true عشان يروح للمراجعة مباشرة
+        submit_to_app_store: false          # خليه true عشان يروح للمراجعة مباشرة (قولّي وأفعلها)
