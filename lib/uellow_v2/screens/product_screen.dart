@@ -435,8 +435,11 @@ class _Gallery extends StatelessWidget {
             // PageView with only a couple of images alive, so memory is fine).
             // The decode-size optimisation stays on the product-card GRID,
             // where many images render at once.
+            // v4.1.14 — fill the gallery area (BoxFit.cover) so portrait/square
+            // product photos don't letterbox with white bars on iPhone.
             return CachedNetworkImage(imageUrl: it['url'] as String,
-                fit: BoxFit.contain);
+                width: double.infinity, height: double.infinity,
+                fit: BoxFit.cover);
           },
         )),
         // v2.1.43 — gallery promotion coin REMOVED per request (the
