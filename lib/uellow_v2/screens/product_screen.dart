@@ -431,7 +431,11 @@ class _Gallery extends StatelessWidget {
                 fallbackImage: images.isNotEmpty ? images.first : null,
               );
             }
-            return CachedNetworkImage(imageUrl: it['url'] as String, fit: BoxFit.contain);
+            // v2.2.37 perf — decode the gallery image at ~1080px instead of
+            // the full 1920 source: still crisp on phones, far less memory
+            // and decode cost while swiping. (Pinch-zoom viewer stays full-res.)
+            return CachedNetworkImage(imageUrl: it['url'] as String,
+                fit: BoxFit.contain, memCacheWidth: 1080);
           },
         )),
         // v2.1.43 — gallery promotion coin REMOVED per request (the

@@ -735,6 +735,10 @@ class _Image extends StatelessWidget {
             child: CachedNetworkImage(
               imageUrl: product.image,
               fit: BoxFit.cover,
+              // v2.2.37 perf — decode at card resolution, not the full source.
+              // A 2-col card is ~half screen; 450px covers high-DPI without
+              // holding full-size bitmaps in memory (huge scroll-jank win).
+              memCacheWidth: 450,
               placeholder: (_, __) => const ColoredBox(color: UellowColors.border),
               errorWidget: (_, __, ___) => const ColoredBox(color: UellowColors.border),
             ),
