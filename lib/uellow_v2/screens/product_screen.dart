@@ -334,12 +334,12 @@ class _ProductScreenState extends State<ProductScreen> {
           onOpen: () => _showSpecsDialog(context, p))),
       SliverToBoxAdapter(child: KeyedSubtree(
           key: _kReviews, child: _ReviewsBlock(productId: p.id))),
+      // v2.2.36 — related products now continue into Beena (Yellow Brain)
+      // picks inside the SAME block (no separate _BeenaPicks rail).
       SliverToBoxAdapter(child: KeyedSubtree(
           key: _kRelated, child: _RelatedInfinite(
           productId: p.id,
           categoryId: p.categories.isNotEmpty ? p.categories.first.id : null))),
-      // v2.2.34 — Beena (Yellow Brain) recommendations after the related set.
-      SliverToBoxAdapter(child: _BeenaPicks(excludeId: p.id)),
       const SliverToBoxAdapter(child: SizedBox(height: 80)),
     ]),
       // v2.1.59 — floating section tabs: hidden at the top, slide in on
@@ -964,42 +964,246 @@ class MidStrikePrice extends StatelessWidget {
 
 // v2.2.26 — Brain: installments (BNPL) nudge — only shown when the backend
 // deems the product eligible (price + margin). Pure UI.
+// v2.2.36 — one-line installments nudge → opens a professional sheet with a
+// payment timeline, instructions and the provider lockup (Taly / Deema soon).
 class _InstallmentsCard extends StatelessWidget {
   const _InstallmentsCard({required this.data});
   final Map<String, dynamic> data;
+
+  static const _teal = Color(0xFF0E8A6A);
+  static const _tealDk = Color(0xFF0B6B53);
+
   @override
   Widget build(BuildContext context) {
     final ar = UellowApi.instance.lang.toLowerCase().startsWith('ar');
-    final label = ((data['label'] as Map?)?[ar ? 'ar' : 'en'] ?? '').toString();
-    final provider = (data['provider'] ?? 'both').toString();
-    final pv = provider == 'tabby' ? 'Tabby'
-        : provider == 'tamara' ? 'Tamara' : 'Tabby · Tamara';
+    final count = (data['count'] as num?)?.toInt() ?? 4;
+    final per = (data['per_installment'] as num?)?.toDouble() ?? 0;
+    final provider = (data['provider_label'] ?? 'Taly').toString();
+    final oneLine = ar
+        ? 'قسّمها على $count دفعات بدون فوائد عبر $provider'
+        : 'Split in $count interest-free payments with $provider';
     return Container(
       color: Colors.white, margin: const EdgeInsets.only(top: 8),
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 11),
-        decoration: BoxDecoration(
-          color: const Color(0xFFEEF2FF),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: const Color(0xFFC7D2FE)),
+      padding: const EdgeInsets.fromLTRB(16, 6, 16, 6),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () => showModalBottomSheet(
+          context: context, isScrollControlled: true,
+          backgroundColor: Colors.white,
+          shape: const RoundedRectangleBorder(
+              borderRadius: BorderRadius.vertical(top: Radius.circular(22))),
+          builder: (_) => _InstallmentsSheet(
+              ar: ar, count: count, per: per, provider: provider),
         ),
-        child: Row(children: [
-          const Text('💳', style: TextStyle(fontSize: 20)),
-          const SizedBox(width: 10),
-          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-            Text(label.isNotEmpty ? label
-                    : (ar ? 'قسّمها بدون فوائد' : 'Split, interest-free'),
-                style: const TextStyle(fontSize: 12.5, height: 1.35,
-                    fontWeight: FontWeight.w800, color: Color(0xFF3730A3))),
-            Text(ar ? 'عبر $pv' : 'via $pv', style: const TextStyle(
-                fontSize: 10.5, color: Color(0xFF6366F1))),
-          ])),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF1FBF7),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: const Color(0xFFB7E4D2)),
+          ),
+          child: Row(children: [
+            const Icon(Icons.credit_card_rounded, size: 18, color: _teal),
+            const SizedBox(width: 9),
+            Expanded(child: Text(oneLine, maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 12.5,
+                    fontWeight: FontWeight.w800, color: _tealDk))),
+            const Icon(Icons.chevron_right_rounded, size: 18, color: _teal),
+          ]),
+        ),
+      ),
+    );
+  }
+}
+
+class _InstallmentsSheet extends StatelessWidget {
+  const _InstallmentsSheet({required this.ar, required this.count,
+      required this.per, required this.provider});
+  final bool ar;
+  final int count;
+  final double per;
+  final String provider;
+
+  static const _teal = Color(0xFF0E8A6A);
+  static const _tealDk = Color(0xFF0B6B53);
+
+  String _money(double v) => ar ? '${v.toStringAsFixed(3)} د.ك'
+      : 'KD ${v.toStringAsFixed(3)}';
+
+  String _whenLabel(int i) {
+    if (i == 0) return ar ? 'اليوم' : 'Today';
+    if (ar) return 'بعد $i ${i == 1 ? 'شهر' : 'أشهر'}';
+    return 'In $i month${i == 1 ? '' : 's'}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final total = per * count;
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+        child: Column(mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Center(child: Container(width: 42, height: 4,
+            decoration: BoxDecoration(color: const Color(0xFFE2E2E2),
+                borderRadius: BorderRadius.circular(4)))),
+          const SizedBox(height: 16),
+          Row(children: [
+            Container(
+              padding: const EdgeInsets.all(9),
+              decoration: BoxDecoration(color: const Color(0xFFF1FBF7),
+                  borderRadius: BorderRadius.circular(12)),
+              child: const Icon(Icons.credit_card_rounded, color: _teal, size: 22),
+            ),
+            const SizedBox(width: 12),
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+              Text(ar ? 'قسّمها على $count دفعات' : 'Split in $count payments',
+                  style: const TextStyle(fontSize: 16.5,
+                      fontWeight: FontWeight.w900, color: UellowColors.ink)),
+              Text(ar ? 'بدون فوائد · بدون رسوم خفية'
+                      : 'Interest-free · no hidden fees',
+                  style: const TextStyle(fontSize: 12, color: Color(0xFF7A8A85))),
+            ])),
+          ]),
+          const SizedBox(height: 18),
+          // ── payment timeline ──
+          for (int i = 0; i < count; i++) _TimelineRow(
+            index: i, last: i == count - 1,
+            when: _whenLabel(i), amount: _money(per),
+            payLabel: ar ? 'الدفعة ${i + 1}' : 'Payment ${i + 1}',
+          ),
+          const SizedBox(height: 6),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            decoration: BoxDecoration(color: const Color(0xFFF6F6F6),
+                borderRadius: BorderRadius.circular(12)),
+            child: Row(children: [
+              Text(ar ? 'الإجمالي' : 'Total',
+                  style: const TextStyle(fontSize: 13.5,
+                      fontWeight: FontWeight.w700, color: Color(0xFF555555))),
+              const Spacer(),
+              Text(_money(total), style: const TextStyle(fontSize: 15,
+                  fontWeight: FontWeight.w900, color: UellowColors.ink)),
+            ]),
+          ),
+          const SizedBox(height: 16),
+          // ── instructions ──
+          Text(ar ? 'كيف تعمل؟' : 'How it works',
+              style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w900,
+                  color: UellowColors.ink)),
+          const SizedBox(height: 8),
+          _Step(text: ar ? 'اختر «$provider» كوسيلة الدفع عند إتمام الطلب.'
+              : 'Choose “$provider” as your payment method at checkout.'),
+          _Step(text: ar ? 'ادفع الدفعة الأولى الآن، والباقي تلقائياً كل شهر.'
+              : 'Pay the first installment now; the rest auto-charge monthly.'),
+          _Step(text: ar ? 'بدون فوائد طالما تدفع في موعدها.'
+              : 'No interest as long as you pay on time.'),
+          const SizedBox(height: 16),
+          // ── provider lockup ──
+          Row(children: [
+            Text(ar ? 'بالشراكة مع' : 'Powered by',
+                style: const TextStyle(fontSize: 11.5, color: Color(0xFF8A8A8A))),
+            const SizedBox(width: 10),
+            _ProviderChip(name: provider),
+            const SizedBox(width: 8),
+            _ProviderChip(name: 'Deema',
+                soon: true, soonLabel: ar ? 'قريباً' : 'soon'),
+          ]),
+          const SizedBox(height: 14),
+          SizedBox(width: double.infinity, child: ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _tealDk, foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(vertical: 13),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14)),
+            ),
+            child: Text(ar ? 'تمام' : 'Got it',
+                style: const TextStyle(fontWeight: FontWeight.w900)),
+          )),
         ]),
       ),
     );
   }
+}
+
+class _TimelineRow extends StatelessWidget {
+  const _TimelineRow({required this.index, required this.last,
+      required this.when, required this.amount, required this.payLabel});
+  final int index; final bool last; final String when; final String amount;
+  final String payLabel;
+  @override
+  Widget build(BuildContext context) {
+    const teal = Color(0xFF0E8A6A);
+    return IntrinsicHeight(child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Column(children: [
+        Container(width: 26, height: 26,
+          decoration: BoxDecoration(
+            color: index == 0 ? teal : Colors.white, shape: BoxShape.circle,
+            border: Border.all(color: teal, width: 2)),
+          child: Center(child: index == 0
+              ? const Icon(Icons.check, size: 14, color: Colors.white)
+              : Text('${index + 1}', style: const TextStyle(fontSize: 12,
+                  fontWeight: FontWeight.w900, color: teal))),
+        ),
+        if (!last) Expanded(child: Container(width: 2, color: const Color(0xFFB7E4D2))),
+      ]),
+      const SizedBox(width: 12),
+      Padding(
+        padding: const EdgeInsets.only(bottom: 14),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(payLabel, style: const TextStyle(fontSize: 13.5,
+              fontWeight: FontWeight.w800, color: UellowColors.ink)),
+          Text(when, style: const TextStyle(fontSize: 11.5, color: Color(0xFF8A8A8A))),
+        ]),
+      ),
+      const Spacer(),
+      Padding(padding: const EdgeInsets.only(top: 2),
+        child: Text(amount, style: const TextStyle(fontSize: 13.5,
+            fontWeight: FontWeight.w900, color: Color(0xFF0B6B53)))),
+    ]));
+  }
+}
+
+class _Step extends StatelessWidget {
+  const _Step({required this.text});
+  final String text;
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(bottom: 7),
+    child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      const Padding(padding: EdgeInsets.only(top: 5),
+        child: Icon(Icons.check_circle, size: 15, color: Color(0xFF0E8A6A))),
+      const SizedBox(width: 8),
+      Expanded(child: Text(text, style: const TextStyle(fontSize: 12.5,
+          height: 1.4, color: Color(0xFF444444)))),
+    ]),
+  );
+}
+
+class _ProviderChip extends StatelessWidget {
+  const _ProviderChip({required this.name, this.soon = false, this.soonLabel = ''});
+  final String name; final bool soon; final String soonLabel;
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+    decoration: BoxDecoration(
+      color: soon ? const Color(0xFFF2F2F2) : UellowColors.darkBrown,
+      borderRadius: BorderRadius.circular(8),
+    ),
+    child: Row(mainAxisSize: MainAxisSize.min, children: [
+      Text(name, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w900,
+          color: soon ? const Color(0xFF999999) : UellowColors.yellow)),
+      if (soon) ...[
+        const SizedBox(width: 5),
+        Text('· $soonLabel', style: const TextStyle(fontSize: 10,
+            fontWeight: FontWeight.w700, color: Color(0xFFAAAAAA))),
+      ],
+    ]),
+  );
 }
 
 // v2.2.20 — "What's inside" for a bundle product: each component with its
@@ -1912,20 +2116,20 @@ class _CompactDeliveryState extends State<_CompactDelivery> {
       // v2.2.16 — staleness-aware: re-detects silently when the cached
       // fix is old, so travelling users stop seeing their OLD location.
       final fix = await FirstLaunchService.freshFix();
-      if (fix != null && fix.address.isNotEmpty) {
-        // Nominatim: "House, Street, City, Region, Country" — country is
-        // the LAST piece; the city sits a couple of pieces before it.
-        final pieces = fix.address.split(',').map((s) => s.trim())
-            .where((s) => s.isNotEmpty && !RegExp(r'^[0-9]').hasMatch(s))
-            .toList();
-        if (pieces.isNotEmpty) {
-          final country = pieces.last;
-          final city = pieces.length >= 3
-              ? pieces[pieces.length - 3]
-              : (pieces.length >= 2 ? pieces[pieces.length - 2] : '');
-          if (mounted) setState(() => _summary =
-              city.isNotEmpty ? '$country - $city' : country);
+      if (fix != null) {
+        // v2.2.36 — use the STRUCTURED city/country straight from Nominatim
+        // instead of guessing pieces from display_name by position (which
+        // routinely picked the wrong piece). Fall back to display_name only
+        // if structured fields are unavailable.
+        var summary = [fix.country, fix.city]
+            .where((s) => s.isNotEmpty).join(' - ');
+        if (summary.isEmpty && fix.address.isNotEmpty) {
+          final pieces = fix.address.split(',').map((s) => s.trim())
+              .where((s) => s.isNotEmpty && !RegExp(r'^[0-9]').hasMatch(s))
+              .toList();
+          if (pieces.isNotEmpty) summary = pieces.last;
         }
+        if (summary.isNotEmpty && mounted) setState(() => _summary = summary);
       }
     } catch (_) {}
   }
@@ -4021,8 +4225,13 @@ class _RelatedInfiniteState extends State<_RelatedInfinite> {
   int _page = 1;
   bool _loading = false;
   bool _srvHasMore = true;
+  // v2.2.36 — once same-category products run out (or there are none), this
+  // block continues with Beena (Yellow Brain) recommendations IN THE SAME
+  // grid, so there is no separate "Picked by Yellow Brain" block.
+  bool _beenaDone = false;
+  bool _usingBeena = false;
 
-  bool get _hasMore => _buffer.isNotEmpty || _srvHasMore;
+  bool get _hasMore => _buffer.isNotEmpty || _srvHasMore || !_beenaDone;
 
   @override
   void initState() {
@@ -4032,26 +4241,45 @@ class _RelatedInfiniteState extends State<_RelatedInfinite> {
   }
 
   Future<void> _fetchIntoBuffer() async {
-    final page = await UellowApi.instance.products.list(
-        categoryId: widget.categoryId, page: _page, perPage: 16);
-    for (final p in page.items) {
-      if (p.id == widget.productId || _seen.contains(p.id)) continue;
-      _seen.add(p.id);
-      _buffer.add(p);
+    // Phase 1 — same-category related products.
+    if (_srvHasMore) {
+      final page = await UellowApi.instance.products.list(
+          categoryId: widget.categoryId, page: _page, perPage: 16);
+      for (final p in page.items) {
+        if (p.id == widget.productId || _seen.contains(p.id)) continue;
+        _seen.add(p.id);
+        _buffer.add(p);
+      }
+      _srvHasMore = page.hasNext;
+      _page++;
+      return;
     }
-    _srvHasMore = page.hasNext;
-    _page++;
+    // Phase 2 — category exhausted: continue with Beena (Yellow Brain) picks
+    // in the same grid (fetched once, de-duplicated against what's shown).
+    if (!_beenaDone) {
+      _beenaDone = true;
+      try {
+        final picks = await UellowApi.instance.products.topSelling();
+        for (final p in picks) {
+          if (p.id == widget.productId || _seen.contains(p.id)) continue;
+          _seen.add(p.id);
+          _buffer.add(p);
+          _usingBeena = true;
+        }
+      } catch (_) {/* leave _beenaDone true so we don't loop */}
+    }
   }
 
   Future<void> _show(int n) async {
     if (_loading) return;
     setState(() => _loading = true);
     try {
-      while (_buffer.length < n && _srvHasMore) {
+      while (_buffer.length < n && (_srvHasMore || !_beenaDone)) {
         await _fetchIntoBuffer();
       }
     } catch (_) {
       _srvHasMore = false;
+      _beenaDone = true;
     }
     if (!mounted) return;
     setState(() {
@@ -4067,6 +4295,8 @@ class _RelatedInfiniteState extends State<_RelatedInfinite> {
   @override
   Widget build(BuildContext context) {
     final ar = UellowApi.instance.lang == 'ar';
+    // Nothing related AND no Beena picks → hide the whole block.
+    if (_items.isEmpty && !_loading) return const SizedBox.shrink();
     return NotificationListener<ScrollEndNotification>(
       onNotification: (n) => false,
       child: Container(
@@ -4075,7 +4305,12 @@ class _RelatedInfiniteState extends State<_RelatedInfinite> {
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(T.t('product.related'), style: UT.h3),
           const SizedBox(height: 4),
-          Text(T.t('sec.related_sub'), style: UT.subtitle),
+          Text(
+              _usingBeena
+                  ? (ar ? 'منتجات مشابهة وترشيحات يلو برين'
+                        : 'Similar products & Yellow Brain picks')
+                  : T.t('sec.related_sub'),
+              style: UT.subtitle),
           const SizedBox(height: 12),
           if (_items.isEmpty && _loading)
             const SizedBox(height: 180,

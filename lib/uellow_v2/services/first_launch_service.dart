@@ -5,6 +5,14 @@
 // is stashed in SharedPreferences so checkout's "Detect my address" button
 // can fill the form without a second round-trip.
 //
+// v2.2.36 — PERMANENT address-capture fix: we now persist the STRUCTURED
+// address pieces (country / city / state) parsed from Nominatim's `address`
+// object, instead of only the flat `display_name`. Callers used to split
+// display_name by commas and guess the city/country by POSITION, which is
+// locale-dependent and routinely picked the wrong piece — the long-standing
+// "wrong address from current location" bug. Now city/country come straight
+// from the structured fields.
+//
 // All work is non-blocking: callers fire-and-forget so the splash → home
 // transition stays snappy.
 // =============================================================================
@@ -18,6 +26,14 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../api/uellow_api.dart';
 
+typedef GeoFix = ({
+  double lat,
+  double lng,
+  String address,
+  String city,
+  String country,
+});
+
 class FirstLaunchService {
   FirstLaunchService._();
 
@@ -25,7 +41,61 @@ class FirstLaunchService {
   static const _kLatKey = 'uellow_geo_lat_v1';
   static const _kLngKey = 'uellow_geo_lng_v1';
   static const _kAddrKey = 'uellow_geo_addr_v1';
+  static const _kCityKey = 'uellow_geo_city_v1';
+  static const _kCountryKey = 'uellow_geo_country_v1';
   static const _kTsKey = 'uellow_geo_ts_v1';
+
+  /// Parse Nominatim's structured `address` object into the pieces we care
+  /// about. City falls back through the OSM hierarchy (town/village/…), so
+  /// rural and urban fixes both resolve to a sensible "city".
+  static ({String display, String city, String country}) _parse(
+      Map<String, dynamic> j) {
+    final display = (j['display_name'] as String?) ?? '';
+    final a = (j['address'] as Map?)?.cast<String, dynamic>() ?? const {};
+    String pick(List<String> keys) {
+      for (final k in keys) {
+        final v = a[k];
+        if (v != null && v.toString().trim().isNotEmpty) return v.toString().trim();
+      }
+      return '';
+    }
+    final city = pick(
+        ['city', 'town', 'village', 'municipality', 'suburb', 'state_district', 'county']);
+    final country = pick(['country']);
+    return (display: display, city: city, country: country);
+  }
+
+  /// Reverse-geocode a coordinate via Nominatim. Returns null on failure.
+  static Future<({String display, String city, String country})?> _reverse(
+      double lat, double lng) async {
+    try {
+      final r = await http.get(
+        Uri.parse(
+          'https://nominatim.openstreetmap.org/reverse?format=jsonv2'
+          '&addressdetails=1'
+          '&lat=$lat&lon=$lng'
+          '&accept-language=${UellowApi.instance.lang}',
+        ),
+        headers: {'User-Agent': 'UellowApp/2.0 (support@uellow.com)'},
+      ).timeout(const Duration(seconds: 6));
+      if (r.statusCode == 200) {
+        return _parse(jsonDecode(r.body) as Map<String, dynamic>);
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  static Future<void> _store(SharedPreferences prefs, double lat, double lng,
+      ({String display, String city, String country})? geo) async {
+    await prefs.setDouble(_kLatKey, lat);
+    await prefs.setDouble(_kLngKey, lng);
+    await prefs.setInt(_kTsKey, DateTime.now().millisecondsSinceEpoch);
+    if (geo != null) {
+      if (geo.display.isNotEmpty) await prefs.setString(_kAddrKey, geo.display);
+      await prefs.setString(_kCityKey, geo.city);
+      await prefs.setString(_kCountryKey, geo.country);
+    }
+  }
 
   /// Called once from Splash after the country picker has been resolved.
   /// Idempotent — subsequent calls are no-ops.
@@ -61,33 +131,13 @@ class FirstLaunchService {
           timeLimit: Duration(seconds: 10),
         ),
       );
-      await prefs.setDouble(_kLatKey, pos.latitude);
-      await prefs.setDouble(_kLngKey, pos.longitude);
-      await prefs.setInt(_kTsKey, DateTime.now().millisecondsSinceEpoch);
-      // Reverse-geocode (Nominatim, no key needed). Failure is non-fatal —
-      // we still have the coords so the checkout map can self-geocode.
-      try {
-        final r = await http.get(
-          Uri.parse(
-            'https://nominatim.openstreetmap.org/reverse?format=jsonv2'
-            '&lat=${pos.latitude}&lon=${pos.longitude}'
-            '&accept-language=${UellowApi.instance.lang}',
-          ),
-          headers: {'User-Agent': 'UellowApp/2.0 (support@uellow.com)'},
-        ).timeout(const Duration(seconds: 6));
-        if (r.statusCode == 200) {
-          final j = jsonDecode(r.body) as Map<String, dynamic>;
-          final addr = (j['display_name'] as String?) ?? '';
-          if (addr.isNotEmpty) await prefs.setString(_kAddrKey, addr);
-        }
-      } catch (_) {}
+      final geo = await _reverse(pos.latitude, pos.longitude);
+      await _store(prefs, pos.latitude, pos.longitude, geo);
     } catch (_) {/* swallow — best-effort */}
   }
 
   /// Reads the last-known geo fix from prefs.
-  /// Returns null when location was never granted or coords are stale (not
-  /// stored yet). Callers that want a *fresh* fix should call [refreshNow].
-  static Future<({double lat, double lng, String address})?> lastFix() async {
+  static Future<GeoFix?> lastFix() async {
     final prefs = await SharedPreferences.getInstance();
     final lat = prefs.getDouble(_kLatKey);
     final lng = prefs.getDouble(_kLngKey);
@@ -96,13 +146,15 @@ class FirstLaunchService {
       lat: lat,
       lng: lng,
       address: prefs.getString(_kAddrKey) ?? '',
+      city: prefs.getString(_kCityKey) ?? '',
+      country: prefs.getString(_kCountryKey) ?? '',
     );
   }
 
   /// Requests location permission + grabs a fresh GPS fix on demand. Used by
   /// the checkout "Detect my address" button when the user wants to skip
   /// typing.
-  static Future<({double lat, double lng, String address})?> refreshNow() async {
+  static Future<GeoFix?> refreshNow() async {
     try {
       var lp = await Geolocator.checkPermission();
       if (lp == LocationPermission.denied) {
@@ -117,41 +169,26 @@ class FirstLaunchService {
           timeLimit: Duration(seconds: 10),
         ),
       );
-      String addr = '';
-      try {
-        final r = await http.get(
-          Uri.parse(
-            'https://nominatim.openstreetmap.org/reverse?format=jsonv2'
-            '&lat=${pos.latitude}&lon=${pos.longitude}'
-            '&accept-language=${UellowApi.instance.lang}',
-          ),
-          headers: {'User-Agent': 'UellowApp/2.0 (support@uellow.com)'},
-        ).timeout(const Duration(seconds: 6));
-        if (r.statusCode == 200) {
-          final j = jsonDecode(r.body) as Map<String, dynamic>;
-          addr = (j['display_name'] as String?) ?? '';
-        }
-      } catch (_) {}
-      // Persist for next time
+      final geo = await _reverse(pos.latitude, pos.longitude);
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setDouble(_kLatKey, pos.latitude);
-      await prefs.setDouble(_kLngKey, pos.longitude);
-      await prefs.setInt(_kTsKey, DateTime.now().millisecondsSinceEpoch);
-      if (addr.isNotEmpty) await prefs.setString(_kAddrKey, addr);
-      return (lat: pos.latitude, lng: pos.longitude, address: addr);
+      await _store(prefs, pos.latitude, pos.longitude, geo);
+      return (
+        lat: pos.latitude,
+        lng: pos.longitude,
+        address: geo?.display ?? '',
+        city: geo?.city ?? '',
+        country: geo?.country ?? '',
+      );
     } catch (_) {
       return null;
     }
   }
 
-  /// v2.2.16 — staleness-aware fix. The first-launch fix used to live
-  /// FOREVER, so a user who travelled kept seeing their old location in
-  /// the "Deliver to" block even after restarting the app. Returns the
-  /// cached fix while it is younger than [maxAge]; otherwise silently
-  /// re-detects — but ONLY when permission is already granted (never
-  /// prompts) — and updates the cache. Falls back to the stale cache if
-  /// GPS fails.
-  static Future<({double lat, double lng, String address})?> freshFix(
+  /// v2.2.16 — staleness-aware fix. Returns the cached fix while it is younger
+  /// than [maxAge]; otherwise silently re-detects — but ONLY when permission
+  /// is already granted (never prompts) — and updates the cache. Falls back to
+  /// the stale cache if GPS fails.
+  static Future<GeoFix?> freshFix(
       {Duration maxAge = const Duration(minutes: 10)}) async {
     final prefs = await SharedPreferences.getInstance();
     final ts = prefs.getInt(_kTsKey) ?? 0;

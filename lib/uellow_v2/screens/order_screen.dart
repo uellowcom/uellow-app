@@ -415,6 +415,8 @@ class _MapBoxState extends State<_MapBox> {
 .carwrap .disc .mi{font-family:'Material Icons Round';font-size:40px;color:#412402;
   line-height:1;font-weight:normal;font-style:normal;
   filter:drop-shadow(0 2px 3px rgba(0,0,0,.4))}
+.carwrap .disc .carimg{width:46px;height:46px;object-fit:contain;
+  filter:drop-shadow(0 2px 4px rgba(0,0,0,.45))}
 @keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-3px)}}
 </style>
 <script>
@@ -441,9 +443,10 @@ else if(pts.length==1){map.setView(pts[0],15);}
 
   // the live courier — driver image disc + double sonar pulse.
   String _carPin(dynamic lat, dynamic lng, String label) {
+    // v2.2.36 — colored delivery-car icon (flaticon) instead of the mono glyph.
     return "L.marker([$lat,$lng],{zIndexOffset:1000,icon:L.divIcon({className:'',iconSize:[90,68],iconAnchor:[45,34],"
         "html:'<div class=\"uic\"><div class=\"carwrap\">"
-        "<div class=\"disc\"><span class=\"mi\">local_shipping</span></div></div>"
+        "<div class=\"disc\"><img class=\"carimg\" src=\"https://cdn-icons-png.flaticon.com/512/7511/7511673.png\"/></div></div>"
         "<span class=\"lbl\">${_esc(label)}</span></div>'})}).addTo(map);";
   }
 
@@ -839,8 +842,10 @@ class _Summary extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(children: [
-        Expanded(child: Text(ar ? 'طريقة الدفع' : 'Payment method',
-            style: const TextStyle(fontSize: 12.5, color: UellowColors.text))),
+        Text(ar ? 'طريقة الدفع' : 'Payment method',
+            style: const TextStyle(fontSize: 12.5, color: UellowColors.text)),
+        const SizedBox(width: 8),
+        const Spacer(),
         Flexible(child: Text(label, textAlign: TextAlign.end, overflow: TextOverflow.ellipsis,
             style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700,
                 color: UellowColors.text))),
@@ -1042,6 +1047,17 @@ class _Actions extends StatelessWidget {
   Future<void> _openInvoice(BuildContext context) async {
     // Download PDF to a temp file, then open or share.
     final messenger = ScaffoldMessenger.of(context);
+    // Invoices are issued after the order is delivered (or already paid).
+    // Before that, show a friendly explanation instead of a hard error.
+    final ready = order.isPaid ||
+        order.uellowStatus == 'delivered' ||
+        order.uellowStatus == 'done';
+    if (!ready) {
+      messenger.showSnackBar(SnackBar(content: Text(ar
+          ? 'تصدر الفاتورة بعد تسليم الطلب.'
+          : 'The invoice is issued after the order is delivered.')));
+      return;
+    }
     messenger.showSnackBar(SnackBar(
         content: Text(ar ? 'جاري تحضير الفاتورة...' : 'Preparing invoice...'),
         duration: const Duration(seconds: 1)));
