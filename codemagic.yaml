@@ -91,5 +91,8 @@ workflows:
     publishing:
       app_store_connect:
         auth: integration
-        submit_to_testflight: true          # ينزل أوتوماتيك على TestFlight
-        submit_to_app_store: false          # خليه true عشان يروح للمراجعة مباشرة (قولّي وأفعلها)
+        # يرفع البناء على App Store Connect (متاح للاختبار الداخلي + جاهز للنشر).
+        # false = ميبعتش لمراجعة TestFlight الخارجي (اللي بتطلب معلومات تواصل).
+        # خلّيه true بعد ما تملأ test-info لو عايز اختبار خارجي تلقائي.
+        submit_to_testflight: false
+        submit_to_app_store: false          # خليه true عشان يروح لمراجعة App Store مباشرة
