@@ -22,7 +22,8 @@ workflows:
       groups:
         - appstore                          # يحوي CERTIFICATE_PRIVATE_KEY (مفتاح ثابت)
       vars:
-        BUNDLE_ID: "com.uellow.uellow"      # لو مختلف على متجرك، غيّره هنا
+        BUNDLE_ID: "com.uellow.app"         # نفس المعرّف على App Store
+        APP_APPLE_ID: "6769010765"          # Apple ID الرقمي للتطبيق (لحساب رقم البناء)
     scripts:
       - name: Flutter packages get
         script: |
@@ -56,10 +57,13 @@ workflows:
       - name: Build signed IPA
         script: |
           VERSION_NAME=$(grep '^version:' pubspec.yaml | sed 's/version: //; s/+.*//')
-          echo "Building $VERSION_NAME (build $BUILD_NUMBER)"
+          # رقم البناء = أعلى رقم على المتجر + 1 (يتفادى التعارض مع البناءات الموجودة)
+          LATEST=$(app-store-connect get-latest-build-number "$APP_APPLE_ID" 2>/dev/null || echo "")
+          if [ -n "$LATEST" ]; then BUILD=$((LATEST + 1)); else BUILD="$BUILD_NUMBER"; fi
+          echo "Building $VERSION_NAME (build $BUILD)"
           flutter build ipa --release \
             --build-name="$VERSION_NAME" \
-            --build-number="$BUILD_NUMBER" \
+            --build-number="$BUILD" \
             --export-options-plist=/Users/builder/export_options.plist
     artifacts:
       - build/ios/ipa/*.ipa
