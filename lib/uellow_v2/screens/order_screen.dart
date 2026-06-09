@@ -838,7 +838,6 @@ class _Summary extends StatelessWidget {
         : ((ar ? labelMap['ar'] : labelMap['en']) as String? ?? '');
     if (label.isEmpty) return const SizedBox.shrink();
     final paid = pm['paid'] == true || order.isPaid;
-    final isOnline = pm['is_online'] == true;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(children: [
@@ -849,14 +848,13 @@ class _Summary extends StatelessWidget {
         Flexible(child: Text(label, textAlign: TextAlign.end, overflow: TextOverflow.ellipsis,
             style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700,
                 color: UellowColors.text))),
+        // v2.2.37 — only a PAID status badge. The old "Online pay" badge
+        // duplicated the method label (which already reads "دفع إلكتروني"),
+        // showing the text twice and skewing the row.
         if (paid) ...[
           const SizedBox(width: 6),
           _payBadge(ar ? 'مدفوع' : 'Paid', UellowColors.successDk,
               const Color(0xFFE6F4EA)),
-        ] else if (isOnline) ...[
-          const SizedBox(width: 6),
-          _payBadge(ar ? 'دفع إلكتروني' : 'Online pay', UellowColors.darkBrown,
-              UellowColors.yellowFaint),
         ],
       ]),
     );
