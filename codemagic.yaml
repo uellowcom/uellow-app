@@ -43,11 +43,17 @@ workflows:
             exit 1
           fi
           keychain initialize
+          # المفتاح مخزّن Base64 (سطر واحد) لتفادي تلف الأسطر عند اللصق؛ نفكّه لملف PEM
+          echo "$CERTIFICATE_PRIVATE_KEY" | base64 --decode > /tmp/cm_cert_key.pem 2>/dev/null || true
+          if ! grep -q "BEGIN RSA PRIVATE KEY\|BEGIN PRIVATE KEY" /tmp/cm_cert_key.pem 2>/dev/null; then
+            echo "❌ المفتاح بعد فك Base64 مش PEM صالح — تأكد إنك لصقت نص Base64 كامل (سطر واحد) في المتغيّر."
+            exit 1
+          fi
           # 2) جِب/أنشئ شهادة التوزيع + بروفايل App Store بمفتاح خاص ثابت
           app-store-connect fetch-signing-files "$BUNDLE_ID" \
             --type IOS_APP_STORE \
             --platform IOS \
-            --certificate-key=@env:CERTIFICATE_PRIVATE_KEY \
+            --certificate-key=@file:/tmp/cm_cert_key.pem \
             --create \
             --verbose
           keychain add-certificates
