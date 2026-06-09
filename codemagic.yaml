@@ -1,0 +1,56 @@
+# Codemagic CI — iOS build + auto-upload to App Store Connect
+# يبني على ماك سحابي، يوقّع تلقائياً بالـAPI Key، ويرفع لـTestFlight/App Store.
+#
+# قبل أول تشغيل، من Codemagic UI:
+#   1) Teams > Integrations > App Store Connect > اربط الـAPI Key (.p8 + Key ID + Issuer ID).
+#      سمّيه بنفس اسم الـintegration المستخدم تحت (uellow_appstore).
+#   2) متغيّرات البيئة مش محتاجة باسوورد — التوقيع كله بالـAPI Key.
+#
+# Bundle ID الحالي في المشروع: com.uellow.uellow  (لو مختلف على متجرك، عدّله تحت في bundle_identifier)
+
+workflows:
+  ios-appstore:
+    name: iOS — App Store release
+    instance_type: mac_mini_m2
+    max_build_duration: 90
+    integrations:
+      app_store_connect: uellow_appstore   # اسم الـintegration اللي ربطته في Codemagic
+    environment:
+      flutter: 3.29.3                       # نفس إصدار الأسطول (16KB + Dart 3.7.2)
+      xcode: latest
+      cocoapods: default
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.uellow.uellow
+      vars:
+        BUNDLE_ID: "com.uellow.uellow"
+        APP_STORE_APPLE_ID: ""              # (اختياري) Apple ID الرقمي للتطبيق من App Store Connect
+    scripts:
+      - name: Flutter packages get
+        script: |
+          flutter pub get
+      - name: Install CocoaPods
+        script: |
+          cd ios && pod install --repo-update
+      - name: Set build number (آخر بناء على المتجر + 1)
+        script: |
+          BN=$(app-store-connect get-latest-app-store-build-number "$APP_STORE_APPLE_ID" 2>/dev/null || echo "")
+          if [ -z "$BN" ]; then BN=$(($BUILD_NUMBER)); fi
+          echo "Using build number: $((BN + 1))"
+          flutter build ipa --release \
+            --build-number=$((BN + 1)) \
+            --export-options-plist=/Users/builder/export_options.plist || true
+      - name: Build signed IPA
+        script: |
+          xcode-project use-profiles
+          flutter build ipa --release \
+            --build-name=$(grep '^version:' pubspec.yaml | sed 's/version: //; s/+.*//')
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+      - flutter_drive.log
+    publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true          # ينزل أوتوماتيك على TestFlight
+        submit_to_app_store: false          # خليه false لحد ما تجرّبه؛ خلّيه true عشان يروح للمراجعة مباشرة
