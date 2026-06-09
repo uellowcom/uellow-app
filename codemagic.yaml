@@ -96,3 +96,36 @@ workflows:
         # خلّيه true بعد ما تملأ test-info لو عايز اختبار خارجي تلقائي.
         submit_to_testflight: false
         submit_to_app_store: false          # خليه true عشان يروح لمراجعة App Store مباشرة
+
+  # ───────────────────────── Android (Huawei AppGallery / مباشر) ─────────────────────────
+  android-release:
+    name: Android — APK + AAB (Huawei/AppGallery)
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+    environment:
+      flutter: 3.29.3                       # نفس إصدار الأسطول
+      groups:
+        - android_signing                   # UELLOW_KEYSTORE_BASE64 + UELLOW_KEYSTORE_PASSWORD + UELLOW_KEY_ALIAS
+      vars:
+        UELLOW_SIGN: "upload"               # يوقّع بمفتاح الرفع (مش debug)
+        UELLOW_KEYSTORE_PATH: "/tmp/uellow-upload.jks"
+        UELLOW_KEY_ALIAS: "uellow-upload"
+    scripts:
+      - name: Decode signing keystore
+        script: |
+          if [ -z "$UELLOW_KEYSTORE_BASE64" ]; then
+            echo "❌ UELLOW_KEYSTORE_BASE64 فاضي — أضِفه لمجموعة 'android_signing' في Codemagic."
+            exit 1
+          fi
+          echo "$UELLOW_KEYSTORE_BASE64" | base64 --decode > "$UELLOW_KEYSTORE_PATH"
+          echo "keystore decoded -> $UELLOW_KEYSTORE_PATH ($(wc -c < $UELLOW_KEYSTORE_PATH) bytes)"
+      - name: Flutter packages get
+        script: |
+          flutter pub get
+      - name: Build signed APK + AAB
+        script: |
+          flutter build apk --release
+          flutter build appbundle --release
+    artifacts:
+      - build/app/outputs/flutter-apk/*.apk
+      - build/app/outputs/bundle/release/*.aab

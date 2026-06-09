@@ -48,12 +48,22 @@ android {
     // direct-download APKs keep the debug signature (in-place updates).
     signingConfigs {
         upload {
-            storeFile file('/root/secrets/uellow-upload-2026.jks')
-            storePassword new File('/root/secrets/uellow-upload-2026.password.txt').exists()
-                ? new File('/root/secrets/uellow-upload-2026.password.txt').text.trim() : ''
-            keyAlias 'uellow-upload'
-            keyPassword new File('/root/secrets/uellow-upload-2026.password.txt').exists()
-                ? new File('/root/secrets/uellow-upload-2026.password.txt').text.trim() : ''
+            // CI (Codemagic): keystore path + passwords من متغيّرات البيئة.
+            // محلياً (السيرفر): من /root/secrets.
+            def ciStore = System.getenv('UELLOW_KEYSTORE_PATH')
+            def hostPwFile = new File('/root/secrets/uellow-upload-2026.password.txt')
+            if (ciStore != null && !ciStore.isEmpty()) {
+                storeFile file(ciStore)
+                storePassword System.getenv('UELLOW_KEYSTORE_PASSWORD') ?: ''
+                keyAlias System.getenv('UELLOW_KEY_ALIAS') ?: 'uellow-upload'
+                keyPassword (System.getenv('UELLOW_KEY_PASSWORD')
+                    ?: System.getenv('UELLOW_KEYSTORE_PASSWORD') ?: '')
+            } else {
+                storeFile file('/root/secrets/uellow-upload-2026.jks')
+                storePassword hostPwFile.exists() ? hostPwFile.text.trim() : ''
+                keyAlias 'uellow-upload'
+                keyPassword hostPwFile.exists() ? hostPwFile.text.trim() : ''
+            }
         }
     }
 
