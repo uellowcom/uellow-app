@@ -36,8 +36,14 @@ workflows:
           # ينشئ شهادة التوزيع + بروفايل App Store تلقائياً لو مش موجودين.
           # ملاحظة: الـAPI Key لازم يكون دوره Admin أو App Manager عشان يقدر
           # يُنشئ شهادات؛ لو الدور Developer، الإنشاء بيفشل بصمت.
+          set -e
+          # 1) تأكد إن المفتاح الخاص الثابت موجود فعلاً
+          if [ -z "$CERTIFICATE_PRIVATE_KEY" ]; then
+            echo "❌ CERTIFICATE_PRIVATE_KEY فاضي — أضِفه لمجموعة المتغيّرات 'appstore' في Codemagic (Secure)."
+            exit 1
+          fi
           keychain initialize
-          # مفتاح خاص ثابت (CERTIFICATE_PRIVATE_KEY) عشان نفس الشهادة تُعاد عبر البناءات
+          # 2) جِب/أنشئ شهادة التوزيع + بروفايل App Store بمفتاح خاص ثابت
           app-store-connect fetch-signing-files "$BUNDLE_ID" \
             --type IOS_APP_STORE \
             --platform IOS \
@@ -54,6 +60,13 @@ workflows:
           echo "--- export options plist ---"
           cat /Users/builder/export_options.plist 2>/dev/null || echo "(not generated)"
           echo "============================================"
+          # 3) افشل فوراً وبوضوح لو مفيش أي شهادة توقيع صالحة في الـkeychain
+          if ! security find-identity -v -p codesigning | grep -qiE "Apple (Distribution|Development)|iPhone (Distribution|Developer)"; then
+            echo "❌ مفيش شهادة توقيع في الـkeychain بعد fetch-signing-files."
+            echo "   الأسباب المحتملة: دور الـAPI Key مش Admin/App Manager، أو وصلت لحد شهادات التوزيع في Apple."
+            exit 1
+          fi
+          echo "✅ شهادة التوقيع جاهزة في الـkeychain."
       - name: Build signed IPA
         script: |
           VERSION_NAME=$(grep '^version:' pubspec.yaml | sed 's/version: //; s/+.*//')
