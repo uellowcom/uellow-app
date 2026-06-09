@@ -9,7 +9,8 @@ plugins {
 
 android {
     namespace = "com.uellow.uellow"
-    compileSdk = flutter.compileSdkVersion
+    // camera 1.5.0 (mobile_scanner 6) يتطلّب compileSdk 35+/AGP 8.6+
+    compileSdk = 36
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
