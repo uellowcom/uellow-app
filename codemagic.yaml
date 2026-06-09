@@ -24,6 +24,7 @@ workflows:
       vars:
         BUNDLE_ID: "com.uellow.app"         # نفس المعرّف على App Store
         APP_APPLE_ID: "6769010765"          # Apple ID الرقمي للتطبيق (لحساب رقم البناء)
+        IOS_VERSION: "4.1.12"               # نسخة iOS التسويقية (مستقلة عن أندرويد؛ لازم تكون أعلى من آخر نسخة على المتجر)
     scripts:
       - name: Flutter packages get
         script: |
@@ -75,13 +76,13 @@ workflows:
           echo "✅ شهادة التوقيع جاهزة في الـkeychain."
       - name: Build signed IPA
         script: |
-          VERSION_NAME=$(grep '^version:' pubspec.yaml | sed 's/version: //; s/+.*//')
+          # نسخة iOS التسويقية مستقلة عن pubspec (أندرويد) — لازم تكون أعلى من آخر نسخة على App Store
           # رقم البناء = أعلى رقم على المتجر + 1 (يتفادى التعارض مع البناءات الموجودة)
           LATEST=$(app-store-connect get-latest-build-number "$APP_APPLE_ID" 2>/dev/null || echo "")
           if [ -n "$LATEST" ]; then BUILD=$((LATEST + 1)); else BUILD="$BUILD_NUMBER"; fi
-          echo "Building $VERSION_NAME (build $BUILD)"
+          echo "Building iOS $IOS_VERSION (build $BUILD)"
           flutter build ipa --release \
-            --build-name="$VERSION_NAME" \
+            --build-name="$IOS_VERSION" \
             --build-number="$BUILD" \
             --export-options-plist=/Users/builder/export_options.plist
     artifacts:
