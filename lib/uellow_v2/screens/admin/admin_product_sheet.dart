@@ -43,6 +43,10 @@ class _AdminProductSheetState extends State<_AdminProductSheet> {
   bool _continueSelling = false;
   final Map<int, TextEditingController> _vCost = {};
   final Map<int, TextEditingController> _vBarcode = {};
+  // v2.2.41 — eCommerce category (section) editing
+  List<Map<String, dynamic>> _cats = [];
+  final Set<int> _selCats = {};
+  final Map<int, String> _catNames = {};
 
   @override
   void initState() {
@@ -73,6 +77,17 @@ class _AdminProductSheetState extends State<_AdminProductSheet> {
         _vCost[id] = TextEditingController(text: '${v['cost'] ?? ''}');
         _vBarcode[id] = TextEditingController(text: '${v['barcode'] ?? ''}');
       }
+      for (final c in (d['eco_categories'] as List? ?? const [])) {
+        final id = ((c as Map)['id'] as num).toInt();
+        _selCats.add(id);
+        _catNames[id] = (c['name'] ?? '').toString();
+      }
+      try {
+        _cats = await AdminApi.instance.categories();
+        for (final c in _cats) {
+          _catNames[(c['id'] as num).toInt()] = (c['name'] ?? '').toString();
+        }
+      } catch (_) {}
     } catch (e) {
       _error = e.toString();
     }
@@ -91,6 +106,7 @@ class _AdminProductSheetState extends State<_AdminProductSheet> {
         'continue_selling': _continueSelling,
         if (!hasVariants) 'cost': double.tryParse(_cost.text.trim()),
         if (!hasVariants) 'barcode': _barcode.text.trim(),
+        'public_categ_ids': _selCats.toList(),
         if (hasVariants) 'variants': [
           for (final v in (d['variants'] as List? ?? const []))
             {
@@ -263,6 +279,8 @@ class _AdminProductSheetState extends State<_AdminProductSheet> {
             const SizedBox(height: 6),
             for (final v in variants) _variantCard(ar, v as Map, sym),
           ],
+          const SizedBox(height: 16),
+          _categorySection(ar),
           const SizedBox(height: 8),
         ]),
       )),
@@ -290,6 +308,112 @@ class _AdminProductSheetState extends State<_AdminProductSheet> {
         ),
       ),
     ]);
+  }
+
+  Widget _categorySection(bool ar) {
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Row(children: [
+        Text(ar ? '🗂️ قسم المتجر (eCommerce)' : '🗂️ Store section (eCommerce)',
+            style: UT.h3),
+        const Spacer(),
+        TextButton.icon(
+          onPressed: _cats.isEmpty ? null : () => _openCatPicker(ar),
+          icon: const Icon(Icons.edit_outlined, size: 16),
+          label: Text(ar ? 'تعديل' : 'Edit'),
+          style: TextButton.styleFrom(
+              foregroundColor: UellowColors.darkBrown),
+        ),
+      ]),
+      const SizedBox(height: 4),
+      if (_selCats.isEmpty)
+        Text(ar ? 'لا يوجد قسم محدد' : 'No section selected',
+            style: UT.subtitle)
+      else
+        Wrap(spacing: 6, runSpacing: 6, children: [
+          for (final id in _selCats)
+            Chip(
+              label: Text(_catNames[id] ?? '#$id',
+                  style: const TextStyle(fontSize: 11,
+                      fontWeight: FontWeight.w700)),
+              backgroundColor: UellowColors.yellow.withValues(alpha: .2),
+              side: BorderSide.none,
+              visualDensity: VisualDensity.compact,
+              onDeleted: () => setState(() => _selCats.remove(id)),
+            ),
+        ]),
+    ]);
+  }
+
+  Future<void> _openCatPicker(bool ar) async {
+    final q = TextEditingController();
+    await showModalBottomSheet(
+      context: context, isScrollControlled: true, backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius:
+          BorderRadius.vertical(top: Radius.circular(18))),
+      builder: (c) => StatefulBuilder(builder: (c, setSt) {
+        final term = q.text.trim().toLowerCase();
+        final list = term.isEmpty ? _cats : _cats.where((e) =>
+            (e['name'] ?? '').toString().toLowerCase().contains(term)).toList();
+        return Padding(
+          padding: EdgeInsets.only(
+              bottom: MediaQuery.of(c).viewInsets.bottom),
+          child: SizedBox(
+            height: MediaQuery.of(c).size.height * .7,
+            child: Column(children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
+                child: TextField(
+                  controller: q,
+                  onChanged: (_) => setSt(() {}),
+                  decoration: InputDecoration(
+                    hintText: ar ? '🔍 ابحث عن قسم' : '🔍 Search section',
+                    isDense: true, filled: true,
+                    fillColor: const Color(0xFFF7F8FA),
+                    border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide.none),
+                  ),
+                ),
+              ),
+              Expanded(child: ListView.builder(
+                itemCount: list.length,
+                itemBuilder: (_, i) {
+                  final id = (list[i]['id'] as num).toInt();
+                  final on = _selCats.contains(id);
+                  return CheckboxListTile(
+                    dense: true,
+                    value: on,
+                    activeColor: UellowColors.darkBrown,
+                    title: Text(list[i]['name']?.toString() ?? '',
+                        style: const TextStyle(fontSize: 12.5)),
+                    onChanged: (v) => setSt(() {
+                      if (v == true) {
+                        _selCats.add(id);
+                      } else {
+                        _selCats.remove(id);
+                      }
+                      setState(() {});
+                    }),
+                  );
+                },
+              )),
+              SafeArea(child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 6, 16, 10),
+                child: SizedBox(width: double.infinity, child: ElevatedButton(
+                  onPressed: () => Navigator.pop(c),
+                  style: ElevatedButton.styleFrom(
+                      backgroundColor: UellowColors.yellow,
+                      foregroundColor: UellowColors.darkBrown,
+                      padding: const EdgeInsets.symmetric(vertical: 12)),
+                  child: Text(ar ? 'تم' : 'Done',
+                      style: const TextStyle(fontWeight: FontWeight.w900)),
+                )),
+              )),
+            ]),
+          ),
+        );
+      }),
+    );
   }
 
   Widget _numField(String label, TextEditingController ctl,

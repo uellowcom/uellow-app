@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 import '../../../api/uellow_api.dart';
 import '../../services/admin_mode.dart';
 import '../../theme/uellow_theme.dart';
+import 'admin_new_order_screen.dart';
 
 class AdminOrdersScreen extends StatefulWidget {
   const AdminOrdersScreen({super.key});
@@ -72,11 +73,24 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
       backgroundColor: const Color(0xFFF2F3F5),
       appBar: AppBar(
         backgroundColor: const Color(0xFF412402),
-        foregroundColor: Colors.white,
+        // v2.2.41 — yellow back arrow + title (was white, low-visibility).
+        foregroundColor: UellowColors.yellow,
+        iconTheme: const IconThemeData(color: UellowColors.yellow),
         title: Text('${ar ? '📦 الطلبات' : '📦 Orders'}'
             '${_total > 0 ? ' ($_total)' : ''}',
             style: const TextStyle(fontSize: 16,
-                fontWeight: FontWeight.w900)),
+                fontWeight: FontWeight.w900, color: UellowColors.yellow)),
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        backgroundColor: UellowColors.yellow,
+        foregroundColor: UellowColors.darkBrown,
+        icon: const Icon(Icons.add_rounded),
+        label: Text(ar ? 'طلب جديد' : 'New order',
+            style: const TextStyle(fontWeight: FontWeight.w900)),
+        onPressed: () => Navigator.push(context, MaterialPageRoute(
+            builder: (_) => const AdminNewOrderScreen())).then((created) {
+          if (created == true) _load(reset: true);
+        }),
       ),
       body: Column(children: [
         // search + filters
@@ -151,13 +165,15 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
     return Padding(
       padding: const EdgeInsetsDirectional.only(end: 8),
       child: ChoiceChip(
-        label: Text(label, style: TextStyle(fontSize: 11,
+        // v2.2.41 — black font on a light chip so the filters are legible
+        // (was washed-out white on the dark header).
+        label: Text(label, style: const TextStyle(fontSize: 11,
             fontWeight: FontWeight.w800,
-            color: sel ? UellowColors.darkBrown : Colors.white)),
+            color: UellowColors.darkBrown)),
         selected: sel,
         showCheckmark: false,
         selectedColor: UellowColors.yellow,
-        backgroundColor: Colors.white.withValues(alpha: .12),
+        backgroundColor: Colors.white,
         side: BorderSide.none,
         visualDensity: VisualDensity.compact,
         onSelected: (_) {
@@ -298,10 +314,11 @@ class _AdminOrderDetailScreenState extends State<AdminOrderDetailScreen> {
       backgroundColor: const Color(0xFFF2F3F5),
       appBar: AppBar(
         backgroundColor: const Color(0xFF412402),
-        foregroundColor: Colors.white,
+        foregroundColor: UellowColors.yellow,
+        iconTheme: const IconThemeData(color: UellowColors.yellow),
         title: Text(ar ? 'تفاصيل الطلب' : 'Order details',
             style: const TextStyle(fontSize: 16,
-                fontWeight: FontWeight.w900)),
+                fontWeight: FontWeight.w900, color: UellowColors.yellow)),
       ),
       body: FutureBuilder<Map<String, dynamic>>(
         future: _future,
@@ -390,12 +407,213 @@ class _AdminOrderDetailScreenState extends State<AdminOrderDetailScreen> {
                     '${(t as Map)['provider'] ?? ''} (${t['state'] ?? ''})',
                     '${t['amount'] ?? 0}'),
               ]),
+            _actionCard(d, ar),
             const SizedBox(height: 24),
           ]);
         },
       ),
     );
   }
+
+  bool _busy = false;
+
+  void _reload() => setState(() {
+        _future = AdminApi.instance.orderDetail(widget.orderId);
+      });
+
+  Future<void> _run(Future<Map<String, dynamic>> Function() op,
+      String okMsg) async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      await op();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(okMsg)));
+        _reload();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('${e.toString().replaceAll('Exception: ', '')}'),
+            backgroundColor: UellowColors.danger));
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Widget _actionCard(Map<String, dynamic> d, bool ar) {
+    final state = (d['state'] ?? '').toString();
+    final isCancelled = state == 'cancel';
+    final isConfirmed = state == 'sale' || state == 'done';
+    final id = widget.orderId;
+    final btns = <Widget>[];
+    if (!isCancelled && !isConfirmed) {
+      btns.add(_actBtn(ar ? '✅ اعتماد الطلب' : '✅ Approve order',
+          UellowColors.successDk,
+          () => _run(() => AdminApi.instance.orderApprove(id),
+              ar ? 'تم اعتماد الطلب' : 'Order approved')));
+    }
+    if (isConfirmed) {
+      btns.add(_actBtn(ar ? '🚚 تعيين توصيل' : '🚚 Assign delivery',
+          UellowColors.darkBrown, () => _openAssignDelivery(id, ar)));
+    }
+    if (!isCancelled) {
+      btns.add(_actBtn(ar ? '✖ إلغاء الطلب' : '✖ Cancel order',
+          UellowColors.danger, () => _confirmCancel(id, ar)));
+    }
+    if (btns.isEmpty) return const SizedBox.shrink();
+    return _card(title: ar ? '⚙️ إجراءات' : '⚙️ Actions', children: [
+      if (_busy) const Padding(padding: EdgeInsets.only(bottom: 8),
+          child: LinearProgressIndicator(minHeight: 2)),
+      ...btns,
+    ]);
+  }
+
+  Widget _actBtn(String label, Color color, VoidCallback onTap) => Padding(
+    padding: const EdgeInsets.only(bottom: 8),
+    child: SizedBox(width: double.infinity, child: ElevatedButton(
+      onPressed: _busy ? null : onTap,
+      style: ElevatedButton.styleFrom(
+        backgroundColor: color, foregroundColor: Colors.white,
+        elevation: 0, padding: const EdgeInsets.symmetric(vertical: 12),
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12)),
+      ),
+      child: Text(label, style: const TextStyle(fontWeight: FontWeight.w900)),
+    )),
+  );
+
+  Future<void> _confirmCancel(int id, bool ar) async {
+    final ok = await showDialog<bool>(context: context, builder: (c) =>
+        AlertDialog(
+          title: Text(ar ? 'إلغاء الطلب؟' : 'Cancel order?'),
+          content: Text(ar ? 'لا يمكن التراجع بسهولة.'
+              : "This can't be easily undone."),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(c, false),
+                child: Text(ar ? 'تراجع' : 'Back')),
+            TextButton(onPressed: () => Navigator.pop(c, true),
+                child: Text(ar ? 'إلغاء الطلب' : 'Cancel order',
+                    style: const TextStyle(color: UellowColors.danger))),
+          ],
+        ));
+    if (ok == true) {
+      _run(() => AdminApi.instance.orderCancel(id),
+          ar ? 'تم إلغاء الطلب' : 'Order cancelled');
+    }
+  }
+
+  Future<void> _openAssignDelivery(int id, bool ar) async {
+    Map<String, dynamic> opts;
+    try {
+      opts = await AdminApi.instance.deliveryOptions();
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(ar ? 'تعذّر تحميل خيارات التوصيل'
+              : 'Failed to load delivery options')));
+      return;
+    }
+    final companies = ((opts['carrier_companies'] as List?) ?? const [])
+        .map((e) => (e as Map).cast<String, dynamic>()).toList();
+    final drivers = ((opts['drivers'] as List?) ?? const [])
+        .map((e) => (e as Map).cast<String, dynamic>()).toList();
+    if (companies.isEmpty) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(ar ? 'لا توجد شركات شحن مُعدّة'
+              : 'No carrier companies configured')));
+      return;
+    }
+    int? companyId = (companies.first['id'] as num).toInt();
+    int? driverId;
+    String payType = 'cash';
+    String setStatus = 'assigned';
+    if (!mounted) return;
+    final go = await showModalBottomSheet<bool>(
+      context: context, isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius:
+          BorderRadius.vertical(top: Radius.circular(18))),
+      builder: (c) => StatefulBuilder(builder: (c, setSt) {
+        final dl = drivers.where((d) => d['carrier_company_id'] == null ||
+            d['carrier_company_id'] == companyId).toList();
+        return Padding(
+          padding: EdgeInsets.fromLTRB(18, 16, 18,
+              16 + MediaQuery.of(c).viewInsets.bottom +
+                  MediaQuery.of(c).padding.bottom),
+          child: Column(mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(ar ? '🚚 تعيين توصيل' : '🚚 Assign delivery',
+                style: UT.h3),
+            const SizedBox(height: 12),
+            _ddl<int?>(ar ? 'شركة الشحن' : 'Carrier company', companyId,
+                [for (final c0 in companies)
+                  DropdownMenuItem<int?>(value: (c0['id'] as num).toInt(),
+                      child: Text(c0['name']?.toString() ?? ''))],
+                (v) => setSt(() { companyId = v; driverId = null; })),
+            const SizedBox(height: 10),
+            _ddl<int?>(ar ? 'السائق (اختياري)' : 'Driver (optional)',
+                driverId,
+                [const DropdownMenuItem(value: null, child: Text('—')),
+                  for (final d0 in dl)
+                    DropdownMenuItem(value: (d0['id'] as num).toInt(),
+                        child: Text(d0['name']?.toString() ?? ''))],
+                (v) => setSt(() => driverId = v)),
+            const SizedBox(height: 10),
+            _ddl<String>(ar ? 'نوع الدفع' : 'Payment type', payType,
+                [
+                  DropdownMenuItem(value: 'cash',
+                      child: Text(ar ? 'كاش عند الاستلام' : 'Cash on delivery')),
+                  DropdownMenuItem(value: 'online',
+                      child: Text(ar ? 'مدفوع أونلاين' : 'Paid online')),
+                  DropdownMenuItem(value: 'free',
+                      child: Text(ar ? 'مجاني' : 'Free')),
+                ], (v) => setSt(() => payType = v ?? 'cash')),
+            const SizedBox(height: 10),
+            _ddl<String>(ar ? 'الحالة' : 'Status', setStatus, [
+              DropdownMenuItem(value: 'assigned',
+                  child: Text(ar ? 'مُسند' : 'Assigned')),
+              DropdownMenuItem(value: 'out_for_delivery',
+                  child: Text(ar ? 'خرج للتوصيل' : 'Out for delivery')),
+            ], (v) => setSt(() => setStatus = v ?? 'assigned')),
+            const SizedBox(height: 16),
+            SizedBox(width: double.infinity, child: ElevatedButton(
+              onPressed: () => Navigator.pop(c, true),
+              style: ElevatedButton.styleFrom(
+                  backgroundColor: UellowColors.yellow,
+                  foregroundColor: UellowColors.darkBrown,
+                  padding: const EdgeInsets.symmetric(vertical: 13),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12))),
+              child: Text(ar ? 'تأكيد التعيين' : 'Confirm assignment',
+                  style: const TextStyle(fontWeight: FontWeight.w900)),
+            )),
+          ]),
+        );
+      }),
+    );
+    if (go == true) {
+      _run(() => AdminApi.instance.assignDelivery(id, {
+            'carrier_company_id': companyId,
+            if (driverId != null) 'driver_id': driverId,
+            'payment_method_type': payType,
+            'set_status': setStatus,
+            'create_trip': true,
+          }), ar ? 'تم تعيين التوصيل' : 'Delivery assigned');
+    }
+  }
+
+  Widget _ddl<T>(String label, T value, List<DropdownMenuItem<T>> items,
+      ValueChanged<T?> onChanged) => InputDecorator(
+    decoration: InputDecoration(
+      labelText: label, isDense: true,
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+    ),
+    child: DropdownButtonHideUnderline(child: DropdownButton<T>(
+      value: value, isExpanded: true, items: items, onChanged: onChanged)),
+  );
 
   Widget _card({String? title, required List<Widget> children}) => Container(
     margin: const EdgeInsets.only(bottom: 12),

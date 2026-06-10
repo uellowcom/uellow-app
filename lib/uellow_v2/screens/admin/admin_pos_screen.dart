@@ -31,10 +31,11 @@ class _AdminPosScreenState extends State<AdminPosScreen>
       backgroundColor: const Color(0xFFF2F3F5),
       appBar: AppBar(
         backgroundColor: const Color(0xFF412402),
-        foregroundColor: Colors.white,
+        foregroundColor: UellowColors.yellow,
+        iconTheme: const IconThemeData(color: UellowColors.yellow),
         title: Text(ar ? '🧾 سجل نقاط البيع' : '🧾 POS Log',
             style: const TextStyle(fontSize: 16,
-                fontWeight: FontWeight.w900)),
+                fontWeight: FontWeight.w900, color: UellowColors.yellow)),
         bottom: TabBar(
           controller: _tabs,
           indicatorColor: UellowColors.yellow,

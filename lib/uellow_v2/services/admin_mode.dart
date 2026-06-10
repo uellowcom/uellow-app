@@ -127,4 +127,41 @@ class AdminApi {
     }
     return (r['data'] as Map).cast<String, dynamic>();
   }
+
+  // ── v2.2.41 — eCommerce category picker + sales actions ──────────────
+  Future<List<Map<String, dynamic>>> categories() async {
+    final r = await UellowApi.instance
+        .getRaw('/api/mobile/v2/admin/categories', auth: true);
+    final list = ((r['data'] as Map?)?['categories'] as List?) ?? const [];
+    return list.map((e) => (e as Map).cast<String, dynamic>()).toList();
+  }
+
+  Future<Map<String, dynamic>> _post(String path,
+      [Map<String, dynamic>? body]) async {
+    final r = await UellowApi.instance
+        .postRaw(path, body: body ?? const {}, auth: true);
+    if (r['success'] != true) {
+      throw Exception((r['error'] ?? r['code'] ?? 'failed').toString());
+    }
+    return ((r['data'] as Map?) ?? const {}).cast<String, dynamic>();
+  }
+
+  Future<Map<String, dynamic>> orderApprove(int id) =>
+      _post('/api/mobile/v2/admin/order/$id/approve');
+
+  Future<Map<String, dynamic>> orderCancel(int id) =>
+      _post('/api/mobile/v2/admin/order/$id/cancel');
+
+  Future<Map<String, dynamic>> deliveryOptions() async {
+    final r = await UellowApi.instance
+        .getRaw('/api/mobile/v2/admin/delivery/options', auth: true);
+    return ((r['data'] as Map?) ?? const {}).cast<String, dynamic>();
+  }
+
+  Future<Map<String, dynamic>> assignDelivery(int id,
+          Map<String, dynamic> body) =>
+      _post('/api/mobile/v2/admin/order/$id/assign-delivery', body);
+
+  Future<Map<String, dynamic>> orderCreate(Map<String, dynamic> body) =>
+      _post('/api/mobile/v2/admin/order/create', body);
 }

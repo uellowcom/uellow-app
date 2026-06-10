@@ -122,7 +122,7 @@ class _Header extends StatelessWidget {
           Expanded(child: Column(
               crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(ar ? '🛡️ لوحة الإدارة' : '🛡️ Admin Console',
-                style: const TextStyle(color: Colors.white, fontSize: 19,
+                style: const TextStyle(color: UellowColors.yellow, fontSize: 19,
                     fontWeight: FontWeight.w900)),
             Text(ar ? 'المبيعات · البوس · المنتجات' : 'Sales · POS · Products',
                 style: TextStyle(color: Colors.white.withValues(alpha: .55),
@@ -238,8 +238,8 @@ class _CircleBtn extends StatelessWidget {
     onTap: onTap, borderRadius: BorderRadius.circular(999),
     child: Container(width: 36, height: 36,
       decoration: BoxDecoration(shape: BoxShape.circle,
-          color: Colors.white.withValues(alpha: .1)),
-      child: Icon(icon, color: Colors.white, size: 19)),
+          color: UellowColors.yellow.withValues(alpha: .15)),
+      child: Icon(icon, color: UellowColors.yellow, size: 19)),
   );
 }
 
