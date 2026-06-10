@@ -1,7 +1,7 @@
 name: uellow
 description: Uellow Marketplace — v2 mobile app
 publish_to: 'none'
-version: 2.2.39+239
+version: 2.2.40+240
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
@@ -32,6 +32,8 @@ dependencies:
   permission_handler: ^11.3.1
   # v2.0.39 — Custom nav icons (PNG/SVG upload)
   flutter_svg: ^2.0.10
+  # v2.2.40 — realistic brand glyphs for the social-media row (Account screen)
+  font_awesome_flutter: ^10.7.0
   # v2.0.83 — Reels tab (TikTok-style vertical video feed)
   video_player: ^2.9.2
   record: ^6.2.1

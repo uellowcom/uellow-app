@@ -869,7 +869,8 @@ class _BrandsRowState extends State<_BrandsRow> {
           itemBuilder: (_, i) {
             if (i >= brands.length.clamp(0, 14)) {
               return GestureDetector(
-                onTap: () => Navigator.pushNamed(context, '/brands'),
+                onTap: () => Navigator.pushNamed(context, '/brands',
+                    arguments: {'category_id': widget.categoryId}),
                 child: Container(
                   decoration: BoxDecoration(
                     color: UellowColors.yellowSoft,

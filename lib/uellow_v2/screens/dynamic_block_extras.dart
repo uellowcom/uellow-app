@@ -2651,11 +2651,14 @@ class _ExploreMoreBlockState extends State<ExploreMoreBlock> {
       return _buildSticky(context, t, ar, title, showLoadMoreBtn);
     }
 
+    // v2.2.40 — Explore More is a terminal infinite feed; reserve room for the
+    // bottom nav bar + iPhone home indicator so the Load-more button / end
+    // marker never hide under the nav bar on wide screens.
+    final navInset =
+        kBottomNavigationBarHeight + MediaQuery.of(context).padding.bottom;
     return Stack(children: [
       Padding(
-        // v2.1.36 — no bottom padding while the Load-more button shows;
-        // the button is the natural end of the block.
-        padding: EdgeInsets.fromLTRB(10, 4, 10, showLoadMoreBtn ? 0 : 10),
+        padding: EdgeInsets.fromLTRB(10, 4, 10, navInset + (showLoadMoreBtn ? 6 : 10)),
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           // ─── Header row ────────────────────────────────────────────────────
           if ((widget.p['show_title'] != false) && title.isNotEmpty)

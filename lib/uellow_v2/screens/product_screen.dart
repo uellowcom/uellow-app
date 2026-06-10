@@ -4385,16 +4385,19 @@ class _CtaBar extends StatelessWidget {
         (product.bundle!['listing_state'] ?? 'ok') == 'badge') {
       isOut = true;
     }
+    // v2.2.40 — explicit home-indicator inset + a comfortable gap so the
+    // buttons never hug the iPhone bottom bar (was SafeArea, which on some
+    // wide screens left them flush against the indicator).
+    final bottomInset = MediaQuery.of(context).padding.bottom;
     return Container(
-      padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+      padding: EdgeInsets.fromLTRB(10, 10, 10, 10 + bottomInset),
       decoration: const BoxDecoration(
         color: Colors.white,
         border: Border(top: BorderSide(color: UellowColors.border)),
         boxShadow: [BoxShadow(
             color: Color(0x14000000), blurRadius: 8, offset: Offset(0, -2))],
       ),
-      child: SafeArea(top: false,
-          child: isOut ? _notify(context, product) : _normal(context, product)),
+      child: isOut ? _notify(context, product) : _normal(context, product),
     );
   }
 
@@ -4515,12 +4518,12 @@ class _BeenaHelpButton extends StatelessWidget {
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
       child: SizedBox(
-        width: 44, height: 50,
+        width: 48, height: 56,
         child: Stack(clipBehavior: Clip.none, alignment: Alignment.center, children: [
           // Bee icon
           Container(
-            width: 38, height: 38,
-            margin: const EdgeInsets.only(top: 8),
+            width: 44, height: 44,
+            margin: const EdgeInsets.only(top: 10),
             decoration: const BoxDecoration(
               shape: BoxShape.circle,
               gradient: RadialGradient(
@@ -4580,7 +4583,7 @@ class _CtaButton extends StatelessWidget {
         onTap: onTap,
         borderRadius: side,
         child: Container(
-          height: 38,
+          height: 48,
           decoration: BoxDecoration(
             gradient: gradient,
             borderRadius: side,

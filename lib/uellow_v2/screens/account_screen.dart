@@ -8,6 +8,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -221,18 +222,20 @@ class _GuestSigninBanner extends StatelessWidget {
 /// opens the official Uellow page in the platform browser.
 class _SocialMediaSection extends StatelessWidget {
   const _SocialMediaSection();
+  // v2.2.40 — real brand glyphs (FontAwesome) instead of approximate Material
+  // icons, each in its official brand colour.
   static const _channels = [
-    (icon: Icons.facebook,           color: Color(0xFF1877F2),
+    (icon: FontAwesomeIcons.facebookF,  color: Color(0xFF1877F2),
         label: 'Facebook',  url: 'https://facebook.com/uellow'),
-    (icon: Icons.camera_alt_outlined, color: Color(0xFFE4405F),
+    (icon: FontAwesomeIcons.instagram,  color: Color(0xFFE4405F),
         label: 'Instagram', url: 'https://instagram.com/uellow'),
-    (icon: Icons.tag,                 color: Color(0xFF000000),
+    (icon: FontAwesomeIcons.tiktok,     color: Color(0xFF000000),
         label: 'TikTok',    url: 'https://tiktok.com/@uellow'),
-    (icon: Icons.alternate_email,     color: Color(0xFF1DA1F2),
+    (icon: FontAwesomeIcons.xTwitter,   color: Color(0xFF000000),
         label: 'X',         url: 'https://x.com/uellow'),
-    (icon: Icons.video_library_outlined, color: Color(0xFFFF0000),
+    (icon: FontAwesomeIcons.youtube,    color: Color(0xFFFF0000),
         label: 'YouTube',   url: 'https://youtube.com/@uellow'),
-    (icon: Icons.chat,                color: Color(0xFF25D366),
+    (icon: FontAwesomeIcons.whatsapp,   color: Color(0xFF25D366),
         label: 'WhatsApp',  url: 'https://wa.me/96560000000'),
   ];
   @override
@@ -283,7 +286,7 @@ class _Channel extends StatelessWidget {
             border: Border.all(color: color.withValues(alpha: 0.18)),
           ),
           alignment: Alignment.center,
-          child: Icon(icon, color: color, size: 20),
+          child: FaIcon(icon, color: color, size: 18),
         ),
         const SizedBox(height: 4),
         Text(label, style: const TextStyle(fontSize: 9.5,

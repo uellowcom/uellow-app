@@ -284,15 +284,20 @@ class _StdLayout extends StatelessWidget {
     final cmpFs    = compact ? 8.5  : 9.0;
     final discFs   = compact ? 8.0  : 8.5;
     final padBetweenPriceAndStats = compact ? 2.0 : 4.0;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _Image(product: product, hasDiscount: hasDiscount,
-            discountPct: discountPct, faved: faved, onFav: onFav,
-            hideFreeShip: hideFreeShip, display: display),
-        // v2.2.16 — info area wrapped so the builder can fix its height
-        // and colour (see cardInfoWrap).
-        cardInfoWrap(display, Padding(
+    // v2.2.40 — bounded cell → photo Expands to absorb slack (no dead gap);
+    // unbounded context → 1:1 square fallback so Expanded never asserts.
+    return LayoutBuilder(builder: (context, c) {
+      final bounded = c.hasBoundedHeight;
+      final photo = _Image(product: product, hasDiscount: hasDiscount,
+          discountPct: discountPct, faved: faved, onFav: onFav,
+          hideFreeShip: hideFreeShip, fill: bounded, display: display);
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          bounded ? Expanded(child: photo) : photo,
+          // v2.2.16 — info area wrapped so the builder can fix its height
+          // and colour (see cardInfoWrap).
+          cardInfoWrap(display, Padding(
           padding: EdgeInsets.fromLTRB(8, compact ? 4 : 6, 8, compact ? 6 : 8),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -409,8 +414,9 @@ class _StdLayout extends StatelessWidget {
             ],
           ),
         )),
-      ],
-    );
+        ],
+      );
+    });
   }
 }
 
@@ -708,6 +714,7 @@ class _Image extends StatelessWidget {
     this.hideFreeShip = false,
     this.extraBadges = const [],
     this.display = const CardDisplay(),
+    this.fill = false,
   });
   final CardDisplay display;
   final UellowProductCard product;
@@ -715,6 +722,10 @@ class _Image extends StatelessWidget {
   final int discountPct;
   final bool faved;
   final VoidCallback onFav;
+  // v2.2.40 — when true the photo fills the height it's given (e.g. inside an
+  // Expanded) instead of forcing a 1:1 square. This lets the card absorb any
+  // grid-cell slack into the photo so there's no dead space below the badges.
+  final bool fill;
   // v2.1.56 — suppress the free-shipping badge only (shop rows).
   final bool hideFreeShip;
   // v2.1.28 — clean image for the rich card: discount %, free-shipping
@@ -725,9 +736,7 @@ class _Image extends StatelessWidget {
   final List<Widget> extraBadges;
   @override
   Widget build(BuildContext context) {
-    return AspectRatio(
-      aspectRatio: 1,
-      child: Stack(
+    final content = Stack(
         fit: StackFit.expand,
         children: [
           ColoredBox(
@@ -854,8 +863,10 @@ class _Image extends StatelessWidget {
                     )),
           ),
         ],
-      ),
-    );
+      );
+    return fill
+        ? content
+        : AspectRatio(aspectRatio: 1, child: content);
   }
 }
 
@@ -1063,15 +1074,21 @@ class _RichLayout extends StatelessWidget {
     final badges = _allBadges(ar);
     final bottom = badges.take(3).toList();
     final overflow = badges.skip(3).toList();
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        // v2.1.28 — clean photo; overflow badges land on it bottom-end.
-        _Image(product: product, hasDiscount: hasDiscount,
-            discountPct: discountPct, faved: faved, onFav: onFav,
-            clean: true, extraBadges: overflow, display: display),
-        // v2.2.16 — info area wrapped for builder height/colour control.
-        cardInfoWrap(display, Padding(
+    // v2.2.40 — in a bounded-height cell (grids, rails) the photo Expands to
+    // absorb slack so there's no dead gap under the badges; in an unbounded
+    // context it falls back to a 1:1 square (Expanded would otherwise assert).
+    return LayoutBuilder(builder: (context, c) {
+      final bounded = c.hasBoundedHeight;
+      final photo = _Image(product: product, hasDiscount: hasDiscount,
+          discountPct: discountPct, faved: faved, onFav: onFav,
+          clean: true, fill: bounded, extraBadges: overflow, display: display);
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // v2.1.28 — clean photo; overflow badges land on it bottom-end.
+          bounded ? Expanded(child: photo) : photo,
+          // v2.2.16 — info area wrapped for builder height/colour control.
+          cardInfoWrap(display, Padding(
           padding: const EdgeInsets.fromLTRB(8, 4, 8, 6),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             // ── name (2 lines) — promo coin inline BEFORE the name.
@@ -1202,8 +1219,9 @@ class _RichLayout extends StatelessWidget {
             ])),
           ]),
         )),
-      ],
-    );
+        ],
+      );
+    });
   }
 }
 

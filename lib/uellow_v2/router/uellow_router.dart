@@ -133,7 +133,12 @@ class UellowRouter {
     Routes.compare:       (ctx) => const CompareScreen(),
     Routes.wallet:        (ctx) => const WalletScreen(),
     Routes.coupons:       (ctx) => const CouponsScreen(),
-    Routes.brands:        (ctx) => const BrandsScreen(),
+    Routes.brands:        (ctx) {
+      final a = ModalRoute.of(ctx)?.settings.arguments;
+      final cid = (a is Map && a['category_id'] is int)
+          ? a['category_id'] as int : 0;
+      return BrandsScreen(categoryId: cid);
+    },
     Routes.bestsellers:   (ctx) => const BestsellersScreen(),
     Routes.myReviews:     (ctx) => const MyReviewsScreen(),
     Routes.flash:         (ctx) => const FlashScreen(),

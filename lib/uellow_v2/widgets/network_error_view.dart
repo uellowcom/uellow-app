@@ -23,6 +23,14 @@ class NetworkErrorView extends StatefulWidget {
         s.contains('failed host lookup') || s.contains('timed out');
   }
 
+  /// True specifically when the server is just slow (a timeout), as opposed
+  /// to being fully offline — drives the calmer "Just a moment" state.
+  static bool isTimeout(Object? e) {
+    if (e is UellowApiException) return e.code == 'TIMEOUT';
+    final s = (e?.toString() ?? '').toLowerCase();
+    return s.contains('timed out') || s.contains('timeout');
+  }
+
   @override
   State<NetworkErrorView> createState() => _NetworkErrorViewState();
 }
@@ -42,17 +50,27 @@ class _NetworkErrorViewState extends State<NetworkErrorView>
   @override
   Widget build(BuildContext context) {
     final ar = UellowApi.instance.lang == 'ar';
-    final net = NetworkErrorView.isNetwork(widget.error);
-    final title = net
-        ? (ar ? 'لا يوجد اتصال' : 'No connection')
-        : (ar ? 'حدث خطأ ما' : 'Something went wrong');
-    final body = net
+    // v2.2.40 — a slow response (TIMEOUT) is NOT "no connection". Give it a
+    // calm, reassuring state of its own so we don't alarm the customer when
+    // the app is merely a little slow.
+    final timeout = NetworkErrorView.isTimeout(widget.error);
+    final net = !timeout && NetworkErrorView.isNetwork(widget.error);
+    final title = timeout
+        ? (ar ? 'لحظة من فضلك' : 'Just a moment')
+        : net
+            ? (ar ? 'لا يوجد اتصال' : 'No connection')
+            : (ar ? 'حدث خطأ ما' : 'Something went wrong');
+    final body = timeout
         ? (ar
-            ? 'تعذّر الوصول للإنترنت. تأكد من اتصالك وحاول مرة أخرى.'
-            : "We can't reach the internet right now. Check your connection and try again.")
-        : (ar
-            ? 'واجهتنا مشكلة مؤقتة. حاول مرة أخرى.'
-            : 'We hit a temporary issue. Please try again.');
+            ? 'الاتصال أبطأ قليلاً من المعتاد — جارٍ التحميل. يمكنك التحديث للمحاولة مجدداً.'
+            : 'Things are a little slower than usual — still loading. You can refresh to try again.')
+        : net
+            ? (ar
+                ? 'تعذّر الوصول للإنترنت. تأكد من اتصالك وحاول مرة أخرى.'
+                : "We can't reach the internet right now. Check your connection and try again.")
+            : (ar
+                ? 'واجهتنا مشكلة مؤقتة. حاول مرة أخرى.'
+                : 'We hit a temporary issue. Please try again.');
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(28),
@@ -89,8 +107,11 @@ class _NetworkErrorViewState extends State<NetworkErrorView>
                     child: Transform.translate(
                       offset: Offset(0, -2 + t * 4),
                       child: Icon(
-                        net ? Icons.wifi_off_rounded
-                            : Icons.error_outline_rounded,
+                        timeout
+                            ? Icons.hourglass_top_rounded
+                            : net
+                                ? Icons.wifi_off_rounded
+                                : Icons.error_outline_rounded,
                         size: widget.compact ? 30 : 40,
                         color: UellowColors.darkBrown),
                     ),
@@ -112,7 +133,8 @@ class _NetworkErrorViewState extends State<NetworkErrorView>
             ElevatedButton.icon(
               onPressed: widget.onRetry,
               icon: const Icon(Icons.refresh_rounded, size: 18),
-              label: Text(ar ? 'إعادة المحاولة' : 'Try again',
+              label: Text(timeout ? (ar ? 'تحديث' : 'Refresh')
+                      : (ar ? 'إعادة المحاولة' : 'Try again'),
                   style: const TextStyle(fontWeight: FontWeight.w900)),
               style: ElevatedButton.styleFrom(
                 backgroundColor: UellowColors.yellow,

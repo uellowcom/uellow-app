@@ -12,7 +12,10 @@ import '../../api/uellow_models.dart';
 import '../theme/uellow_theme.dart';
 
 class BrandsScreen extends StatefulWidget {
-  const BrandsScreen({super.key});
+  const BrandsScreen({super.key, this.categoryId = 0});
+  // v2.2.40 — when opened from a category's "More" brands tile, preselect
+  // that category so it shows only the brands of the section the user is in.
+  final int categoryId;
   @override
   State<BrandsScreen> createState() => _BrandsScreenState();
 }
@@ -20,7 +23,7 @@ class BrandsScreen extends StatefulWidget {
 class _BrandsScreenState extends State<BrandsScreen> {
   List<Map<String, dynamic>>? _brands;
   List<UellowCategory> _roots = const [];
-  int _catId = 0;                  // 0 = all
+  late int _catId = widget.categoryId;   // 0 = all
   final _q = TextEditingController();
 
   @override

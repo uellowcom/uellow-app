@@ -315,8 +315,8 @@ class UellowApi {
       throw UellowApiException(
         code: 'TIMEOUT',
         message: lang == 'ar'
-            ? '⏳ الاتصال يأخذ وقتاً أطول من المعتاد — حاول مرة أخرى أو اسحب الشاشة للتحديث'
-            : '⏳ Taking longer than usual — please retry or pull to refresh',
+            ? 'الاتصال أبطأ قليلاً من المعتاد — يمكنك التحديث للمحاولة مجدداً'
+            : 'A little slower than usual — you can refresh to try again',
         statusCode: 0,
       );
     } on HttpException {
