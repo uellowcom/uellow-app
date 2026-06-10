@@ -101,9 +101,21 @@ class DeepLinkService {
     if (segs[0] == 'wishlist') { nav.pushNamed(Routes.wishlist); return; }
     // /loyalty
     if (segs[0] == 'loyalty') { nav.pushNamed(Routes.loyalty); return; }
-    // Fallback — open as in-app webview so links never dead-end.
+    // /app — the public download landing page. A user opening this already HAS
+    // the app, and the page redirects to market://, so loading it in a webview
+    // dead-ends on an error. Just go home. (Same for the bare site root.)
+    if (segs[0] == 'app') {
+      nav.pushNamedAndRemoveUntil(Routes.home, (r) => false);
+      return;
+    }
+    // Fallback — open as in-app webview so content links never dead-end.
+    // Skip schemes a webview can't render (store/app deep links).
     final url = uri.toString();
-    nav.pushNamed(Routes.webview, arguments: {'url': url, 'title': ''});
+    if (uri.scheme == 'http' || uri.scheme == 'https') {
+      nav.pushNamed(Routes.webview, arguments: {'url': url, 'title': ''});
+    } else {
+      nav.pushNamedAndRemoveUntil(Routes.home, (r) => false);
+    }
   }
 
   // Pull the trailing integer out of slugs like "smart-watch-1786".
