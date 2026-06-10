@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -16,7 +17,10 @@ final GlobalKey<NavigatorState> rootNavigatorKey = GlobalKey<NavigatorState>();
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await UellowApi.init();
-  UellowApi.instance.setAppMeta(appVersion: kAppVersion, platform: 'android');
+  // v2.2.43 — detect the real platform so the update gate sends the right
+  // store: iOS users were sent to Google Play because this was hard-coded.
+  UellowApi.instance.setAppMeta(
+      appVersion: kAppVersion, platform: Platform.isIOS ? 'ios' : 'android');
   // Hydrate language from prefs before first paint so Directionality is right.
   try {
     final prefs = await SharedPreferences.getInstance();
