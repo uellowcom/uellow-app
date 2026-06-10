@@ -1,0 +1,23 @@
+# Huawei AppGallery publishing (used by the codemagic.yaml `huawei-release`
+# workflow). The AAB is built by Flutter beforehand; this lane only uploads it
+# to AppGallery via the Connect Publishing API (is_aab: true) and stops short of
+# auto-submitting so the store listing can be completed/reviewed first.
+default_platform(:android)
+
+platform :android do
+  desc "Upload the release AAB to Huawei AppGallery"
+  lane :huawei_upload do
+    huawei_appgallery_connect(
+      client_id:     ENV["HUAWEI_CLIENT_ID"],
+      client_secret: ENV["HUAWEI_CLIENT_SECRET"],
+      app_id:        ENV["HUAWEI_APP_ID"],
+      # Flutter outputs here (run from the android/ dir → one level up):
+      apk_path: "../build/app/outputs/bundle/release/app-release.aab",
+      is_aab: true,
+      # false = just upload the binary; submit for review manually from the
+      # console after the listing (icon/screenshots/description/privacy) is done.
+      submit_for_review: false,
+      delay_before_submit_for_review: 20
+    )
+  end
+end
