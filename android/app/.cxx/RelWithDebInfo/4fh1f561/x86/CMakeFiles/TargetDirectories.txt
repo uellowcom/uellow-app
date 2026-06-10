@@ -1,0 +1,2 @@
+/root/uellow_app/android/app/.cxx/RelWithDebInfo/4fh1f561/x86/CMakeFiles/edit_cache.dir
+/root/uellow_app/android/app/.cxx/RelWithDebInfo/4fh1f561/x86/CMakeFiles/rebuild_cache.dir

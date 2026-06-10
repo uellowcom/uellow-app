@@ -1,7 +1,7 @@
 name: uellow
 description: Uellow Marketplace — v2 mobile app
 publish_to: 'none'
-version: 2.2.44+244
+version: 2.2.45+245
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
@@ -16,6 +16,8 @@ dependencies:
   # v2.1.64 — system-tray push notifications (FCM)
   firebase_core: ^3.8.0
   firebase_messaging: ^15.1.5
+  # phone OTP via Firebase Auth (Firebase sends the SMS — no gateway)
+  firebase_auth: ^5.3.4
   http: ^1.2.0
   cached_network_image: ^3.3.1
   shared_preferences: ^2.2.2

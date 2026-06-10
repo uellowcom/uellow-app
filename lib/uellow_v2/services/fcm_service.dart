@@ -30,7 +30,7 @@ class FcmService {
   Future<void> init() async {
     if (_inited) return;
     try {
-      await Firebase.initializeApp();
+      if (Firebase.apps.isEmpty) await Firebase.initializeApp();
       FirebaseMessaging.onBackgroundMessage(_onBackgroundMessage);
       final fm = FirebaseMessaging.instance;
       await fm.requestPermission(alert: true, badge: true, sound: true);

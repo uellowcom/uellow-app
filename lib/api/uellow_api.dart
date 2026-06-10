@@ -472,6 +472,19 @@ class _AuthApi {
     return _saveAuth(res);
   }
 
+  // Firebase Phone Auth: the device verifies the phone with Firebase (which
+  // sends the SMS itself), then we exchange the Firebase ID token for our
+  // bearer token. Server verifies the token against Google's public keys.
+  Future<UellowAuthResult> firebaseSignIn(String idToken,
+      {String? phone, String? name}) async {
+    final res = await _c._post('/api/mobile/v2/auth/firebase', body: {
+      'id_token': idToken,
+      if (phone != null && phone.isNotEmpty) 'phone': phone,
+      if (name != null && name.isNotEmpty) 'name': name,
+    });
+    return _saveAuth(res);
+  }
+
   // v2.1.16 — email OTP (no SMS provider needed): request a 6-digit
   // code, then verify it. Verify returns the same auth payload as login.
   Future<String> otpEmailRequest(String emailOrPhone) async {

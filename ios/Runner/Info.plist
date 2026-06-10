@@ -49,6 +49,11 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<!-- Google Sign-In: the iOS OAuth client id (from google-services.json,
+	     client_type 2 / bundle com.uellow.app). Without GIDClientID the
+	     google_sign_in plugin crashes on iOS. -->
+	<key>GIDClientID</key>
+	<string>50540776966-48kgig4ojqik90lmrc42uv0n7n9b06ar.apps.googleusercontent.com</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
@@ -57,6 +62,15 @@
 			<key>CFBundleURLSchemes</key>
 			<array>
 				<string>uellow</string>
+			</array>
+		</dict>
+		<!-- Google OAuth callback = the REVERSED iOS client id. -->
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>google-signin</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.googleusercontent.apps.50540776966-48kgig4ojqik90lmrc42uv0n7n9b06ar</string>
 			</array>
 		</dict>
 	</array>

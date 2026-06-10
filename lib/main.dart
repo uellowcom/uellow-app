@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uellow/api/uellow_api.dart';
@@ -16,6 +17,12 @@ final GlobalKey<NavigatorState> rootNavigatorKey = GlobalKey<NavigatorState>();
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Initialise Firebase up-front so phone-OTP (Firebase Auth) and FCM are
+  // both ready before any login attempt. Idempotent + non-fatal on iOS if
+  // GoogleService-Info.plist is missing.
+  try {
+    if (Firebase.apps.isEmpty) await Firebase.initializeApp();
+  } catch (_) {}
   await UellowApi.init();
   // v2.2.43 — detect the real platform so the update gate sends the right
   // store: iOS users were sent to Google Play because this was hard-coded.

@@ -8,6 +8,7 @@ import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
 
 import '../services/fcm_service.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 
@@ -15,6 +16,7 @@ import '../../api/uellow_api.dart';
 import '../theme/uellow_l10n.dart';
 import '../theme/uellow_theme.dart';
 import '../widgets/uellow_logo.dart';
+import 'phone_login_screen.dart';
 
 class AuthScreen extends StatefulWidget {
   const AuthScreen({super.key, this.asSheet = false});
@@ -235,8 +237,13 @@ class _AuthScreenState extends State<AuthScreen> {
         const SizedBox(height: 8),
         SizedBox(width: double.infinity, child: _socialBtn(
             UellowApi.instance.lang.toLowerCase().startsWith('ar')
-                ? 'رمز لمرة واحدة (OTP)' : 'One-time code (OTP)',
-            Icons.password_outlined, UellowColors.darkBrown,
+                ? 'الدخول برقم الهاتف' : 'Continue with phone',
+            Icons.smartphone, UellowColors.darkBrown, _phoneFlow)),
+        const SizedBox(height: 8),
+        SizedBox(width: double.infinity, child: _socialBtn(
+            UellowApi.instance.lang.toLowerCase().startsWith('ar')
+                ? 'رمز عبر البريد الإلكتروني' : 'Email one-time code',
+            Icons.alternate_email, UellowColors.darkBrown,
             _otpFlow)),
         const SizedBox(height: 16),
         Text(T.t('account.terms'),
@@ -333,6 +340,18 @@ class _AuthScreenState extends State<AuthScreen> {
     );
   }
 
+  // Dedicated phone sign-in screen (country picker + flag → Firebase OTP).
+  Future<void> _phoneFlow() async {
+    final okSignedIn = await showPhoneLogin(context);
+    if (okSignedIn && mounted) {
+      if (widget.asSheet) {
+        Navigator.of(context).pop(true);
+      } else {
+        Navigator.of(context).pushReplacementNamed('/home');
+      }
+    }
+  }
+
   // v2.1.16 — email OTP sign-in: ask for email (or account phone), send a
   // 6-digit code, verify, and complete exactly like a password login.
   Future<void> _otpFlow() async {
@@ -340,6 +359,14 @@ class _AuthScreenState extends State<AuthScreen> {
     final target = TextEditingController(text: _email.text);
     final codeCtl = TextEditingController();
     bool sent = false; bool busy = false; String? err; String maskedTo = '';
+    String verificationId = '';
+    bool isPhone(String t) => t.isNotEmpty && !t.contains('@');
+    String normPhone(String t) {
+      var d = t.replaceAll(RegExp(r'[^0-9]'), '');
+      if (d.startsWith('00')) d = d.substring(2);
+      if (d.length == 8) d = '965$d'; // Kuwait default
+      return '+$d';
+    }
     final done = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
@@ -347,24 +374,84 @@ class _AuthScreenState extends State<AuthScreen> {
       shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (ctx) => StatefulBuilder(builder: (ctx, setS) {
+        // Phone → Firebase Phone Auth (Firebase sends the SMS itself, no
+        // gateway needed). Email → Odoo email OTP (unchanged).
+        Future<void> _firebaseLogin(String idToken, String phone) async {
+          await UellowApi.instance.auth.firebaseSignIn(idToken, phone: phone);
+          unawaited(FcmService.instance.register());
+          if (ctx.mounted) Navigator.of(ctx).pop(true);
+        }
         Future<void> send() async {
           setS(() { busy = true; err = null; });
+          final t = target.text.trim();
           try {
-            maskedTo = await UellowApi.instance.auth
-                .otpSend(target.text.trim());
-            setS(() { sent = true; busy = false; });
+            if (isPhone(t)) {
+              final phone = normPhone(t);
+              await FirebaseAuth.instance.verifyPhoneNumber(
+                phoneNumber: phone,
+                timeout: const Duration(seconds: 60),
+                verificationCompleted: (cred) async {
+                  // Android may auto-retrieve the SMS → sign in directly.
+                  try {
+                    final uc = await FirebaseAuth.instance
+                        .signInWithCredential(cred);
+                    final idt = await uc.user?.getIdToken() ?? '';
+                    if (idt.isNotEmpty) await _firebaseLogin(idt, phone);
+                  } catch (_) {}
+                },
+                verificationFailed: (e) {
+                  setS(() { busy = false; err = ar
+                      ? 'تعذر إرسال الرمز: ${e.message ?? ''}'
+                      : 'Could not send code: ${e.message ?? ''}'; });
+                },
+                codeSent: (vid, _) {
+                  setS(() {
+                    verificationId = vid; sent = true; busy = false;
+                    maskedTo = phone;
+                  });
+                },
+                codeAutoRetrievalTimeout: (vid) { verificationId = vid; },
+              );
+            } else {
+              maskedTo = await UellowApi.instance.auth.otpSend(t);
+              setS(() { sent = true; busy = false; });
+            }
           } on UellowApiException catch (e) {
             setS(() { err = e.message; busy = false; });
+          } catch (e) {
+            setS(() { err = ar ? 'تعذر إرسال الرمز' : 'Could not send the code';
+                busy = false; });
           }
         }
         Future<void> verify() async {
           setS(() { busy = true; err = null; });
+          final t = target.text.trim();
           try {
-            await UellowApi.instance.auth.otpCheck(
-                target: target.text.trim(), code: codeCtl.text.trim());
-            if (ctx.mounted) Navigator.of(ctx).pop(true);
+            if (isPhone(t)) {
+              final cred = PhoneAuthProvider.credential(
+                  verificationId: verificationId, smsCode: codeCtl.text.trim());
+              final uc = await FirebaseAuth.instance
+                  .signInWithCredential(cred);
+              final idt = await uc.user?.getIdToken() ?? '';
+              if (idt.isEmpty) {
+                throw UellowApiException(code: 'NO_TOKEN',
+                    message: ar ? 'تعذر الحصول على التوكن' : 'No token',
+                    statusCode: 400);
+              }
+              await _firebaseLogin(idt, normPhone(t));
+            } else {
+              await UellowApi.instance.auth.otpCheck(
+                  target: t, code: codeCtl.text.trim());
+              if (ctx.mounted) Navigator.of(ctx).pop(true);
+            }
+          } on FirebaseAuthException catch (e) {
+            setS(() { err = ar ? 'رمز غير صحيح أو منتهي'
+                : (e.message ?? 'Invalid code'); busy = false; });
           } on UellowApiException catch (e) {
             setS(() { err = e.message; busy = false; });
+          } catch (e) {
+            setS(() { err = ar ? 'فشل التأكيد' : 'Verification failed';
+                busy = false; });
           }
         }
         return Padding(
