@@ -57,6 +57,15 @@ workflows:
             --certificate-key=@file:/tmp/cm_cert_key.pem \
             --create \
             --verbose
+          # 2b) بروفايل توقيع منفصل للـWidget Extension (Live Activity)
+          #     bundle id لازم يكون بادئته = bundle id التطبيق المضيف.
+          #     --create بينشئ الـApp ID لو مش موجود (المفتاح دوره Admin).
+          app-store-connect fetch-signing-files "${BUNDLE_ID}.LiveActivity" \
+            --type IOS_APP_STORE \
+            --platform IOS \
+            --certificate-key=@file:/tmp/cm_cert_key.pem \
+            --create \
+            --verbose
           keychain add-certificates
           xcode-project use-profiles --verbose
           echo "================ DIAGNOSTICS ================"

@@ -8,21 +8,13 @@ import ActivityKit
 // the live order status in the Lock Screen + Dynamic Island.
 //
 // The Live Activity itself is declared in a separate Widget Extension
-// target (UellowOrderActivity.swift). When the channel receives an
-// 'update' call before the activity exists, it requests one; subsequent
-// calls update the current one. The activity ends on the explicit
-// 'end' call (or after 8 hours, per the system policy).
+// target (UellowLiveActivity/UellowLiveActivity.swift). The shared
+// UellowOrderAttributes type lives in Runner/UellowOrderAttributes.swift
+// (compiled into both targets). When the channel receives an 'update'
+// call before the activity exists, it requests one; subsequent calls
+// update the current one. The activity ends on the explicit 'end' call
+// (or after 8 hours, per the system policy).
 // =============================================================================
-
-@available(iOS 16.1, *)
-struct UellowOrderAttributes: ActivityAttributes {
-    public struct ContentState: Codable, Hashable {
-        var title: String
-        var body: String
-        var progress: Double  // 0..1
-    }
-    var orderId: Int
-}
 
 @main
 @objc class AppDelegate: FlutterAppDelegate {

@@ -1,31 +1,17 @@
 // =============================================================================
 // UellowLiveActivity — the Widget Extension that renders the Live
-// Activity on Lock Screen + Dynamic Island. Mirrors the structure
-// defined in Runner/AppDelegate.swift (UellowOrderAttributes).
+// Activity on Lock Screen + Dynamic Island. The shared
+// UellowOrderAttributes type is defined in Runner/UellowOrderAttributes.swift
+// and compiled into this target too (see project.pbxproj).
 //
-// To enable in Xcode:
-//   1. File → New → Target → Widget Extension → "Uellow Live Activity"
-//      ☑ Include Live Activity. Bundle ID: com.uellow.app.liveactivity
-//   2. Set Deployment Target = 16.1.
-//   3. Copy this file into that target.
-//   4. Ensure the Runner target has NSSupportsLiveActivities = true
-//      in Info.plist (already set).
+// This target's deployment target is iOS 16.1, so no @available guards
+// are needed here — ActivityKit/WidgetKit APIs are unconditionally
+// available.
 // =============================================================================
 import ActivityKit
 import SwiftUI
 import WidgetKit
 
-@available(iOS 16.1, *)
-struct UellowOrderAttributes: ActivityAttributes {
-    public struct ContentState: Codable, Hashable {
-        var title: String
-        var body: String
-        var progress: Double  // 0..1
-    }
-    var orderId: Int
-}
-
-@available(iOS 16.1, *)
 struct UellowOrderActivityWidget: Widget {
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: UellowOrderAttributes.self) { context in
@@ -76,5 +62,13 @@ struct UellowOrderActivityWidget: Widget {
             }
             .keylineTint(Color.yellow)
         }
+    }
+}
+
+// WidgetKit entry point for the extension.
+@main
+struct UellowWidgetsBundle: WidgetBundle {
+    var body: some Widget {
+        UellowOrderActivityWidget()
     }
 }
