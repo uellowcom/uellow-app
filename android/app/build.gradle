@@ -31,12 +31,11 @@ android {
         // GitHub APKs and the Play listing are now the SAME app.
         // (namespace stays com.uellow.uellow — internal code path only.)
         applicationId = "com.uellow.app"
-        // v2.2.17 — broadest device support: API 21 (Android 5.0, 2014) is
-        // Flutter's floor — covers effectively every phone still in use.
-        // record_android declares minSdk 23; we override it in the manifest
-        // and the Beena voice code already fails soft (try/catch + snack)
-        // on the handful of 5.x/6.0 devices where recording can't start.
-        minSdk = 21
+        // v2.2.41 — minSdk 23 (Android 6.0): required by androidx.camera
+        // (camera-core 1.5.0 via mobile_scanner, the admin barcode scanner)
+        // and record_android, both of which declare minSdk 23. API 21/22
+        // (Android 5.x, 2014-15) is <1% of devices, so this is a safe floor.
+        minSdk = 23
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
