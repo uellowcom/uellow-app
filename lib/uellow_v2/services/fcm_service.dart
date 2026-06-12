@@ -8,6 +8,7 @@
 // onto mobile.session + res.partner so the server can target customers.
 // =============================================================================
 import 'dart:async';
+import 'dart:io' show Platform;
 
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
@@ -43,8 +44,19 @@ class FcmService {
         }
       });
       fm.onTokenRefresh.listen((t) => _register(t));
+      // iOS: the FCM token is only mintable once the APNs token has arrived.
+      // Fetch it first (short retry) and forward it so the backend can store
+      // the real APNs token alongside the FCM one.
+      String? apns;
+      if (Platform.isIOS) {
+        for (var i = 0; i < 5; i++) {
+          apns = await fm.getAPNSToken();
+          if (apns != null && apns.isNotEmpty) break;
+          await Future.delayed(const Duration(milliseconds: 600));
+        }
+      }
       final token = await fm.getToken();
-      if (token != null && token.isNotEmpty) await _register(token);
+      if (token != null && token.isNotEmpty) await _register(token, apns: apns);
       _inited = true;
     } catch (_) {
       // Devices without Google services (e.g. Huawei HMS) land here —
@@ -56,12 +68,14 @@ class FcmService {
   /// the token to the customer).
   Future<void> register() async {
     try {
-      final t = await FirebaseMessaging.instance.getToken();
-      if (t != null && t.isNotEmpty) await _register(t);
+      final fm = FirebaseMessaging.instance;
+      final apns = Platform.isIOS ? await fm.getAPNSToken() : null;
+      final t = await fm.getToken();
+      if (t != null && t.isNotEmpty) await _register(t, apns: apns);
     } catch (_) {}
   }
 
-  Future<void> _register(String token) async {
+  Future<void> _register(String token, {String? apns}) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       var deviceId = prefs.getString('uellow_device_id_v1') ?? '';
@@ -73,7 +87,8 @@ class FcmService {
       await UellowApi.instance.notifications.registerDevice(
         deviceId: deviceId,
         pushToken: token,
-        platform: 'android',
+        platform: Platform.isIOS ? 'ios' : 'android',
+        apnsToken: Platform.isIOS ? apns : null,
       );
     } catch (_) {}
   }

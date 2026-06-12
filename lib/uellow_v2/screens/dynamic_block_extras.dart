@@ -363,6 +363,13 @@ class DynSectionHeader extends StatelessWidget {
               Navigator.pushNamed(context, '/free-shipping');
             } else if (src == 'bundles') {
               Navigator.pushNamed(context, '/bundles');
+            } else if (src == 'installments') {
+              // v2.2.46 — all products eligible for Taly installments.
+              Navigator.pushNamed(context, '/collection', arguments: {
+                'filters': const {'installments': '1', 'sort': 'newest'},
+                'title': title.isNotEmpty
+                    ? title : (ar ? 'تقسيط بدون فوائد' : 'Pay in installments'),
+              });
             } else if (cid > 0) {
               Navigator.pushNamed(context, '/collection',
                   arguments: {'category_id': cid, 'title': title});
@@ -2745,11 +2752,10 @@ class _ExploreMoreBlockState extends State<ExploreMoreBlock> {
           if (_items.isEmpty && _loading && _showSkeleton)
             _SkeletonGrid(columns: _columns)
           else if (_items.isEmpty && !_loading)
-            Padding(
-              padding: const EdgeInsets.all(20),
-              child: Center(child: Text(ar ? 'لا توجد منتجات' : 'No products yet',
-                  style: TextStyle(color: t.dark.withOpacity(0.6)))),
-            )
+            // v2.2.46 — collapse silently instead of showing a "no products"
+            // label that reads as broken. The backend explore feed now falls
+            // back to the base catalogue, so a true empty = transient/network.
+            const SizedBox.shrink()
           else
             _renderGrid(),
           // ─── Load more / spinner / end marker ──────────────────────────────

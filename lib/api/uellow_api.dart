@@ -647,7 +647,7 @@ class _ProductsApi {
     int page = 1, int perPage = 20,
     int? categoryId, String? search, String sort = 'newest',
     int? brandId, int? tagId, double? minPrice, double? maxPrice,
-    bool? onSale,
+    bool? onSale, bool? installments,
   }) async {
     final res = await _c._get(EP.products, query: {
       'page': page, 'per_page': perPage, 'sort': sort,
@@ -658,6 +658,7 @@ class _ProductsApi {
       if (minPrice   != null) 'min_price': minPrice,
       if (maxPrice   != null) 'max_price': maxPrice,
       if (onSale == true) 'on_sale': '1',
+      if (installments == true) 'installments': '1',
     });
     return UellowPage.fromJson(
       res,
@@ -1321,12 +1322,14 @@ class _NotificationsApi {
     required String deviceId,
     required String pushToken,
     String? platform, String? deviceName, String? osVersion, String? appVersion,
+    String? apnsToken,
   }) async {
     await _c._post(EP.notificationsRegister, body: {
       'device_id': deviceId,
       'push_token': pushToken,
       // Live app language → server localizes push notifications to it.
       'lang': _c.lang,
+      if (apnsToken   != null) 'apns_token': apnsToken,
       if (platform    != null) 'platform': platform,
       if (deviceName  != null) 'device_name': deviceName,
       if (osVersion   != null) 'os_version': osVersion,

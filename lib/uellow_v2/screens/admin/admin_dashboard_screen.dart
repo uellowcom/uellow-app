@@ -59,6 +59,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 setState(() => _future = AdminApi.instance.dashboard()),
             child: CustomScrollView(slivers: [
               SliverToBoxAdapter(child: _Header(d: d, ar: ar)),
+              // ── Live now (who's on the app right now) ────────────────
+              SliverToBoxAdapter(child: _LiveCard(
+                  live: (d['live'] as Map?)?.cast<String, dynamic>()
+                      ?? const {}, ar: ar)),
               // ── Management (the "menu") ──────────────────────────────
               SliverToBoxAdapter(child: _SectionTitle(
                   icon: Icons.grid_view_rounded,
@@ -241,6 +245,70 @@ class _CircleBtn extends StatelessWidget {
           color: UellowColors.yellow.withValues(alpha: .15)),
       child: Icon(icon, color: UellowColors.yellow, size: 19)),
   );
+}
+
+// ─── live-now snapshot (online users + reach) ───────────────────────────
+class _LiveCard extends StatelessWidget {
+  const _LiveCard({required this.live, required this.ar});
+  final Map<String, dynamic> live;
+  final bool ar;
+  int _n(String k) => (live[k] as num?)?.toInt() ?? 0;
+  @override
+  Widget build(BuildContext context) {
+    final online = _n('online_now');
+    final stats = <(IconData, int, String, Color)>[
+      (Icons.bolt_rounded, _n('active_30m'),
+          ar ? 'نشط (٣٠ د)' : 'Active 30m', const Color(0xFF2563EB)),
+      (Icons.today_rounded, _n('active_today'),
+          ar ? 'نشط اليوم' : 'Active today', const Color(0xFF7C3AED)),
+      (Icons.person_add_alt_1_rounded, _n('new_customers_today'),
+          ar ? 'عملاء جدد' : 'New today', const Color(0xFF059669)),
+      (Icons.shopping_cart_rounded, _n('carts_active'),
+          ar ? 'سلات نشطة' : 'Live carts', const Color(0xFFEA580C)),
+      (Icons.notifications_active_rounded, _n('push_reach'),
+          ar ? 'وصول الإشعارات' : 'Push reach', const Color(0xFFDB2777)),
+    ];
+    return Container(
+      margin: const EdgeInsets.fromLTRB(14, 14, 14, 0),
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+      decoration: BoxDecoration(color: Colors.white,
+          borderRadius: BorderRadius.circular(18),
+          boxShadow: const [BoxShadow(color: Color(0x12000000),
+              blurRadius: 10, offset: Offset(0, 4))]),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Container(width: 9, height: 9, decoration: const BoxDecoration(
+              shape: BoxShape.circle, color: Color(0xFF10B981))),
+          const SizedBox(width: 7),
+          Text(ar ? 'الآن على التطبيق' : 'Live on the app', style: UT.h3),
+          const Spacer(),
+          Text('$online ${ar ? 'متصل' : 'online'}',
+              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w900,
+                  color: Color(0xFF10B981))),
+        ]),
+        const SizedBox(height: 12),
+        Wrap(spacing: 8, runSpacing: 8, children: [
+          for (final s in stats) Container(
+            width: (MediaQuery.of(context).size.width - 28 - 32 - 16) / 3,
+            padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+            decoration: BoxDecoration(
+              color: s.$4.withValues(alpha: .07),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Column(children: [
+              Icon(s.$1, size: 17, color: s.$4),
+              const SizedBox(height: 4),
+              Text('${s.$2}', style: TextStyle(fontSize: 16,
+                  fontWeight: FontWeight.w900, color: s.$4)),
+              Text(s.$3, textAlign: TextAlign.center,
+                  style: const TextStyle(fontSize: 9,
+                      fontWeight: FontWeight.w700, color: UellowColors.muted)),
+            ]),
+          ),
+        ]),
+      ]),
+    );
+  }
 }
 
 // ─── section title ───────────────────────────────────────────────────────
