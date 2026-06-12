@@ -100,10 +100,10 @@ workflows:
     publishing:
       app_store_connect:
         auth: integration
-        # يرفع البناء على App Store Connect (متاح للاختبار الداخلي + جاهز للنشر).
-        # false = ميبعتش لمراجعة TestFlight الخارجي (اللي بتطلب معلومات تواصل).
-        # خلّيه true بعد ما تملأ test-info لو عايز اختبار خارجي تلقائي.
-        submit_to_testflight: false
+        # يرفع البناء على App Store Connect ويدفعه تلقائياً لـ TestFlight.
+        # الاختبار الداخلي (Internal Testing) لا يحتاج مراجعة Apple → يظهر فور المعالجة.
+        # ملاحظة: الاختبار الخارجي (External groups) يحتاج Beta App Review + معلومات تواصل.
+        submit_to_testflight: true
         submit_to_app_store: false          # خليه true عشان يروح لمراجعة App Store مباشرة
 
   # ───────────────────────── Android (Huawei AppGallery / مباشر) ─────────────────────────
