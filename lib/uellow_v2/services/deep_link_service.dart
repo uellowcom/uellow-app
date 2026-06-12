@@ -48,20 +48,51 @@ class DeepLinkService {
     final nav = _navKey?.currentState;
     if (nav == null) return;
     final segs = uri.pathSegments.where((s) => s.isNotEmpty).toList();
+    // For custom schemes (uellow://shop/slug-123) the first token lands in the
+    // URI *host*, not pathSegments. Fold it back in so https and scheme links
+    // route through the exact same rules.
+    if (uri.scheme != 'http' && uri.scheme != 'https' &&
+        (uri.host).isNotEmpty) {
+      segs.insert(0, uri.host);
+    }
     if (segs.isEmpty) {
       nav.pushNamedAndRemoveUntil(Routes.home, (r) => false);
       return;
     }
-    // /product/<slug-or-slug-id>
-    if (segs.length >= 2 && (segs[0] == 'product' || segs[0] == 'shop' && segs.length >= 3 && segs[1] == 'product')) {
-      final tailIdx = segs[0] == 'product' ? 1 : 2;
-      final id = _trailingId(segs[tailIdx]);
+    // Odoo eCommerce categories: /shop/category/<slug>-<id>
+    // (checked BEFORE the product rule so a category isn't mistaken for a
+    // product by its trailing id).
+    if (segs.length >= 3 && segs[0] == 'shop' && segs[1] == 'category') {
+      final id = _trailingId(segs[2]);
       if (id != null) {
-        nav.pushNamed(Routes.product, arguments: {'id': id});
+        nav.pushNamed(Routes.collection, arguments: {'category_id': id});
         return;
       }
     }
-    // /category/<id>
+    // Product URLs:
+    //   /product/<slug>-<id>            (custom / uellow:// scheme)
+    //   /shop/product/<slug>-<id>       (legacy)
+    //   /shop/<slug>-<id>               (Odoo 18 website_sale default) ← live
+    // The last form collides with non-product /shop/* pages (cart, wishlist,
+    // checkout…), so guard with a reserved-word skip list.
+    const shopReserved = {
+      'cart', 'wishlist', 'checkout', 'address', 'payment', 'confirmation',
+      'category', 'product', 'compare', 'pricelist', 'extra_info',
+    };
+    int? productId;
+    if (segs[0] == 'product' && segs.length >= 2) {
+      productId = _trailingId(segs[1]);
+    } else if (segs[0] == 'shop' && segs.length >= 3 && segs[1] == 'product') {
+      productId = _trailingId(segs[2]);
+    } else if (segs[0] == 'shop' && segs.length == 2 &&
+        !shopReserved.contains(segs[1])) {
+      productId = _trailingId(segs[1]);
+    }
+    if (productId != null) {
+      nav.pushNamed(Routes.product, arguments: {'id': productId});
+      return;
+    }
+    // /category/<id>  (custom short form)
     if (segs.length >= 2 && segs[0] == 'category') {
       final id = _trailingId(segs[1]);
       if (id != null) {
@@ -94,6 +125,11 @@ class DeepLinkService {
           'brand_value_id': id, 'brand_name': segs[1]});
         return;
       }
+    }
+    // bare /shop (no product/category) → home
+    if (segs[0] == 'shop') {
+      nav.pushNamedAndRemoveUntil(Routes.home, (r) => false);
+      return;
     }
     // /flash
     if (segs[0] == 'flash') { nav.pushNamed(Routes.flash); return; }
