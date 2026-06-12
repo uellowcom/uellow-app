@@ -373,7 +373,8 @@ class _ContentState extends State<_Content> {
           key: ValueKey('slider-${widget.category.id}'),
           category: widget.category),
       // Sub-categories (only if any)
-      if (subs.isNotEmpty) _SubCatsGrid(subs: subs, lang: lang),
+      if (subs.isNotEmpty) _SubCatsGrid(subs: subs, lang: lang,
+          parentId: widget.category.id),
       // Latest products slider — backend-toggleable (v2.1.57)
       if (widget.cfg?['show_recent'] != false)
         _LatestSlider(category: widget.category, products: _products),
@@ -389,9 +390,13 @@ class _ContentState extends State<_Content> {
 }
 
 class _SubCatsGrid extends StatelessWidget {
-  const _SubCatsGrid({required this.subs, required this.lang});
+  const _SubCatsGrid({required this.subs, required this.lang,
+      required this.parentId});
   final List<UellowCategory> subs;
   final String lang;
+  // v2.2.46 — main category id, for the trailing "View all" tile that opens
+  // the full product list of the parent category.
+  final int parentId;
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -421,8 +426,35 @@ class _SubCatsGrid extends StatelessWidget {
             crossAxisCount: 3, crossAxisSpacing: 8, mainAxisSpacing: 6,
             childAspectRatio: 0.88,
           ),
-          itemCount: subs.length,
+          // +1 for the trailing "View all" tile.
+          itemCount: subs.length + 1,
           itemBuilder: (_, i) {
+            if (i == subs.length) {
+              // ── "View all" → all products of the MAIN category ──
+              return GestureDetector(
+                onTap: () => Navigator.pushNamed(context, '/collection',
+                    arguments: {'category_id': parentId}),
+                behavior: HitTestBehavior.opaque,
+                child: Column(children: [
+                  Expanded(child: Container(
+                    decoration: BoxDecoration(
+                      color: UellowColors.yellowSoft,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    alignment: Alignment.center,
+                    child: const Icon(Icons.grid_view_rounded,
+                        size: 28, color: UellowColors.darkBrown),
+                  )),
+                  const SizedBox(height: 6),
+                  Text(lang == 'ar' ? 'عرض الكل' : 'View all', maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontSize: 8.5, height: 1.25,
+                          fontWeight: FontWeight.w900,
+                          color: UellowColors.darkBrown)),
+                  const Text('', style: TextStyle(fontSize: 8)),
+                ]));
+            }
             final c = subs[i];
             return GestureDetector(
               onTap: () => Navigator.pushNamed(context, '/collection',

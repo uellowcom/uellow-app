@@ -58,8 +58,23 @@ class UpdateGate {
       ),
       pageBuilder: (ctx, _, __) => _UpdateDialog(
           minVersion: min, force: s.forceUpdate,
-          storeUrl: (s.urls['play_store'] ?? '').toString()),
+          storeUrl: _storeUrl(ctx, s)),
     );
+  }
+
+  /// Platform-correct store URL. iOS → Apple App Store, Android → Google Play.
+  /// Falls back to the right store even when the backend `urls` map is missing
+  /// the key — previously iOS users were always sent to Google Play.
+  static String _storeUrl(BuildContext context, UellowAppSettings s) {
+    final isIOS = Theme.of(context).platform == TargetPlatform.iOS;
+    if (isIOS) {
+      final u = (s.urls['app_store'] ?? '').toString();
+      return u.isNotEmpty ? u : 'https://apps.apple.com/app/id6769010765';
+    }
+    final u = (s.urls['play_store'] ?? '').toString();
+    return u.isNotEmpty
+        ? u
+        : 'https://play.google.com/store/apps/details?id=com.uellow.app';
   }
 }
 

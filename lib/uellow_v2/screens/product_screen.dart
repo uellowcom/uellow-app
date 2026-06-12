@@ -2825,7 +2825,10 @@ class _DescriptionBlock extends StatelessWidget {
               decoration: const BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topCenter, end: Alignment.bottomCenter,
-                  colors: [Colors.transparent, Colors.white], stops: [0, 0.9],
+                  // v2.2.46 — transparent-WHITE (0x00FFFFFF) not Colors.transparent
+                  // (transparent black), which interpolated through grey and looked
+                  // like a dirty shadow over the text. Now a clean white fade.
+                  colors: [Color(0x00FFFFFF), Colors.white], stops: [0, 0.9],
                 ),
               ),
             )),
@@ -4422,9 +4425,10 @@ class _CtaBar extends StatelessWidget {
             try {
               await UellowApi.instance.wishlist.add(p.id);
               if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text(
-                      "We'll notify you the moment it's back in stock."),
-                      duration: Duration(seconds: 2)));
+                  SnackBar(content: Text(UellowApi.instance.lang == 'ar'
+                      ? 'سنعلمك فور توفّر المنتج في المخزون.'
+                      : "We'll notify you the moment it's back in stock."),
+                      duration: const Duration(seconds: 2)));
             } on UellowApiException catch (e) {
               if (e.isAuthError) {
                 if (context.mounted) Navigator.pushNamed(context, '/auth');
