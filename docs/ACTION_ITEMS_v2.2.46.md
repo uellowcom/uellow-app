@@ -6,25 +6,18 @@
 
 ---
 
-## 🔴 البند ١ — تفعيل إشعارات iOS (الكود جاهز، ينقص خطوتان منك)
+## 🟢 البند ١ — إشعارات iOS (اكتمل الإعداد — يتبقّى بناء نسخة جديدة فقط)
 
-**المشكلة:** تطبيق الآيفون لا يستقبل أي إشعار (أندرويد يعمل). السبب الجذري: ملف `GoogleService-Info.plist` غير موجود لنسخة iOS، فلا يُولَّد توكن إشعارات على الآيفون أصلاً — وهذا أيضاً سبب عدم وصول إشعارات نقاط البيع (POS) لجهازك.
+**تم إنجازه (2026-06-12):**
+- ✅ رفعتَ ملف `GoogleService-Info.plist` في `ios/Runner/` — تحقّقت منه: Bundle `com.uellow.app`، مشروع `uellow-app`، إدخال iOS سليم.
+- ✅ رفعتَ مفتاح **APNs (.p8)** في Firebase Cloud Messaging سابقاً.
+- ✅ **أصلحتُ أنا الخطوة الناقصة الفعلية:** كان الملف موجوداً في المجلد لكنه **غير مربوط بهدف Runner في Xcode** (`project.pbxproj`)، فما كان ليُحزَم داخل التطبيق وقت البناء. سجّلته الآن (commit `ed9be20`).
 
-**ما عليك فعله (في Firebase Console — مشروع `uellow-app`):**
+**ما يتبقّى منك — خطوة واحدة فقط:**
+- **بناء نسخة iOS جديدة وإرسالها** (Codemagic ← workflow ايفون ← TestFlight/App Store).
+  السبب: النسخة الحالية على المتجر بُنيت **قبل** هذا الإصلاح، فلا تحتوي ربط الملف. أي بناء جديد بعد commit `ed9be20` سيحتوي كل شيء وتعمل الإشعارات تلقائياً (وتصلك إشعارات POS على الآيفون أيضاً).
 
-1. **إضافة تطبيق iOS:**
-   - افتح Firebase Console ← Project Settings ← قسم *Your apps* ← **Add app ← iOS**.
-   - Bundle ID: `com.uellow.app`
-   - نزّل ملف **`GoogleService-Info.plist`** الناتج.
-   - ضعه داخل مجلّد `ios/Runner/` في مشروع التطبيق وأضفه لهدف Runner في Xcode (أو احقنه في Codemagic CI).
-
-2. **رفع مفتاح APNs (لتسليم الإشعار فعلياً للآيفون):**
-   - Firebase Console ← Project Settings ← **Cloud Messaging**.
-   - تحت *Apple app configuration* ← **Upload** مفتاح **APNs Auth Key (.p8)**.
-   - أدخِل معه **Key ID** و **Apple Team ID**.
-   - (المفتاح .p8 يُنشأ من Apple Developer ← Keys ← مفتاح بصلاحية *Apple Push Notifications service*.)
-
-> بمجرّد إنجاز هاتين الخطوتين، تعمل إشعارات iOS تلقائياً (الكود الباقي منشور في v2.2.46)، وتصلك إشعارات POS على الآيفون أيضاً.
+> ملاحظة تحقّق سريعة عند رفع APNs: تأكّد أن **Key ID** و **Apple Team ID** أُدخلا بشكل صحيح مع المفتاح .p8.
 
 ---
 
