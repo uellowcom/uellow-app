@@ -19,6 +19,8 @@ import ActivityKit
 @main
 @objc class AppDelegate: FlutterAppDelegate {
     private var currentActivity: Any?
+    // v2.2.48 — kept so the token observer can call back into Flutter.
+    private var laChannel: FlutterMethodChannel?
 
     override func application(
         _ application: UIApplication,
@@ -35,6 +37,7 @@ import ActivityKit
                 guard let self = self else { return }
                 self.handle(call: call, result: result)
             }
+            self.laChannel = channel
         }
         return super.application(application, didFinishLaunchingWithOptions: launchOptions)
     }
@@ -61,9 +64,15 @@ import ActivityKit
                 } else {
                     do {
                         let attrs = UellowOrderAttributes(orderId: orderId)
+                        // v2.2.48 — pushType:.token so iOS issues a per-activity
+                        // APNs token; we forward it to the backend which then
+                        // pushes remote updates even when the app is closed.
                         let activity = try Activity<UellowOrderAttributes>.request(
-                            attributes: attrs, contentState: state, pushType: nil)
+                            attributes: attrs, contentState: state, pushType: .token)
                         currentActivity = activity
+                        if #available(iOS 16.2, *) {
+                            self.observeLiveActivityToken(activity, orderId: orderId)
+                        }
                         result(true)
                     } catch {
                         result(FlutterError(code: "ACTIVITY_FAIL",
@@ -83,6 +92,22 @@ import ActivityKit
             result(FlutterError(code: "UNSUPPORTED",
                                 message: "Live Activities require iOS 16.1+",
                                 details: nil))
+        }
+    }
+
+    // v2.2.48 — راقب توكن دفع النشاط وأرسله إلى Flutter ليُسجَّل في الخادم.
+    @available(iOS 16.2, *)
+    private func observeLiveActivityToken(
+        _ activity: Activity<UellowOrderAttributes>, orderId: Int) {
+        Task {
+            for await tokenData in activity.pushTokenUpdates {
+                let token = tokenData.map { String(format: "%02x", $0) }.joined()
+                await MainActor.run {
+                    self.laChannel?.invokeMethod(
+                        "liveActivityToken",
+                        arguments: ["orderId": orderId, "token": token])
+                }
+            }
         }
     }
 }

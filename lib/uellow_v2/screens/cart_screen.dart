@@ -683,19 +683,46 @@ class _LineCard extends StatelessWidget {
           // that was hiding it); the "/قطعة" unit label is tiny and
           // muted so the price reads clearly even in select mode.
           Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
-            Text(line.unitPrice.format(),
-                maxLines: 1, overflow: TextOverflow.visible,
-                softWrap: false,
-                style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w900, color: UellowColors.ink)),
-            const SizedBox(width: 4),
-            Text(lang == 'ar' ? '/قطعة' : '/pc', style: const TextStyle(
-                fontSize: 9, color: UellowColors.muted)),
+            // v2.2.48 — promo free gift: shows "Free" + a gift chip, no qty box.
+            if (line.isGift) ...[
+              Text(lang == 'ar' ? 'مجاناً' : 'Free',
+                  style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w900,
+                      color: Color(0xFF0E8A6A))),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                    color: const Color(0xFFEAFAF0),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: const Color(0xFFBFE6CC))),
+                child: Text(lang == 'ar' ? '🎁 هدية' : '🎁 Gift',
+                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800,
+                        color: Color(0xFF0E8A6A))),
+              ),
+            ] else ...[
+              Text(line.unitPrice.format(),
+                  maxLines: 1, overflow: TextOverflow.visible,
+                  softWrap: false,
+                  style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w900, color: UellowColors.ink)),
+              const SizedBox(width: 4),
+              Text(lang == 'ar' ? '/قطعة' : '/pc', style: const TextStyle(
+                  fontSize: 9, color: UellowColors.muted)),
+            ],
             const Spacer(),
-            _QtyBox(qty: line.qty.toInt(), onChange: (n) => onUpdate(line.id, n)),
+            if (!line.isGift)
+              _QtyBox(qty: line.qty.toInt(), onChange: (n) => onUpdate(line.id, n)),
           ]),
           const SizedBox(height: 6),
+          // v2.2.48 — free-gift lines aren't editable/removable; show why.
+          if (line.isGift)
+            Text(lang == 'ar'
+                    ? '🎁 هدية مجانية مع العرض — تُضاف تلقائياً'
+                    : '🎁 Free gift with the offer — added automatically',
+                style: const TextStyle(fontSize: 11, color: Color(0xFF0E8A6A),
+                    fontWeight: FontWeight.w600))
+          else
           Row(children: [
             GestureDetector(
               onTap: () async {

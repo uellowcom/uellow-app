@@ -404,9 +404,12 @@ class DynSectionHeader extends StatelessWidget {
     final t = ar
         ? (props['titleAr']?.toString() ?? props['titleEn']?.toString() ?? fallbackEn)
         : (props['titleEn']?.toString() ?? fallbackEn);
+    // v2.2.48 — بعض البلوكات (مثل بلوك الأقساط) تخزّن الوصف تحت subEn/subAr
+    // بينما القديم يقرأ subtitleEn/subtitleAr فقط، فكان السطر الوصفي يختفي.
+    // نقبل المفتاحين الآن.
     final subtitle = ar
-        ? (props['subtitleAr']?.toString() ?? '')
-        : (props['subtitleEn']?.toString() ?? '');
+        ? (props['subtitleAr']?.toString() ?? props['subAr']?.toString() ?? '')
+        : (props['subtitleEn']?.toString() ?? props['subEn']?.toString() ?? '');
     // v2.0.69/70 — optional header icon OR image next to/replacing the title.
     // Modes:
     //   'beside'  — small icon-sized thumb next to the title (default)
@@ -2539,6 +2542,16 @@ class _ExploreMoreBlockState extends State<ExploreMoreBlock> {
 
     _hasMore = (widget.data['has_more'] as bool?) ?? _items.length >= _perPage;
     _page = (widget.data['next_page'] as num?)?.toInt() ?? 2;
+
+    // v2.2.48 — إصلاح: إن وصل البلوك بدون عناصر مضمّنة (سباق الذاكرة المؤقتة
+    // للصفحة 45ث، أو خطأ عابر في الحلّ، أو شبكة)، حمّل الدفعة الأولى تلقائياً
+    // بدل ترك البلوك فارغاً حتى يضغط المستخدم "تبديل" (كان هذا سبب الشكوى).
+    if (_items.isEmpty && _hasMore) {
+      _page = 1; // الدفعة المضمّنة غائبة فابدأ من الصفحة الأولى لا الثانية
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _loadMore();
+      });
+    }
 
     if (_showActivity) {
       _activityTimer = Timer.periodic(const Duration(seconds: 5), (_) {

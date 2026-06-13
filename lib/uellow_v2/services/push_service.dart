@@ -17,6 +17,8 @@
 import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
+import '../../api/uellow_api.dart';
+
 class PushService {
   PushService._();
   static final PushService instance = PushService._();
@@ -51,6 +53,25 @@ class PushService {
         importance: Importance.high));
       try { await androidImpl.requestNotificationsPermission(); } catch (_) {}
     }
+    // v2.2.48 — iOS: عندما يبدأ النشاط (ActivityKit) ويصدر توكن دفع APNs
+    // الخاص به، يرسله الكود الأصلي عبر هذه القناة فنسجّله في الخادم ليرسل
+    // تحديثات Live Activity عن بُعد حتى والتطبيق مغلق.
+    _liveActivityChannel.setMethodCallHandler((call) async {
+      if (call.method == 'liveActivityToken') {
+        try {
+          final a = (call.arguments as Map);
+          final orderId = a['orderId'];
+          final token = (a['token'] ?? '').toString();
+          if (orderId != null && token.isNotEmpty) {
+            await UellowApi.instance.postRaw(
+              '/api/mobile/v2/live-activity/register',
+              body: {'order_id': orderId, 'activity_token': token},
+              auth: true);
+          }
+        } catch (_) {/* best-effort */}
+      }
+      return null;
+    });
     _ready = true;
   }
 

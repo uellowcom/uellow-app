@@ -842,11 +842,14 @@ class UellowCartLine {
   final UellowMoney subtotal;
   final UellowMoney total;
   final List<Map<String, dynamic>> attributes;
+  // v2.2.48 — mandatory promo free gift (price 0, not removable).
+  final bool isGift;
   const UellowCartLine({
     required this.id, required this.productId, required this.variantId,
     required this.name, required this.sku, required this.image,
     required this.qty, required this.unitPrice, required this.subtotal,
     required this.total, required this.attributes,
+    this.isGift = false,
   });
   factory UellowCartLine.fromJson(Map<String, dynamic> j) {
     // Some endpoints (notably /orders/<id> detail) omit fields like
@@ -874,6 +877,7 @@ class UellowCartLine {
       total: tot,
       attributes: List<Map<String, dynamic>>.from(
           (j['attributes'] as List?) ?? const []),
+      isGift: (j['is_gift'] ?? false) as bool,
     );
   }
 }
