@@ -366,9 +366,13 @@ class UellowVendorRef {
   final String slug;
   final String? logo;
   final String tier;
+  /// True when this is the house "Uellow Vendors" fallback — product has no
+  /// real vendor, or the vendor opted to hide its name. Rendered as the yellow
+  /// Uellow bar (no storefront link).
+  final bool house;
   const UellowVendorRef({
     required this.id, required this.name, required this.slug,
-    this.logo, required this.tier,
+    this.logo, required this.tier, this.house = false,
   });
   factory UellowVendorRef.fromJson(Map<String, dynamic> j) => UellowVendorRef(
         id: (j['id'] ?? 0) as int,
@@ -376,6 +380,7 @@ class UellowVendorRef {
         slug: (j['slug'] ?? '').toString(),
         logo: j['logo'] as String?,
         tier: (j['tier'] ?? 'standard').toString(),
+        house: j['house'] == true || (j['id'] ?? 0) == 0,
       );
 }
 

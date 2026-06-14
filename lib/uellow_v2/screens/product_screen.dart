@@ -313,7 +313,7 @@ class _ProductScreenState extends State<ProductScreen> {
       // request; the full reviews block lower on the page remains.
       // v2.1.74 — Seller / Fulfilled-by-Uellow card sits directly ABOVE
       // the specialist reviews block (per latest spec).
-      if (p.vendor != null)
+      if (p.vendor != null && !p.vendor!.house)
         SliverToBoxAdapter(child: _VendorCard(vendor: p.vendor!))
       else
         const SliverToBoxAdapter(child: _FulfilledByUellowCard()),
@@ -1582,11 +1582,11 @@ class _FulfilledByUellowCard extends StatelessWidget {
               color: UellowColors.muted),
           const SizedBox(width: 4),
           Expanded(child: Text.rich(TextSpan(children: [
-            TextSpan(text: ar ? 'تم بواسطة ' : 'Fulfilled by ',
+            TextSpan(text: ar ? 'البيع عبر ' : 'Sold via ',
                 style: const TextStyle(fontSize: 11,
                     color: UellowColors.muted, fontWeight: FontWeight.w700)),
-            const TextSpan(text: 'Uellow',
-                style: TextStyle(fontWeight: FontWeight.w900,
+            TextSpan(text: ar ? 'تجار يلو' : 'Uellow Vendors',
+                style: const TextStyle(fontWeight: FontWeight.w900,
                     fontSize: 12.5, color: UellowColors.darkBrown)),
             TextSpan(text: ar
                 ? '  —  شحن واستبدال مباشر'

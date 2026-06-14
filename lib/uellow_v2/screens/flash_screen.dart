@@ -415,7 +415,7 @@ class _VendorFilter extends StatelessWidget {
     // Derive unique vendors from the product set
     final byId = <int, UellowVendorRef>{};
     for (final p in products) {
-      if (p.vendor != null) byId[p.vendor!.id] = p.vendor!;
+      if (p.vendor != null && !p.vendor!.house) byId[p.vendor!.id] = p.vendor!;
     }
     final vendors = byId.values.toList();
     if (vendors.isEmpty) return const SizedBox.shrink();
