@@ -164,16 +164,15 @@ import AppTrackingTransparency
         }
     }
 
-    // The TTEventName* constants are of type TTEventName (not String); use the
-    // TTEventName initializer for known events and the String initializer for
-    // any custom fallback.
+    // TTEventName is an NS_TYPED_ENUM (struct wrapping a String); TikTokBaseEvent
+    // takes a plain String, so pass the constant's .rawValue.
     private func ttSimpleEvent(_ key: String) -> TikTokBaseEvent {
         switch key {
-        case "LAUNCH_APP":       return TikTokBaseEvent(eventName: TTEventNameLaunchAPP)
-        case "ADD_PAYMENT_INFO": return TikTokBaseEvent(eventName: TTEventNameAddPaymentInfo)
-        case "REGISTRATION":     return TikTokBaseEvent(eventName: TTEventNameRegistration)
-        case "LOGIN":            return TikTokBaseEvent(eventName: TTEventNameLogin)
-        case "SEARCH":           return TikTokBaseEvent(eventName: TTEventNameSearch)
+        case "LAUNCH_APP":       return TikTokBaseEvent(eventName: TTEventNameLaunchAPP.rawValue)
+        case "ADD_PAYMENT_INFO": return TikTokBaseEvent(eventName: TTEventNameAddPaymentInfo.rawValue)
+        case "REGISTRATION":     return TikTokBaseEvent(eventName: TTEventNameRegistration.rawValue)
+        case "LOGIN":            return TikTokBaseEvent(eventName: TTEventNameLogin.rawValue)
+        case "SEARCH":           return TikTokBaseEvent(eventName: TTEventNameSearch.rawValue)
         default:                 return TikTokBaseEvent(eventName: key)
         }
     }
