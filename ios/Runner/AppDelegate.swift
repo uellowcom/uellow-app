@@ -168,11 +168,11 @@ import AppTrackingTransparency
     // takes a plain String, so pass the constant's .rawValue.
     private func ttSimpleEvent(_ key: String) -> TikTokBaseEvent {
         switch key {
-        case "LAUNCH_APP":       return TikTokBaseEvent(eventName: TTEventNameLaunchAPP.rawValue)
-        case "ADD_PAYMENT_INFO": return TikTokBaseEvent(eventName: TTEventNameAddPaymentInfo.rawValue)
-        case "REGISTRATION":     return TikTokBaseEvent(eventName: TTEventNameRegistration.rawValue)
-        case "LOGIN":            return TikTokBaseEvent(eventName: TTEventNameLogin.rawValue)
-        case "SEARCH":           return TikTokBaseEvent(eventName: TTEventNameSearch.rawValue)
+        case "LAUNCH_APP":       return TikTokBaseEvent(eventName: TTEventName.launchAPP.rawValue)
+        case "ADD_PAYMENT_INFO": return TikTokBaseEvent(eventName: TTEventName.addPaymentInfo.rawValue)
+        case "REGISTRATION":     return TikTokBaseEvent(eventName: TTEventName.registration.rawValue)
+        case "LOGIN":            return TikTokBaseEvent(eventName: TTEventName.login.rawValue)
+        case "SEARCH":           return TikTokBaseEvent(eventName: TTEventName.search.rawValue)
         default:                 return TikTokBaseEvent(eventName: key)
         }
     }
