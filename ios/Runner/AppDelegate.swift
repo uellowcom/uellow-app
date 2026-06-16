@@ -154,8 +154,7 @@ import AppTrackingTransparency
             result(true)
         case "trackSimple":
             let name = (args["event"] as? String) ?? ""
-            let event = TikTokBaseEvent(eventName: ttSimpleName(name))
-            TikTokBusiness.trackTTEvent(event)
+            TikTokBusiness.trackTTEvent(ttSimpleEvent(name))
             result(true)
         case "trackContent":
             trackTikTokContent(args)
@@ -165,14 +164,17 @@ import AppTrackingTransparency
         }
     }
 
-    private func ttSimpleName(_ key: String) -> String {
+    // The TTEventName* constants are of type TTEventName (not String); use the
+    // TTEventName initializer for known events and the String initializer for
+    // any custom fallback.
+    private func ttSimpleEvent(_ key: String) -> TikTokBaseEvent {
         switch key {
-        case "LAUNCH_APP": return TTEventNameLaunchAPP
-        case "ADD_PAYMENT_INFO": return TTEventNameAddPaymentInfo
-        case "REGISTRATION": return TTEventNameRegistration
-        case "LOGIN": return TTEventNameLogin
-        case "SEARCH": return TTEventNameSearch
-        default: return key
+        case "LAUNCH_APP":       return TikTokBaseEvent(eventName: TTEventNameLaunchAPP)
+        case "ADD_PAYMENT_INFO": return TikTokBaseEvent(eventName: TTEventNameAddPaymentInfo)
+        case "REGISTRATION":     return TikTokBaseEvent(eventName: TTEventNameRegistration)
+        case "LOGIN":            return TikTokBaseEvent(eventName: TTEventNameLogin)
+        case "SEARCH":           return TikTokBaseEvent(eventName: TTEventNameSearch)
+        default:                 return TikTokBaseEvent(eventName: key)
         }
     }
 
@@ -211,7 +213,7 @@ import AppTrackingTransparency
         if let val = args["value"] as? NSNumber { event.setValue(val.stringValue) }
 
         let content = TikTokContentParams()
-        if let p = args["price"] as? NSNumber { content.price = p.floatValue }
+        if let p = args["price"] as? NSNumber { content.price = p }
         if let q = args["quantity"] as? NSNumber { content.quantity = q.intValue }
         if let b = args["brand"] as? String { content.brand = b }
         if let n = args["contentName"] as? String { content.contentName = n }
