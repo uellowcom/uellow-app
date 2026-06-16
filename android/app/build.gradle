@@ -71,6 +71,9 @@ android {
             // Signing with the debug keys for now, so `flutter run --release` works.
             signingConfig = (System.getenv('UELLOW_SIGN') == 'upload')
                 ? signingConfigs.upload : signingConfigs.debug
+            // TikTok SDK pulls in optional Play-Billing refs; keep our proguard
+            // rules ( -dontwarn ) applied so R8 doesn't fail on missing classes.
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
             // v2.2.38 — upload native debug symbols so Play can symbolicate
             // crashes/ANRs (clears the "no debug symbols" warning).
             ndk {
@@ -86,4 +89,12 @@ flutter {
 
 dependencies {
     coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.0.4'
+
+    // TikTok Business SDK (Events Manager — TikTok App ID 7651731222326050834)
+    implementation 'com.github.tiktok:tiktok-business-android-sdk:1.5.0'
+    // app life-cycle listening (required by the SDK)
+    implementation 'androidx.lifecycle:lifecycle-process:2.3.1'
+    implementation 'androidx.lifecycle:lifecycle-common-java8:2.3.1'
+    // Google install referrer (install attribution)
+    implementation 'com.android.installreferrer:installreferrer:2.2'
 }

@@ -16,6 +16,7 @@ import 'package:webview_flutter/webview_flutter.dart';
 
 import '../../api/uellow_api.dart';
 import '../../api/uellow_models.dart';
+import '../../services/tiktok_tracker.dart';
 import '../router/uellow_router.dart';
 import '../services/first_launch_service.dart';
 import '../theme/uellow_l10n.dart';
@@ -86,6 +87,17 @@ class _ProductScreenState extends State<ProductScreen> {
   void initState() {
     super.initState();
     _future = UellowApi.instance.products.detail(widget.productId);
+    // TikTok: ViewContent when the product detail loads.
+    _future.then((p) {
+      TikTokTracker.instance.viewContent(
+        contentId: p.id.toString(),
+        contentName: p.name.en,
+        contentCategory: p.categories.isNotEmpty ? p.categories.first.name.en : null,
+        brand: p.brand?.name.en,
+        price: p.price.amount,
+        currency: p.price.currency,
+      );
+    }).catchError((_) {});
     _scrollCtrl.addListener(_onScroll);
   }
 
@@ -4665,6 +4677,15 @@ class _BuySheetState extends State<_BuySheet> {
     setState(() => _busy = true);
     try {
       await UellowApi.instance.cart.add(productId: widget.product.id, qty: _qty);
+      // TikTok: AddToCart on the success path.
+      TikTokTracker.instance.addToCart(
+        contentId: widget.product.id.toString(),
+        contentName: widget.product.name.en,
+        brand: widget.product.brand?.name.en,
+        price: widget.product.price.amount,
+        quantity: _qty,
+        currency: widget.product.price.currency,
+      );
       if (!mounted) return;
       // Capture the NavigatorState BEFORE popping the buy sheet —
       // `context` becomes stale once the modal route is removed, which

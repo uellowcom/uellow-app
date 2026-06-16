@@ -35,6 +35,9 @@ target 'Runner' do
 
   flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
 
+  # TikTok Business SDK (Events Manager — TikTok App ID 7651728981667528722)
+  pod 'TikTokBusinessSDK'
+
   target 'RunnerTests' do
     inherit! :search_paths
   end
@@ -46,5 +49,19 @@ post_install do |installer|
     target.build_configurations.each do |config|
       config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.5'
     end
+  end
+  # TikTok Business SDK requires -ObjC and -lc++ in the APP target's linker flags
+  installer.aggregate_targets.each do |agg|
+    agg.user_project.native_targets.each do |t|
+      next unless t.name == 'Runner'
+      t.build_configurations.each do |config|
+        flags = config.build_settings['OTHER_LDFLAGS'] || ['$(inherited)']
+        flags = [flags] if flags.is_a?(String)
+        flags << '-ObjC' unless flags.include?('-ObjC')
+        flags << '-lc++' unless flags.include?('-lc++')
+        config.build_settings['OTHER_LDFLAGS'] = flags
+      end
+    end
+    agg.user_project.save
   end
 end

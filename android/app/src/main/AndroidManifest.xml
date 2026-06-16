@@ -41,7 +41,7 @@
     <uses-feature android:name="android.hardware.wifi" android:required="false"/>
     <application
         android:label="Uellow"
-        android:name="${applicationName}"
+        android:name=".UellowApplication"
         android:icon="@mipmap/ic_launcher">
         <activity
             android:name=".MainActivity"

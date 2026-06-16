@@ -18,6 +18,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../api/uellow_api.dart';
 import '../../api/uellow_models.dart';
+import '../../services/tiktok_tracker.dart';
 import '../router/uellow_router.dart';
 import '../services/first_launch_service.dart';
 import '../theme/uellow_l10n.dart';
@@ -55,6 +56,15 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   void initState() {
     super.initState();
     _data = _bootstrap();
+    // TikTok: InitiateCheckout when the checkout screen opens.
+    _data.then((d) {
+      final tot = (d.summary?['cart']?['totals']?['total'] as Map?);
+      TikTokTracker.instance.checkout(
+        contentId: 'cart',
+        value: ((tot?['amount'] as num?) ?? 0).toDouble(),
+        currency: (tot?['currency'] ?? 'KWD').toString(),
+      );
+    }).catchError((_) {});
     _loadGuestFlag();
   }
 
@@ -383,6 +393,14 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           }
         }
       }
+      // TikTok: Purchase — both COD and gateway-paid paths converge here.
+      final ttTot = (d.summary?['cart']?['totals']?['total'] as Map?);
+      TikTokTracker.instance.purchase(
+        contentId: result.orderId.toString(),
+        contentName: result.orderName,
+        value: ((ttTot?['amount'] as num?) ?? 0).toDouble(),
+        currency: (ttTot?['currency'] ?? 'KWD').toString(),
+      );
       Navigator.pushReplacementNamed(context, Routes.orderConfirm,
         arguments: OrderConfirmationArgs(
           success: true,
@@ -630,7 +648,11 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
             methods: d.paymentMethods,
             selected: _selectedPaymentId,
             codAllowed: _codAllowed(d),
-            onSelect: (id) => setState(() => _selectedPaymentId = id),
+            onSelect: (id) {
+              setState(() => _selectedPaymentId = id);
+              // TikTok: AddPaymentInfo when a payment method is picked.
+              TikTokTracker.instance.addPaymentInfo();
+            },
           )),
       _section(num: null,
           title: UellowApi.instance.lang == 'ar' ? 'ملخص الطلب' : 'ORDER SUMMARY',

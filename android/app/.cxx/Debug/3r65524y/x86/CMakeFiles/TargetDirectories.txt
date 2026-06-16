@@ -1,0 +1,2 @@
+/root/uellow_app/android/app/.cxx/Debug/3r65524y/x86/CMakeFiles/edit_cache.dir
+/root/uellow_app/android/app/.cxx/Debug/3r65524y/x86/CMakeFiles/rebuild_cache.dir

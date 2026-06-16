@@ -37,6 +37,7 @@ import 'package:http/http.dart' as http;
 import 'uellow_endpoints.dart';
 import 'uellow_models.dart';
 import 'uellow_token_store.dart';
+import '../services/tiktok_tracker.dart';
 
 /// Base URL of the Odoo instance hosting the v2 API. Switch with
 /// `--dart-define=UELLOW_API_BASE=https://staging.uellow.com` for staging.
@@ -579,6 +580,7 @@ class _AuthApi {
     }
     await _c.tokenStore.clearToken();
     _c._emitAuth(null);
+    TikTokTracker.instance.logout();
   }
 
   Future<UellowUser> me() async {
@@ -592,6 +594,13 @@ class _AuthApi {
     final user = UellowUser.fromJson(data['user'] as Map<String, dynamic>);
     await _c.tokenStore.writeToken(token);
     _c._emitAuth(user);
+    // TikTok: identify the user so events attribute correctly.
+    TikTokTracker.instance.identify(
+      externalId: user.id.toString(),
+      userName: user.name,
+      phone: user.phone,
+      email: user.email,
+    );
     return UellowAuthResult(token: token, user: user);
   }
 }

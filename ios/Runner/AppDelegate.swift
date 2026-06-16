@@ -1,6 +1,8 @@
 import Flutter
 import UIKit
 import ActivityKit
+import TikTokBusinessSDK
+import AppTrackingTransparency
 
 // =============================================================================
 // AppDelegate — registers the com.uellow.liveactivity MethodChannel so the
@@ -28,6 +30,12 @@ import ActivityKit
     ) -> Bool {
         GeneratedPluginRegistrant.register(with: self)
 
+        // TikTok Business SDK — Events Manager (Apple App ID 6769010765,
+        // TikTok App ID 7651728981667528722). LaunchApp/Install are auto-tracked.
+        if let ttConfig = TikTokConfig(appId: "6769010765", tiktokAppId: "7651728981667528722") {
+            TikTokBusiness.initializeSdk(ttConfig)
+        }
+
         let controller = window?.rootViewController as? FlutterViewController
         if let controller = controller {
             let channel = FlutterMethodChannel(
@@ -38,6 +46,21 @@ import ActivityKit
                 self.handle(call: call, result: result)
             }
             self.laChannel = channel
+
+            // TikTok event bridge — same channel/contract as Android.
+            let ttChannel = FlutterMethodChannel(
+                name: "uellow/tiktok",
+                binaryMessenger: controller.binaryMessenger)
+            ttChannel.setMethodCallHandler { [weak self] (call, result) in
+                self?.handleTikTok(call: call, result: result)
+            }
+        }
+
+        // App Tracking Transparency prompt (iOS 14+) — needed for IDFA attribution.
+        if #available(iOS 14, *) {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                ATTrackingManager.requestTrackingAuthorization { _ in }
+            }
         }
         return super.application(application, didFinishLaunchingWithOptions: launchOptions)
     }
@@ -109,5 +132,91 @@ import ActivityKit
                 }
             }
         }
+    }
+
+    // =========================================================================
+    // TikTok Business SDK bridge — mirrors the Android MainActivity contract
+    // (channel "uellow/tiktok"). All calls are best-effort; failures never
+    // surface to Flutter as exceptions.
+    // =========================================================================
+    private func handleTikTok(call: FlutterMethodCall, result: @escaping FlutterResult) {
+        let args = call.arguments as? [String: Any] ?? [:]
+        switch call.method {
+        case "identify":
+            TikTokBusiness.identify(
+                withExternalID: (args["externalId"] as? String) ?? "",
+                externalUserName: args["externalUserName"] as? String,
+                phoneNumber: args["phoneNumber"] as? String,
+                email: args["email"] as? String)
+            result(true)
+        case "logout":
+            TikTokBusiness.logout()
+            result(true)
+        case "trackSimple":
+            let name = (args["event"] as? String) ?? ""
+            let event = TikTokBaseEvent(eventName: ttSimpleName(name))
+            TikTokBusiness.trackTTEvent(event)
+            result(true)
+        case "trackContent":
+            trackTikTokContent(args)
+            result(true)
+        default:
+            result(FlutterMethodNotImplemented)
+        }
+    }
+
+    private func ttSimpleName(_ key: String) -> String {
+        switch key {
+        case "LAUNCH_APP": return TTEventNameLaunchAPP
+        case "ADD_PAYMENT_INFO": return TTEventNameAddPaymentInfo
+        case "REGISTRATION": return TTEventNameRegistration
+        case "LOGIN": return TTEventNameLogin
+        case "SEARCH": return TTEventNameSearch
+        default: return key
+        }
+    }
+
+    private func ttCurrency(_ code: String) -> TTCurrency? {
+        switch code {
+        case "KWD": return .KWD
+        case "USD": return .USD
+        case "SAR": return .SAR
+        case "AED": return .AED
+        case "BHD": return .BHD
+        case "QAR": return .QAR
+        case "OMR": return .OMR
+        case "EUR": return .EUR
+        case "GBP": return .GBP
+        default: return nil
+        }
+    }
+
+    private func trackTikTokContent(_ args: [String: Any]) {
+        let type = (args["type"] as? String) ?? ""
+        let event: TikTokContentsEvent
+        switch type {
+        case "AddToCart":      event = TikTokAddToCartEvent()
+        case "ViewContent":    event = TikTokViewContentEvent()
+        case "Checkout":       event = TikTokCheckoutEvent()
+        case "Purchase":       event = TikTokPurchaseEvent()
+        case "AddToWishlist":  event = TikTokAddToWishlistEvent()
+        default: return
+        }
+        if let cid = args["contentId"] as? String { event.setContentId(cid) }
+        if let ct = args["contentType"] as? String { event.setContentType(ct) }
+        if let desc = args["description"] as? String { event.setDescription(desc) }
+        if let cur = args["currency"] as? String, let ttc = ttCurrency(cur) {
+            event.setCurrency(ttc)
+        }
+        if let val = args["value"] as? NSNumber { event.setValue(val.stringValue) }
+
+        let content = TikTokContentParams()
+        if let p = args["price"] as? NSNumber { content.price = p.floatValue }
+        if let q = args["quantity"] as? NSNumber { content.quantity = q.intValue }
+        if let b = args["brand"] as? String { content.brand = b }
+        if let n = args["contentName"] as? String { content.contentName = n }
+        event.setContents([content])
+
+        TikTokBusiness.trackTTEvent(event)
     }
 }

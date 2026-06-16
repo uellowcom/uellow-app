@@ -6,6 +6,10 @@
 	     Export Compliance في كل بناء جديد. -->
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<!-- App Tracking Transparency — required by TikTok SDK for IDFA-based
+	     attribution. Shown once on first launch. -->
+	<key>NSUserTrackingUsageDescription</key>
+	<string>نستخدم بياناتك لتحسين العروض والإعلانات المناسبة لك. We use your data to deliver more relevant offers and ads.</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
