@@ -1087,9 +1087,9 @@ class _ActionTilesState extends State<_ActionTiles> {
 
   // v2.1.66 — Settings tile removed (the gear stays in the header only).
   static const _en = ['Wishlist','Alerts','Coupons','Loyalty',
-                      'Wallet','Smart Fit','Tracking','My Reviews'];
+                      'Wallet','Smart Fit','Tracking','My Reviews','Warranties'];
   static const _ar = ['المفضلة','التنبيهات','الكوبونات','الولاء',
-                      'المحفظة','مقاسي','التتبع','آراء المختصين'];
+                      'المحفظة','مقاسي','التتبع','آراء المختصين','ضماناتي'];
   // Public tiles work for guests too — the rest need a session, so guests
   // get bounced to /auth.
   static const _public = {Routes.tryOn};
@@ -1105,6 +1105,7 @@ class _ActionTilesState extends State<_ActionTiles> {
     (Icons.local_shipping_outlined, Routes.orders),
     // v2.1.62 — specialist-review history (product + the review itself).
     (Icons.rate_review_outlined, Routes.myReviews),
+    (Icons.verified_user_outlined, Routes.warranties),
   ];
   @override
   Widget build(BuildContext context) {

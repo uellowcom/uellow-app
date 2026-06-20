@@ -72,6 +72,9 @@ class EP {
   static const walletBalance      = '/api/mobile/v2/wallet/balance';
   static const walletTransactions = '/api/mobile/v2/wallet/transactions';
 
+  // ── Warranty
+  static const warranty = '/api/mobile/v2/warranty';
+
   // ── Notifications
   static const notifications         = '/api/mobile/v2/notifications';
   static const notificationsRegister = '/api/mobile/v2/notifications/register-device';

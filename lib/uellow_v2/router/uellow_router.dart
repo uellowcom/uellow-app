@@ -30,6 +30,7 @@ import '../screens/notifications_screen.dart';
 import '../screens/affiliate_screen.dart';
 import '../screens/compare_screen.dart';
 import '../screens/loyalty_screen.dart';
+import '../screens/my_warranties_screen.dart';
 import '../screens/wallet_screen.dart';
 import '../screens/coupons_screen.dart';
 import '../screens/bestsellers_screen.dart';
@@ -74,6 +75,7 @@ class Routes {
   static const order         = '/order';          // arg: orderId
   static const account       = '/account';
   static const loyalty       = '/loyalty';
+  static const warranties    = '/warranties';
   static const affiliate     = '/affiliate';     // v2.1.58 partner center
   static const compare       = '/compare';       // v2.1.58 product compare
   static const wallet        = '/wallet';
@@ -129,6 +131,7 @@ class UellowRouter {
     Routes.wishlist:      (ctx) => const WishlistScreen(),
     Routes.notifications: (ctx) => const NotificationsScreen(),
     Routes.loyalty:       (ctx) => const LoyaltyScreen(),
+    Routes.warranties:    (ctx) => const MyWarrantiesScreen(),
     Routes.affiliate:     (ctx) => const AffiliateScreen(),
     Routes.compare:       (ctx) => const CompareScreen(),
     Routes.wallet:        (ctx) => const WalletScreen(),

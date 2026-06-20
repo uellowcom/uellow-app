@@ -110,6 +110,7 @@ class UellowApi {
     beena         = _BeenaApi(this);
     settings      = _SettingsApi(this);
     shipping      = _ShippingApi(this);
+    warranty      = _WarrantyApi(this);
   }
 
   /// Singleton. Initialize once at app start via [UellowApi.init].
@@ -220,6 +221,7 @@ class UellowApi {
   late final _BeenaApi beena;
   late final _SettingsApi settings;
   late final _ShippingApi shipping;
+  late final _WarrantyApi warranty;
 
   // ─── Auth listener (lets ui react to 401 / logout) ───────────────────
 
@@ -1291,6 +1293,81 @@ class _LoyaltyApi {
   Future<UellowLoyalty> overview() async {
     final res = await _c._get(EP.loyalty, auth: true);
     return UellowLoyalty.fromJson(res['data'] as Map<String, dynamic>);
+  }
+}
+
+class _WarrantyApi {
+  _WarrantyApi(this._c);
+  final UellowApi _c;
+
+  Future<UellowWarrantyOverview> myWarranties() async {
+    final res = await _c._get(EP.warranty, auth: true);
+    return UellowWarrantyOverview.fromJson(
+        res['data'] as Map<String, dynamic>, _c.lang);
+  }
+
+  /// Token-stamped certificate URL the app can open in a browser/webview.
+  Future<String> certificateUrl(int id) async {
+    final tok = await _c.tokenStore.readToken();
+    return '${_c.baseUrl}/api/mobile/v2/warranty/$id/certificate?token=${tok ?? ''}';
+  }
+}
+
+class UellowWarrantyOverview {
+  UellowWarrantyOverview(this.count, this.active, this.warranties);
+  final int count;
+  final int active;
+  final List<UellowWarrantyCard> warranties;
+  factory UellowWarrantyOverview.fromJson(Map<String, dynamic> j, String lang) {
+    return UellowWarrantyOverview(
+      (j['count'] ?? 0) as int,
+      (j['active'] ?? 0) as int,
+      ((j['warranties'] ?? []) as List)
+          .map((e) => UellowWarrantyCard.fromJson(e as Map<String, dynamic>, lang))
+          .toList(),
+    );
+  }
+}
+
+class UellowWarrantyCard {
+  UellowWarrantyCard({
+    required this.id, required this.number, required this.product,
+    required this.productId, required this.image, required this.serial,
+    required this.policy, required this.icon, required this.months,
+    required this.dateStart, required this.dateEnd, required this.daysLeft,
+    required this.state, required this.stateLabel, required this.coverage,
+    required this.terms, required this.source,
+  });
+  final int id;
+  final String number, product, image, serial, policy, icon;
+  final int productId, months, daysLeft;
+  final String dateStart, dateEnd, state, stateLabel, coverage, terms, source;
+
+  static String _tr(dynamic m, String lang) {
+    if (m is Map) return (m[lang == 'ar' ? 'ar' : 'en'] ?? m['en'] ?? '').toString();
+    return (m ?? '').toString();
+  }
+
+  factory UellowWarrantyCard.fromJson(Map<String, dynamic> j, String lang) {
+    return UellowWarrantyCard(
+      id: j['id'] as int,
+      number: (j['number'] ?? '').toString(),
+      product: _tr(j['product'], lang),
+      productId: (j['product_id'] ?? 0) as int,
+      image: (j['image'] ?? '').toString(),
+      serial: (j['serial'] ?? '').toString(),
+      policy: _tr(j['policy'], lang),
+      icon: (j['icon'] ?? '🛡️').toString(),
+      months: (j['months'] ?? 0) as int,
+      dateStart: (j['date_start'] ?? '').toString(),
+      dateEnd: (j['date_end'] ?? '').toString(),
+      daysLeft: (j['days_left'] ?? 0) as int,
+      state: (j['state'] ?? '').toString(),
+      stateLabel: _tr(j['state_label'], lang),
+      coverage: _tr(j['coverage'], lang),
+      terms: _tr(j['terms'], lang),
+      source: (j['source'] ?? '').toString(),
+    );
   }
 }
 
