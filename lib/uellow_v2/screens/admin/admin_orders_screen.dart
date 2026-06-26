@@ -400,6 +400,11 @@ class _AdminOrderDetailScreenState extends State<AdminOrderDetailScreen> {
               const Divider(height: 16),
               _amtRow(ar ? 'الإجمالي' : 'Total', amounts['total'] as Map?,
                   bold: true),
+              if (amounts['cost'] != null) ...[
+                const SizedBox(height: 6),
+                _amtRow(ar ? 'التكلفة' : 'Cost', amounts['cost'] as Map?),
+                _profitRow(ar, amounts['margin'] as Map?),
+              ],
             ]),
             if (txs.isNotEmpty)
               _card(title: ar ? '💳 الدفع' : '💳 Payments', children: [
@@ -407,6 +412,7 @@ class _AdminOrderDetailScreenState extends State<AdminOrderDetailScreen> {
                     '${(t as Map)['provider'] ?? ''} (${t['state'] ?? ''})',
                     '${t['amount'] ?? 0}'),
               ]),
+            _fulfilCard(d, ar),
             _actionCard(d, ar),
             const SizedBox(height: 24),
           ]);
@@ -443,23 +449,109 @@ class _AdminOrderDetailScreenState extends State<AdminOrderDetailScreen> {
     }
   }
 
+  // Profit row — green when positive, red on a loss (free/gift lines etc).
+  Widget _profitRow(bool ar, Map? m) {
+    final v = (m?['amount'] as num?) ?? 0;
+    final loss = v < 0;
+    final col = loss ? UellowColors.danger : UellowColors.successDk;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(children: [
+        Text(ar ? 'الربح' : 'Profit', style: TextStyle(
+            fontSize: 12.5, fontWeight: FontWeight.w900, color: col)),
+        const Spacer(),
+        Text('${m?['amount'] ?? 0} ${m?['symbol'] ?? ''}',
+            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w900,
+                color: col)),
+      ]),
+    );
+  }
+
+  // Delivery + fulfilment status (carrier company/driver, invoices, pickings).
+  Widget _fulfilCard(Map<String, dynamic> d, bool ar) {
+    final dv = (d['delivery'] as Map?) ?? const {};
+    final invs = (d['invoices'] as List?) ?? const [];
+    final picks = (d['pickings'] as List?) ?? const [];
+    final hasAny = (dv['company'] ?? '').toString().isNotEmpty ||
+        (dv['driver'] ?? '').toString().isNotEmpty ||
+        (dv['status'] ?? '').toString().isNotEmpty ||
+        invs.isNotEmpty || picks.isNotEmpty;
+    if (!hasAny) return const SizedBox.shrink();
+    return _card(title: ar ? '🚚 التوصيل والفوترة' : '🚚 Delivery & invoicing',
+        children: [
+      if ((dv['company'] ?? '').toString().isNotEmpty)
+        _kv(ar ? 'شركة الشحن' : 'Carrier', dv['company'].toString()),
+      if ((dv['driver'] ?? '').toString().isNotEmpty)
+        _kv(ar ? 'السائق' : 'Driver', dv['driver'].toString()),
+      if ((dv['status'] ?? '').toString().isNotEmpty)
+        _kv(ar ? 'حالة التوصيل' : 'Delivery status', dv['status'].toString()),
+      if ((d['invoice_status'] ?? '').toString().isNotEmpty)
+        _kv(ar ? 'حالة الفوترة' : 'Invoice status',
+            d['invoice_status'].toString()),
+      for (final i in invs)
+        _kv('🧾 ${(i as Map)['name'] ?? ''}',
+            '${i['state'] ?? ''} · ${i['payment_state'] ?? ''}'),
+      for (final pk in picks)
+        _kv('📦 ${(pk as Map)['name'] ?? ''}', '${pk['state'] ?? ''}'),
+    ]);
+  }
+
   Widget _actionCard(Map<String, dynamic> d, bool ar) {
+    final can = (d['can'] as Map?) ?? const {};
     final state = (d['state'] ?? '').toString();
     final isCancelled = state == 'cancel';
-    final isConfirmed = state == 'sale' || state == 'done';
     final id = widget.orderId;
+    bool flag(String k, bool fallback) =>
+        can.containsKey(k) ? can[k] == true : fallback;
+    final isConfirmed = state == 'sale' || state == 'done';
     final btns = <Widget>[];
-    if (!isCancelled && !isConfirmed) {
+    if (flag('confirm', !isCancelled && !isConfirmed)) {
       btns.add(_actBtn(ar ? '✅ اعتماد الطلب' : '✅ Approve order',
           UellowColors.successDk,
           () => _run(() => AdminApi.instance.orderApprove(id),
               ar ? 'تم اعتماد الطلب' : 'Order approved')));
     }
-    if (isConfirmed) {
+    if (flag('assign_delivery', isConfirmed)) {
       btns.add(_actBtn(ar ? '🚚 تعيين توصيل' : '🚚 Assign delivery',
           UellowColors.darkBrown, () => _openAssignDelivery(id, ar)));
     }
-    if (!isCancelled) {
+    if (flag('deliver', false)) {
+      btns.add(_actBtn(ar ? '📦 تأكيد التسليم' : '📦 Validate delivery',
+          const Color(0xFF0D9488),
+          () => _run(() => AdminApi.instance.orderDeliver(id),
+              ar ? 'تم تأكيد التسليم' : 'Delivery validated')));
+    }
+    if (flag('invoice', false)) {
+      btns.add(_actBtn(ar ? '🧾 إنشاء فاتورة' : '🧾 Create invoice',
+          const Color(0xFF7C3AED),
+          () => _run(() => AdminApi.instance.orderInvoice(id),
+              ar ? 'تم إنشاء الفاتورة' : 'Invoice created')));
+    }
+    if (flag('verify_payment', false)) {
+      btns.add(_actBtn(ar ? '🔎 التحقق من الدفع' : '🔎 Verify payment',
+          const Color(0xFF2563EB),
+          () => _run(() => AdminApi.instance.orderVerifyPayment(id),
+              ar ? 'تم التحقق من حالة الدفع' : 'Payment status checked')));
+    }
+    if (flag('register_payment', false)) {
+      btns.add(_actBtn(ar ? '💵 تسجيل دفعة' : '💵 Register payment',
+          const Color(0xFF059669),
+          () => _run(() => AdminApi.instance.orderRegisterPayment(id),
+              ar ? 'تم تسجيل الدفعة' : 'Payment registered')));
+    }
+    if (flag('lock', false)) {
+      btns.add(_actBtn(ar ? '🔒 قفل الطلب' : '🔒 Lock order',
+          const Color(0xFF64748B),
+          () => _run(() => AdminApi.instance.orderLock(id),
+              ar ? 'تم قفل الطلب' : 'Order locked')));
+    }
+    if (flag('unlock', false)) {
+      btns.add(_actBtn(ar ? '🔓 فتح القفل' : '🔓 Unlock order',
+          const Color(0xFF64748B),
+          () => _run(() => AdminApi.instance.orderUnlock(id),
+              ar ? 'تم فتح القفل' : 'Order unlocked')));
+    }
+    if (flag('cancel', !isCancelled)) {
       btns.add(_actBtn(ar ? '✖ إلغاء الطلب' : '✖ Cancel order',
           UellowColors.danger, () => _confirmCancel(id, ar)));
     }

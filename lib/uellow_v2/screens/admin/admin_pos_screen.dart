@@ -166,9 +166,13 @@ class _SessionsTabState extends State<_SessionsTab>
                 ]),
                 const SizedBox(height: 6),
                 Text('${s['config'] ?? ''} · ${s['user'] ?? ''}'
-                    ' · ${s['orders'] ?? 0} ${ar ? 'عملية' : 'sales'}',
+                    ' · ${s['orders'] ?? 0} ${ar ? 'عملية' : 'sales'}'
+                    '${s['items'] != null ? ' · ${s['items']} ${ar ? 'صنف' : 'items'}' : ''}',
                     style: const TextStyle(fontSize: 10.5,
                         color: UellowColors.muted)),
+                const SizedBox(height: 6),
+                _profitPill(ar, s['profit'] as Map?, s['margin_pct'],
+                    s['cost'] as Map?),
                 const SizedBox(height: 3),
                 Row(children: [
                   const Icon(Icons.play_circle_outline_rounded, size: 12,
@@ -299,11 +303,19 @@ class _PosOrdersTabState extends State<_PosOrdersTab>
                           fontWeight: FontWeight.w900,
                           color: UellowColors.darkBrown)),
                 ]),
-                subtitle: Text(
-                    '${o['date'] ?? ''} · ${o['items'] ?? 0} ${ar ? 'منتج' : 'items'}'
-                    '${pays.isNotEmpty ? ' · ${pays.map((p) => (p as Map)['method']).join('+')}' : ''}',
-                    style: const TextStyle(fontSize: 10,
-                        color: UellowColors.muted)),
+                subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                  Text(
+                      '${o['date'] ?? ''} · ${o['items'] ?? 0} ${ar ? 'منتج' : 'items'}'
+                      '${pays.isNotEmpty ? ' · ${pays.map((p) => (p as Map)['method']).join('+')}' : ''}',
+                      style: const TextStyle(fontSize: 10,
+                          color: UellowColors.muted)),
+                  if (o['profit'] != null) ...[
+                    const SizedBox(height: 5),
+                    _profitPill(ar, o['profit'] as Map?, o['margin_pct'],
+                        o['cost'] as Map?),
+                  ],
+                ]),
                 children: [
                   for (final l in lines) Padding(
                     padding: const EdgeInsets.symmetric(vertical: 2),
@@ -312,6 +324,13 @@ class _PosOrdersTabState extends State<_PosOrdersTab>
                           '${(l as Map)['name'] ?? ''}',
                           maxLines: 1, overflow: TextOverflow.ellipsis,
                           style: const TextStyle(fontSize: 10.5))),
+                      if (l['margin'] != null)
+                        Text('${ar ? 'ربح' : 'P'} ${l['margin']}  ',
+                            style: TextStyle(fontSize: 9.5,
+                                fontWeight: FontWeight.w700,
+                                color: (l['margin'] as num? ?? 0) < 0
+                                    ? const Color(0xFFEF4444)
+                                    : const Color(0xFF059669))),
                       Text('×${(l['qty'] as num? ?? 0).toStringAsFixed(0)}'
                           '  ${l['total'] ?? 0}',
                           style: const TextStyle(fontSize: 10.5,
@@ -328,6 +347,38 @@ class _PosOrdersTabState extends State<_PosOrdersTab>
   }
 }
 
+// Profit pill — green when positive, red on a loss; shows margin % + cost.
+Widget _profitPill(bool ar, Map? profit, dynamic marginPct, [Map? cost]) {
+  final v = (profit?['amount'] as num?) ?? 0;
+  final loss = v < 0;
+  final col = loss ? const Color(0xFFEF4444) : const Color(0xFF059669);
+  final pct = (marginPct is num) ? marginPct : null;
+  return Container(
+    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+    decoration: BoxDecoration(
+        color: col.withValues(alpha: .10),
+        borderRadius: BorderRadius.circular(8)),
+    child: Row(mainAxisSize: MainAxisSize.min, children: [
+      Icon(loss ? Icons.trending_down_rounded : Icons.trending_up_rounded,
+          size: 13, color: col),
+      const SizedBox(width: 4),
+      Text('${ar ? 'الربح' : 'Profit'} '
+          '${v.toStringAsFixed((profit?['digits'] as num?)?.toInt() ?? 3)} '
+          '${profit?['symbol'] ?? ''}',
+          style: TextStyle(fontSize: 11, fontWeight: FontWeight.w900,
+              color: col)),
+      if (pct != null) Text('  ·  ${pct.toStringAsFixed(1)}%',
+          style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700,
+              color: col)),
+      if (cost != null && (cost['amount'] as num? ?? 0) != 0)
+        Text('  ·  ${ar ? 'تكلفة' : 'cost'} '
+            '${(cost['amount'] as num? ?? 0).toStringAsFixed((cost['digits'] as num?)?.toInt() ?? 3)}',
+            style: const TextStyle(fontSize: 10,
+                color: UellowColors.muted)),
+    ]),
+  );
+}
+
 class _SessionOrdersScreen extends StatelessWidget {
   const _SessionOrdersScreen({required this.sessionId, required this.title});
   final int sessionId;
@@ -337,9 +388,10 @@ class _SessionOrdersScreen extends StatelessWidget {
     backgroundColor: const Color(0xFFF2F3F5),
     appBar: AppBar(
       backgroundColor: const Color(0xFF412402),
-      foregroundColor: Colors.white,
+      foregroundColor: UellowColors.yellow,
+      iconTheme: const IconThemeData(color: UellowColors.yellow),
       title: Text(title, style: const TextStyle(fontSize: 15,
-          fontWeight: FontWeight.w900)),
+          fontWeight: FontWeight.w900, color: UellowColors.yellow)),
     ),
     body: _PosOrdersTab(sessionId: sessionId),
   );

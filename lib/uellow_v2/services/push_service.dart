@@ -14,6 +14,8 @@
 // every time the backend reports a stage change, and dismiss it when
 // the order is delivered with cancelOrder(orderId).
 // =============================================================================
+import 'dart:convert';
+
 import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
@@ -22,6 +24,27 @@ import '../../api/uellow_api.dart';
 class PushService {
   PushService._();
   static final PushService instance = PushService._();
+
+  /// Set by FcmService — invoked when a local notification is tapped, with
+  /// the decoded data map (so foreground taps route like background ones).
+  static void Function(Map<String, dynamic> data)? onNotificationTap;
+
+  void _handleResponse(NotificationResponse r) {
+    final cb = onNotificationTap;
+    final raw = r.payload ?? '';
+    if (cb == null || raw.isEmpty) return;
+    Map<String, dynamic>? data;
+    try {
+      final dec = jsonDecode(raw);
+      if (dec is Map) data = dec.cast<String, dynamic>();
+    } catch (_) {
+      // Legacy ongoing-order payload "order:123".
+      if (raw.startsWith('order:')) {
+        data = {'type': 'order', 'id': raw.substring(6)};
+      }
+    }
+    if (data != null) cb(data);
+  }
 
   final FlutterLocalNotificationsPlugin _plugin = FlutterLocalNotificationsPlugin();
   bool _ready = false;
@@ -34,7 +57,9 @@ class PushService {
     const ios = DarwinInitializationSettings(
       requestAlertPermission: true, requestBadgePermission: true,
       requestSoundPermission: true);
-    await _plugin.initialize(const InitializationSettings(android: android, iOS: ios));
+    await _plugin.initialize(
+        const InitializationSettings(android: android, iOS: ios),
+        onDidReceiveNotificationResponse: _handleResponse);
     // Create channels up front so settings UI shows them.
     final androidImpl = _plugin.resolvePlatformSpecificImplementation<
         AndroidFlutterLocalNotificationsPlugin>();
@@ -77,7 +102,8 @@ class PushService {
 
   /// v2.1.64 — display a foreground FCM message as a normal tray
   /// notification (background/killed messages are shown by the OS).
-  Future<void> showRemote({required String title, required String body}) async {
+  Future<void> showRemote({required String title, required String body,
+      Map<String, dynamic>? data}) async {
     if (!_ready) await init();
     await _plugin.show(
       DateTime.now().millisecondsSinceEpoch & 0x7FFFFFFF,
@@ -85,6 +111,7 @@ class PushService {
       const NotificationDetails(android: AndroidNotificationDetails(
           'order_update', 'Order updates',
           importance: Importance.high, priority: Priority.high)),
+      payload: (data != null && data.isNotEmpty) ? jsonEncode(data) : null,
     );
   }
 

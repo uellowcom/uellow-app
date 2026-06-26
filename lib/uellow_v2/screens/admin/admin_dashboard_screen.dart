@@ -11,6 +11,7 @@ import 'package:flutter/material.dart';
 import '../../../api/uellow_api.dart';
 import '../../services/admin_mode.dart';
 import '../../theme/uellow_theme.dart';
+import 'admin_helpdesk_screen.dart';
 import 'admin_orders_screen.dart';
 import 'admin_pos_screen.dart';
 import 'admin_products_screen.dart';
@@ -350,6 +351,11 @@ class _ManagementGrid extends StatelessWidget {
           const Color(0xFF059669),
           () => Navigator.push(context, MaterialPageRoute(
               builder: (_) => const AdminProductsScreen()))),
+      (Icons.support_agent_rounded, ar ? 'الدعم' : 'Helpdesk',
+          ar ? 'تذاكر العملاء والردود' : 'Tickets & replies',
+          const Color(0xFFE11D48),
+          () => Navigator.push(context, MaterialPageRoute(
+              builder: (_) => const AdminHelpdeskScreen()))),
     ];
     return Padding(
       padding: const EdgeInsets.fromLTRB(14, 8, 14, 0),

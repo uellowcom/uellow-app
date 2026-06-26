@@ -164,4 +164,91 @@ class AdminApi {
 
   Future<Map<String, dynamic>> orderCreate(Map<String, dynamic> body) =>
       _post('/api/mobile/v2/admin/order/create', body);
+
+  // ── v2.2.54 — full order action set from the admin console ───────────
+  Future<Map<String, dynamic>> orderLock(int id) =>
+      _post('/api/mobile/v2/admin/order/$id/lock');
+
+  Future<Map<String, dynamic>> orderUnlock(int id) =>
+      _post('/api/mobile/v2/admin/order/$id/unlock');
+
+  /// Create + post the customer invoice.
+  Future<Map<String, dynamic>> orderInvoice(int id) =>
+      _post('/api/mobile/v2/admin/order/$id/invoice');
+
+  /// Validate the delivery (mark the picking done).
+  Future<Map<String, dynamic>> orderDeliver(int id) =>
+      _post('/api/mobile/v2/admin/order/$id/deliver');
+
+  /// Register a payment on the posted unpaid invoice.
+  Future<Map<String, dynamic>> orderRegisterPayment(int id,
+          [Map<String, dynamic>? body]) =>
+      _post('/api/mobile/v2/admin/order/$id/register-payment', body);
+
+  /// Reconcile an online (UPayments) charge against the gateway — captures
+  /// the order if the customer actually paid (heals a missed webhook).
+  Future<Map<String, dynamic>> orderVerifyPayment(int id) =>
+      _post('/api/mobile/v2/admin/order/$id/verify-payment');
+
+  // ── v2.2.53 — Helpdesk (support tickets) ─────────────────────────────
+  /// KPIs + stages + teams + priorities (filter chips on the list screen).
+  Future<Map<String, dynamic>> helpdeskMeta() async {
+    final r = await UellowApi.instance
+        .getRaw('/api/mobile/v2/admin/helpdesk/meta', auth: true);
+    return ((r['data'] as Map?) ?? const {}).cast<String, dynamic>();
+  }
+
+  /// Paginated ticket list. `status` = open|closed|all; optional filters by
+  /// stage / team / priority / unassigned.
+  Future<Map<String, dynamic>> tickets({
+    int page = 1,
+    String q = '',
+    String status = 'open',
+    int? stageId,
+    int? teamId,
+    String priority = '',
+    bool unassigned = false,
+  }) async {
+    final r = await UellowApi.instance.getRaw(
+        '/api/mobile/v2/admin/helpdesk/tickets',
+        query: {
+          'page': '$page',
+          if (q.isNotEmpty) 'q': q,
+          if (status.isNotEmpty) 'status': status,
+          if (stageId != null) 'stage_id': '$stageId',
+          if (teamId != null) 'team_id': '$teamId',
+          if (priority.isNotEmpty) 'priority': priority,
+          if (unassigned) 'unassigned': '1',
+        },
+        auth: true);
+    return ((r['data'] as Map?) ?? const {}).cast<String, dynamic>();
+  }
+
+  Future<Map<String, dynamic>> ticketDetail(int id) async {
+    final r = await UellowApi.instance
+        .getRaw('/api/mobile/v2/admin/helpdesk/ticket/$id', auth: true);
+    return ((r['data'] as Map?) ?? const {}).cast<String, dynamic>();
+  }
+
+  /// Post a customer reply (emails followers) or a private internal note.
+  Future<Map<String, dynamic>> ticketReply(int id, String body,
+          {bool internal = false}) =>
+      _post('/api/mobile/v2/admin/helpdesk/ticket/$id/reply',
+          {'body': body, 'internal': internal});
+
+  Future<Map<String, dynamic>> ticketStage(int id, int stageId) =>
+      _post('/api/mobile/v2/admin/helpdesk/ticket/$id/stage',
+          {'stage_id': stageId});
+
+  /// Assign to a user id, or pass `'me'` / `0` (unassign).
+  Future<Map<String, dynamic>> ticketAssign(int id, dynamic userId) =>
+      _post('/api/mobile/v2/admin/helpdesk/ticket/$id/assign',
+          {'user_id': userId});
+
+  Future<List<Map<String, dynamic>>> helpdeskAgents() async {
+    final r = await UellowApi.instance
+        .getRaw('/api/mobile/v2/admin/helpdesk/agents', auth: true);
+    final list = ((r['data'] as Map?)?['agents'] as List?) ?? const [];
+    return list.map((e) => (e as Map).cast<String, dynamic>()).toList();
+  }
 }

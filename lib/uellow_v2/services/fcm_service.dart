@@ -12,9 +12,14 @@ import 'dart:io' show Platform;
 
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../api/uellow_api.dart';
+import '../../main.dart' show rootNavigatorKey;
+import '../router/uellow_router.dart';
+import '../screens/admin/admin_orders_screen.dart';
+import '../screens/admin/admin_pos_screen.dart';
 import 'push_service.dart';
 
 @pragma('vm:entry-point')
@@ -35,14 +40,28 @@ class FcmService {
       FirebaseMessaging.onBackgroundMessage(_onBackgroundMessage);
       final fm = FirebaseMessaging.instance;
       await fm.requestPermission(alert: true, badge: true, sound: true);
-      // Foreground messages → local notification (system tray look).
+      // Foreground messages → local notification (system tray look). Carry
+      // the data map so a tap on the foreground notification routes too.
+      PushService.onNotificationTap = handleTap;
       FirebaseMessaging.onMessage.listen((m) {
         final n = m.notification;
         if (n != null) {
           PushService.instance.showRemote(
-              title: n.title ?? 'Uellow', body: n.body ?? '');
+              title: n.title ?? 'Uellow', body: n.body ?? '',
+              data: m.data);
         }
       });
+      // Tapping a notification (background → foreground) opens the record it
+      // refers to. The server attaches a `data` map with a `type` + `id`
+      // (admin_order, admin_pos_order, admin_pos_session, order, proximity…).
+      FirebaseMessaging.onMessageOpenedApp.listen(
+          (m) => handleTap(m.data));
+      // Cold start from a tapped notification (app was killed).
+      final initial = await fm.getInitialMessage();
+      if (initial != null) {
+        Future.delayed(const Duration(milliseconds: 900),
+            () => handleTap(initial.data));
+      }
       fm.onTokenRefresh.listen((t) => _register(t));
       // iOS: the FCM token is only mintable once the APNs token has arrived.
       // Fetch it first (short retry) and forward it so the backend can store
@@ -62,6 +81,41 @@ class FcmService {
       // Devices without Google services (e.g. Huawei HMS) land here —
       // the in-app inbox keeps working regardless.
     }
+  }
+
+  /// Route a tapped notification to the record it points at. Reads the FCM
+  /// `data` map: `type` selects the screen, `id` (or `order_id`) the record.
+  /// Public + static-friendly so a local-notification tap can reuse it.
+  void handleTap(Map<String, dynamic> data) {
+    try {
+      final nav = rootNavigatorKey.currentState;
+      if (nav == null || data.isEmpty) return;
+      final type = (data['type'] ?? '').toString();
+      final id = int.tryParse(
+          (data['id'] ?? data['order_id'] ?? '').toString());
+      switch (type) {
+        case 'admin_order':
+          if (id != null) {
+            nav.push(MaterialPageRoute(
+                builder: (_) => AdminOrderDetailScreen(orderId: id)));
+          }
+          break;
+        case 'admin_pos_order':
+        case 'admin_pos_session':
+          nav.push(MaterialPageRoute(builder: (_) => const AdminPosScreen()));
+          break;
+        case 'order':
+        case 'proximity':
+        case 'driver_location':
+          if (id != null) {
+            nav.pushNamed(Routes.order, arguments: {'id': id});
+          }
+          break;
+        default:
+          // Unknown / silent payloads — nothing to open.
+          break;
+      }
+    } catch (_) {}
   }
 
   /// Re-send the current token (call after login so the backend links
