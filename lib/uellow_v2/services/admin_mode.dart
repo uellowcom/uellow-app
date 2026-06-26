@@ -199,6 +199,29 @@ class AdminApi {
   Future<Map<String, dynamic>> orderVerifyPayment(int id) =>
       _post('/api/mobile/v2/admin/order/$id/verify-payment');
 
+  // ── v2.2.56 — customer journey / activity ────────────────────────────
+  Future<Map<String, dynamic>> activityRecent(
+      {int page = 1, String q = '', int? partnerId, String event = ''}) async {
+    final r = await UellowApi.instance.getRaw(
+        '/api/mobile/v2/admin/activity/recent',
+        query: {
+          'page': '$page',
+          if (q.isNotEmpty) 'q': q,
+          if (partnerId != null) 'partner_id': '$partnerId',
+          if (event.isNotEmpty) 'event': event,
+        },
+        auth: true);
+    return ((r['data'] as Map?) ?? const {}).cast<String, dynamic>();
+  }
+
+  Future<Map<String, dynamic>> customerActivity(int partnerId,
+      {int page = 1}) async {
+    final r = await UellowApi.instance.getRaw(
+        '/api/mobile/v2/admin/customer/$partnerId/activity',
+        query: {'page': '$page'}, auth: true);
+    return ((r['data'] as Map?) ?? const {}).cast<String, dynamic>();
+  }
+
   // ── v2.2.53 — Helpdesk (support tickets) ─────────────────────────────
   /// KPIs + stages + teams + priorities (filter chips on the list screen).
   Future<Map<String, dynamic>> helpdeskMeta() async {

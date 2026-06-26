@@ -12,6 +12,7 @@ import 'package:uellow/version.dart';
 import 'package:uellow/uellow_v2/services/deep_link_service.dart';
 import 'package:uellow/uellow_v2/services/fcm_service.dart';
 import 'package:uellow/uellow_v2/services/push_service.dart';
+import 'package:uellow/uellow_v2/services/activity_tracker.dart';
 
 final GlobalKey<NavigatorState> rootNavigatorKey = GlobalKey<NavigatorState>();
 
@@ -45,6 +46,8 @@ Future<void> main() async {
   unawaited(PushService.instance.init());
   // v2.1.64 — FCM: token registration + foreground display.
   unawaited(FcmService.instance.init());
+  // v2.2.56 — customer journey tracking (screen views + app lifecycle).
+  ActivityTracker.instance.start();
   runApp(UellowApp(navigatorKey: rootNavigatorKey));
 }
 
@@ -58,14 +61,33 @@ class UellowApp extends StatefulWidget {
   State<UellowApp> createState() => _UellowAppState();
 }
 
-class _UellowAppState extends State<UellowApp> {
+class _UellowAppState extends State<UellowApp> with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     // After first frame the navigator key has a state — wire deep links.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       DeepLinkService.instance.attach(widget.navigatorKey);
     });
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // v2.2.56 — log app foreground/background for the customer journey.
+    if (state == AppLifecycleState.resumed) {
+      ActivityTracker.instance.log('app_open');
+    } else if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.detached) {
+      ActivityTracker.instance.log('app_close');
+      unawaited(ActivityTracker.instance.flush());
+    }
   }
 
   @override
@@ -93,7 +115,10 @@ class _UellowAppState extends State<UellowApp> {
           initialRoute: Routes.splash,
           routes: UellowRouter.routes,
           onGenerateRoute: UellowRouter.generate,
-          navigatorObservers: [appRouteObserver],
+          navigatorObservers: [
+            appRouteObserver,
+            ActivityTracker.instance.observer,
+          ],
         );
       },
     );
