@@ -16,7 +16,7 @@ class AdminPosScreen extends StatefulWidget {
 
 class _AdminPosScreenState extends State<AdminPosScreen>
     with SingleTickerProviderStateMixin {
-  late final TabController _tabs = TabController(length: 2, vsync: this);
+  late final TabController _tabs = TabController(length: 3, vsync: this);
 
   @override
   void dispose() {
@@ -46,12 +46,14 @@ class _AdminPosScreenState extends State<AdminPosScreen>
           tabs: [
             Tab(text: ar ? 'اليوميات' : 'Sessions'),
             Tab(text: ar ? 'العمليات' : 'Sales'),
+            Tab(text: ar ? 'التقارير' : 'Reports'),
           ],
         ),
       ),
       body: TabBarView(controller: _tabs, children: const [
         _SessionsTab(),
         _PosOrdersTab(),
+        _ReportTab(),
       ]),
     );
   }
@@ -345,6 +347,176 @@ class _PosOrdersTabState extends State<_PosOrdersTab>
       ),
     );
   }
+}
+
+// ─── reports (aggregate KPIs over a date range) ──────────────────────────
+class _ReportTab extends StatefulWidget {
+  const _ReportTab();
+  @override
+  State<_ReportTab> createState() => _ReportTabState();
+}
+
+class _ReportTabState extends State<_ReportTab>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+  int _days = 30;
+  Map<String, dynamic>? _data;
+  bool _loading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() => _loading = true);
+    try {
+      _data = await AdminApi.instance.posReport(days: _days);
+    } catch (_) {}
+    if (mounted) setState(() => _loading = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+    final ar = UellowApi.instance.lang == 'ar';
+    if (_data == null && _loading) {
+      return const Center(child: CircularProgressIndicator(
+          color: UellowColors.darkBrown));
+    }
+    final d = _data;
+    if (d == null) {
+      return Center(child: Text(ar ? 'تعذر التحميل' : 'Failed to load'));
+    }
+    final k = (d['kpi'] as Map?) ?? const {};
+    final byPay = (d['by_payment'] as List?) ?? const [];
+    final byCash = (d['by_cashier'] as List?) ?? const [];
+    final top = (d['top_products'] as List?) ?? const [];
+    final cur = d['currency']?.toString() ?? 'KD';
+    num amt(dynamic m) => (m is Map ? (m['amount'] as num? ?? 0) : 0);
+    return RefreshIndicator(
+      onRefresh: _load,
+      child: ListView(padding: const EdgeInsets.fromLTRB(14, 12, 14, 28),
+          children: [
+        // period selector
+        Row(children: [
+          Text(ar ? 'الفترة:' : 'Period:', style: const TextStyle(
+              fontSize: 12, fontWeight: FontWeight.w800,
+              color: UellowColors.muted)),
+          const SizedBox(width: 8),
+          for (final n in const [7, 30, 90, 365]) Padding(
+            padding: const EdgeInsets.only(right: 6),
+            child: ChoiceChip(
+              label: Text(n == 365 ? (ar ? 'سنة' : '1y') : '$n${ar ? 'ي' : 'd'}',
+                  style: const TextStyle(fontSize: 11.5,
+                      fontWeight: FontWeight.w800)),
+              selected: _days == n,
+              selectedColor: UellowColors.yellow,
+              onSelected: (_) { setState(() => _days = n); _load(); },
+            ),
+          ),
+          if (_loading) const Padding(padding: EdgeInsets.only(left: 6),
+              child: SizedBox(width: 14, height: 14,
+                  child: CircularProgressIndicator(strokeWidth: 2))),
+        ]),
+        const SizedBox(height: 12),
+        // headline KPIs
+        Row(children: [
+          _kpi(ar ? 'المبيعات' : 'Sales',
+              '${amt(k['sales']).toStringAsFixed(3)} $cur',
+              const Color(0xFF412402)),
+          const SizedBox(width: 10),
+          _kpi(ar ? 'الربح' : 'Profit',
+              '${amt(k['profit']).toStringAsFixed(3)} $cur',
+              (amt(k['profit']) < 0)
+                  ? const Color(0xFFEF4444) : const Color(0xFF059669),
+              sub: '${k['margin_pct'] ?? 0}%'),
+        ]),
+        const SizedBox(height: 10),
+        Row(children: [
+          _kpi(ar ? 'العمليات' : 'Orders', '${k['orders'] ?? 0}',
+              const Color(0xFF2563EB)),
+          const SizedBox(width: 10),
+          _kpi(ar ? 'الأصناف' : 'Items', '${k['items'] ?? 0}',
+              const Color(0xFF7C3AED)),
+          const SizedBox(width: 10),
+          _kpi(ar ? 'متوسط السلة' : 'Avg basket',
+              amt(k['avg_basket']).toStringAsFixed(3),
+              const Color(0xFF0D9488)),
+        ]),
+        if ((k['refunds_count'] as num? ?? 0) != 0) ...[
+          const SizedBox(height: 10),
+          _kpi(ar ? 'المرتجعات' : 'Refunds',
+              '${amt(k['refunds']).toStringAsFixed(3)} $cur '
+              '(${k['refunds_count']})', const Color(0xFFEF4444)),
+        ],
+        const SizedBox(height: 16),
+        if (byPay.isNotEmpty)
+          _section(ar ? '💳 حسب طريقة الدفع' : '💳 By payment method', [
+            for (final p in byPay) _line((p as Map)['method']?.toString() ?? '',
+                '${(p['amount'] as num? ?? 0).toStringAsFixed(3)} $cur'),
+          ]),
+        if (byCash.isNotEmpty)
+          _section(ar ? '👤 حسب الكاشير' : '👤 By cashier', [
+            for (final c in byCash) _line(
+                '${(c as Map)['name'] ?? ''} · ${c['orders'] ?? 0}',
+                '${ar ? 'ربح' : 'P'} ${(c['profit'] as num? ?? 0).toStringAsFixed(3)} / '
+                '${(c['sales'] as num? ?? 0).toStringAsFixed(3)}'),
+          ]),
+        if (top.isNotEmpty)
+          _section(ar ? '🏆 الأكثر ربحًا' : '🏆 Top by profit', [
+            for (final p in top) _line(
+                '${(p as Map)['name'] ?? ''} ×${p['qty'] ?? 0}',
+                '${(p['profit'] as num? ?? 0).toStringAsFixed(3)} $cur'),
+          ]),
+      ]),
+    );
+  }
+
+  Widget _kpi(String label, String value, Color color, {String? sub}) =>
+      Expanded(child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 12),
+        decoration: BoxDecoration(color: Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: const Color(0xFFECECEC))),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(label, style: const TextStyle(fontSize: 10.5,
+              color: UellowColors.muted, fontWeight: FontWeight.w700)),
+          const SizedBox(height: 5),
+          FittedBox(fit: BoxFit.scaleDown, alignment: Alignment.centerLeft,
+              child: Text(value, style: TextStyle(fontSize: 15,
+                  fontWeight: FontWeight.w900, color: color))),
+          if (sub != null) Text(sub, style: TextStyle(fontSize: 10.5,
+              fontWeight: FontWeight.w800, color: color)),
+        ]),
+      ));
+
+  Widget _section(String title, List<Widget> children) => Container(
+    margin: const EdgeInsets.only(bottom: 12),
+    padding: const EdgeInsets.fromLTRB(14, 12, 14, 8),
+    decoration: BoxDecoration(color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFECECEC))),
+    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text(title, style: const TextStyle(fontSize: 12.5,
+          fontWeight: FontWeight.w900, color: UellowColors.darkBrown)),
+      const SizedBox(height: 8),
+      ...children,
+    ]),
+  );
+
+  Widget _line(String left, String right) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 4),
+    child: Row(children: [
+      Expanded(child: Text(left, maxLines: 1, overflow: TextOverflow.ellipsis,
+          style: const TextStyle(fontSize: 11.5))),
+      const SizedBox(width: 8),
+      Text(right, style: const TextStyle(fontSize: 11.5,
+          fontWeight: FontWeight.w800, color: UellowColors.darkBrown)),
+    ]),
+  );
 }
 
 // Profit pill — green when positive, red on a loss; shows margin % + cost.
