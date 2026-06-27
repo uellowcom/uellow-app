@@ -284,7 +284,7 @@ class AdminApi {
     return list.map((e) => (e as Map).cast<String, dynamic>()).toList();
   }
 
-  // ── v2.2.57 — Purchase (procurement) manager ─────────────────────────
+  // ── v2.2.57 — Purchase (procurement) manager (v2.2.58 adds create/pay/edit/stats) ─────────────────────────
   /// State counts for the filter chips (rfq / to_approve / purchase / …).
   Future<Map<String, dynamic>> purchaseMeta() async {
     final r = await UellowApi.instance
@@ -327,4 +327,46 @@ class AdminApi {
   /// Create + post the vendor bill.
   Future<Map<String, dynamic>> purchaseBill(int id) =>
       _post('/api/mobile/v2/admin/purchase/$id/bill');
+
+  /// Register a payment on the posted unpaid vendor bill.
+  Future<Map<String, dynamic>> purchasePay(int id,
+          [Map<String, dynamic>? body]) =>
+      _post('/api/mobile/v2/admin/purchase/$id/pay', body);
+
+  /// Purchases summary (month spend, RFQ/to-receive/to-bill counts, top
+  /// vendors).
+  Future<Map<String, dynamic>> purchaseStats() async {
+    final r = await UellowApi.instance
+        .getRaw('/api/mobile/v2/admin/purchase/stats', auth: true);
+    return ((r['data'] as Map?) ?? const {}).cast<String, dynamic>();
+  }
+
+  /// Vendor picker for a new RFQ (search by name / phone / email).
+  Future<List<Map<String, dynamic>>> purchaseVendors({String q = ''}) async {
+    final r = await UellowApi.instance.getRaw(
+        '/api/mobile/v2/admin/purchase/vendors',
+        query: {if (q.isNotEmpty) 'q': q}, auth: true);
+    final list = ((r['data'] as Map?)?['vendors'] as List?) ?? const [];
+    return list.map((e) => (e as Map).cast<String, dynamic>()).toList();
+  }
+
+  /// Product search for adding RFQ lines (name / code / barcode).
+  Future<List<Map<String, dynamic>>> purchaseProducts({String q = ''}) async {
+    final r = await UellowApi.instance.getRaw(
+        '/api/mobile/v2/admin/purchase/products',
+        query: {if (q.isNotEmpty) 'q': q}, auth: true);
+    final list = ((r['data'] as Map?)?['products'] as List?) ?? const [];
+    return list.map((e) => (e as Map).cast<String, dynamic>()).toList();
+  }
+
+  /// Create a new RFQ. body = {vendor_id, lines:[{product_id, qty,
+  /// price_unit?}]}.
+  Future<Map<String, dynamic>> purchaseCreate(Map<String, dynamic> body) =>
+      _post('/api/mobile/v2/admin/purchase/create', body);
+
+  /// Edit lines on a draft RFQ. body = {lines:[{id?, product_id?, qty,
+  /// price_unit?}], remove:[ids]}.
+  Future<Map<String, dynamic>> purchaseUpdateLines(int id,
+          Map<String, dynamic> body) =>
+      _post('/api/mobile/v2/admin/purchase/$id/update-lines', body);
 }

@@ -11,6 +11,7 @@ import 'package:flutter/material.dart';
 import '../../../api/uellow_api.dart';
 import '../../theme/uellow_theme.dart';
 import '../../services/admin_mode.dart';
+import 'admin_purchase_create_screen.dart';
 
 const _brown = Color(0xFF412402);
 
@@ -46,6 +47,7 @@ class _AdminPurchaseScreenState extends State<AdminPurchaseScreen> {
 
   final List<Map<String, dynamic>> _rows = [];
   Map<String, dynamic> _counts = {};
+  Map<String, dynamic> _stats = {};
   int _page = 1, _pages = 1, _total = 0;
   bool _loading = false;
   String _q = '';
@@ -93,6 +95,19 @@ class _AdminPurchaseScreenState extends State<AdminPurchaseScreen> {
             dynamic>() ?? {});
       }
     } catch (_) {}
+    try {
+      final s = await AdminApi.instance.purchaseStats();
+      if (mounted) setState(() => _stats = s);
+    } catch (_) {}
+  }
+
+  Future<void> _openCreate() async {
+    final created = await Navigator.push<bool>(context, MaterialPageRoute(
+        builder: (_) => const AdminPurchaseCreateScreen()));
+    if (created == true) {
+      await _loadMeta();
+      await _load(reset: true);
+    }
   }
 
   Future<void> _load({bool reset = false}) async {
@@ -125,6 +140,14 @@ class _AdminPurchaseScreenState extends State<AdminPurchaseScreen> {
             '${_total > 0 ? ' ($_total)' : ''}',
             style: const TextStyle(fontSize: 16,
                 fontWeight: FontWeight.w900, color: UellowColors.yellow)),
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _openCreate,
+        backgroundColor: UellowColors.yellow,
+        foregroundColor: _brown,
+        icon: const Icon(Icons.add_rounded),
+        label: Text(ar ? 'طلب جديد' : 'New RFQ',
+            style: const TextStyle(fontWeight: FontWeight.w900)),
       ),
       body: Column(children: [
         Container(
@@ -196,6 +219,7 @@ class _AdminPurchaseScreenState extends State<AdminPurchaseScreen> {
             ),
           ),
         ),
+        if (_stats.isNotEmpty && _q.isEmpty) _statsStrip(ar),
         Expanded(child: _rows.isEmpty && _loading
             ? const Center(child: CircularProgressIndicator(
                 color: UellowColors.darkBrown))
@@ -227,6 +251,63 @@ class _AdminPurchaseScreenState extends State<AdminPurchaseScreen> {
       ]),
     );
   }
+
+  Widget _statsStrip(bool ar) {
+    final spend = (_stats['month_spend'] as Map?) ?? const {};
+    final toRecv = (_stats['to_receive'] as num?)?.toInt() ?? 0;
+    final toBill = (_stats['to_bill'] as num?)?.toInt() ?? 0;
+    final top = (_stats['top_vendors'] as List?) ?? const [];
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.fromLTRB(14, 12, 14, 0),
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+      decoration: BoxDecoration(color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: const [BoxShadow(color: Color(0x10000000),
+              blurRadius: 8, offset: Offset(0, 3))]),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Expanded(child: _stat(ar ? 'إنفاق هذا الشهر' : 'Spend (month)',
+              '${spend['amount'] ?? 0} ${spend['symbol'] ?? ''}',
+              const Color(0xFFB45309))),
+          Expanded(child: _stat(ar ? 'للاستلام' : 'To receive', '$toRecv',
+              const Color(0xFFF59E0B))),
+          Expanded(child: _stat(ar ? 'للفوترة' : 'To bill', '$toBill',
+              const Color(0xFF7C3AED))),
+        ]),
+        if (top.isNotEmpty) ...[
+          const Divider(height: 16),
+          Text(ar ? 'أعلى الموردين (٩٠ يوم)' : 'Top vendors (90d)',
+              style: const TextStyle(fontSize: 10.5,
+                  fontWeight: FontWeight.w800, color: UellowColors.muted)),
+          const SizedBox(height: 5),
+          for (final v in top.take(3))
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 2),
+              child: Row(children: [
+                Expanded(child: Text((v as Map)['name']?.toString() ?? '',
+                    maxLines: 1, overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 11))),
+                Text('${(v['amount'] as Map?)?['amount'] ?? 0} '
+                    '${(v['amount'] as Map?)?['symbol'] ?? ''}',
+                    style: const TextStyle(fontSize: 11,
+                        fontWeight: FontWeight.w900,
+                        color: UellowColors.darkBrown)),
+              ]),
+            ),
+        ],
+      ]),
+    );
+  }
+
+  Widget _stat(String label, String value, Color c) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text(value, style: TextStyle(fontSize: 14,
+          fontWeight: FontWeight.w900, color: c)),
+      const SizedBox(height: 1),
+      Text(label, style: const TextStyle(fontSize: 9.5,
+          color: UellowColors.muted)),
+    ]);
 
   Widget _row(bool ar, Map<String, dynamic> po) {
     final st = _stateStyle((po['state'] ?? '').toString());
@@ -363,6 +444,21 @@ class _PurchaseDetailSheetState extends State<_PurchaseDetailSheet> {
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  Future<void> _openEdit(Map<String, dynamic> d, bool ar) async {
+    final v = (d['vendor'] as Map?) ?? const {};
+    final lines = ((d['lines'] as List?) ?? const [])
+        .map((e) => (e as Map).cast<String, dynamic>()).toList();
+    final saved = await Navigator.push<bool>(context, MaterialPageRoute(
+      builder: (_) => AdminPurchaseCreateScreen(
+        editPoId: widget.poId,
+        initVendorId: (v['id'] as num?)?.toInt(),
+        initVendorName: (v['name'] ?? '').toString(),
+        initLines: lines,
+      ),
+    ));
+    if (saved == true) _reload();
   }
 
   Future<void> _confirmCancel(bool ar) async {
@@ -562,6 +658,16 @@ class _PurchaseDetailSheetState extends State<_PurchaseDetailSheet> {
           const Color(0xFF7C3AED),
           () => _run(() => AdminApi.instance.purchaseBill(id),
               ar ? 'تم إنشاء الفاتورة' : 'Vendor bill created')));
+    }
+    if (flag('pay')) {
+      btns.add(_actBtn(ar ? '💵 دفع للمورد' : '💵 Pay vendor',
+          const Color(0xFF059669),
+          () => _run(() => AdminApi.instance.purchasePay(id),
+              ar ? 'تم تسجيل الدفعة' : 'Payment registered')));
+    }
+    if (flag('edit')) {
+      btns.add(_actBtn(ar ? '✏️ تعديل البنود' : '✏️ Edit lines',
+          const Color(0xFF2563EB), () => _openEdit(d, ar)));
     }
     if (flag('cancel')) {
       btns.add(_actBtn(ar ? '✖ إلغاء الطلب' : '✖ Cancel order',
