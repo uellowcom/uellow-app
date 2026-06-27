@@ -283,4 +283,48 @@ class AdminApi {
     final list = ((r['data'] as Map?)?['agents'] as List?) ?? const [];
     return list.map((e) => (e as Map).cast<String, dynamic>()).toList();
   }
+
+  // ── v2.2.57 — Purchase (procurement) manager ─────────────────────────
+  /// State counts for the filter chips (rfq / to_approve / purchase / …).
+  Future<Map<String, dynamic>> purchaseMeta() async {
+    final r = await UellowApi.instance
+        .getRaw('/api/mobile/v2/admin/purchase/meta', auth: true);
+    return ((r['data'] as Map?) ?? const {}).cast<String, dynamic>();
+  }
+
+  /// Paginated purchase-order / RFQ list. `state` =
+  /// rfq|to_approve|purchase|to_receive|to_bill|cancel|'' (all).
+  Future<Map<String, dynamic>> purchases(
+      {int page = 1, String q = '', String state = ''}) async {
+    final r = await UellowApi.instance.getRaw(
+        '/api/mobile/v2/admin/purchases',
+        query: {
+          'page': '$page',
+          if (q.isNotEmpty) 'q': q,
+          if (state.isNotEmpty) 'state': state,
+        },
+        auth: true);
+    return ((r['data'] as Map?) ?? const {}).cast<String, dynamic>();
+  }
+
+  Future<Map<String, dynamic>> purchaseDetail(int id) async {
+    final r = await UellowApi.instance
+        .getRaw('/api/mobile/v2/admin/purchase/$id', auth: true);
+    return ((r['data'] as Map?) ?? const {}).cast<String, dynamic>();
+  }
+
+  /// Confirm an RFQ → purchase order.
+  Future<Map<String, dynamic>> purchaseConfirm(int id) =>
+      _post('/api/mobile/v2/admin/purchase/$id/confirm');
+
+  Future<Map<String, dynamic>> purchaseCancel(int id) =>
+      _post('/api/mobile/v2/admin/purchase/$id/cancel');
+
+  /// Validate the incoming receipt (set the goods received in stock).
+  Future<Map<String, dynamic>> purchaseReceive(int id) =>
+      _post('/api/mobile/v2/admin/purchase/$id/receive');
+
+  /// Create + post the vendor bill.
+  Future<Map<String, dynamic>> purchaseBill(int id) =>
+      _post('/api/mobile/v2/admin/purchase/$id/bill');
 }

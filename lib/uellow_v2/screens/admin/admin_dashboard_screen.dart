@@ -16,6 +16,7 @@ import 'admin_activity_screen.dart';
 import 'admin_orders_screen.dart';
 import 'admin_pos_screen.dart';
 import 'admin_products_screen.dart';
+import 'admin_purchase_screen.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
   const AdminDashboardScreen({super.key});
@@ -352,6 +353,11 @@ class _ManagementGrid extends StatelessWidget {
           const Color(0xFF059669),
           () => Navigator.push(context, MaterialPageRoute(
               builder: (_) => const AdminProductsScreen()))),
+      (Icons.shopping_cart_checkout_rounded, ar ? 'المشتريات' : 'Purchases',
+          ar ? 'أوامر الشراء والموردين' : 'POs & vendors',
+          const Color(0xFFB45309),
+          () => Navigator.push(context, MaterialPageRoute(
+              builder: (_) => const AdminPurchaseScreen()))),
       (Icons.support_agent_rounded, ar ? 'الدعم' : 'Helpdesk',
           ar ? 'تذاكر العملاء والردود' : 'Tickets & replies',
           const Color(0xFFE11D48),
