@@ -558,7 +558,15 @@ class _ReelSlideState extends State<_ReelSlide> with RouteAware {
     final ar = widget.ar;
     final p = _product;
     final name = ((p['name'] as Map?)?[ar ? 'ar' : 'en'] as String?) ?? '';
-    final brand = ((p['vendor'] as Map?)?['name'] as String?)
+    // v2.2.59 — vendor.name is now a bilingual Map ({en, ar}) after the
+    // multivendor "Uellow Vendors" house-fallback change. Casting a Map to
+    // String? threw a type-cast error inside build() → the whole Reels tab
+    // rendered as Flutter's gray ErrorWidget. Read the localized value safely
+    // whether the API sends a Map (new) or a plain String (legacy).
+    final vendorName = (p['vendor'] as Map?)?['name'];
+    final brand = (vendorName is Map
+            ? (vendorName[ar ? 'ar' : 'en'] ?? vendorName['en']) as String?
+            : vendorName as String?)
         ?? ((p['brand'] as Map?)?[ar ? 'ar' : 'en'] as String?);
     final price = (p['price'] as Map?)?.cast<String, dynamic>();
     final priceAmt = (price?['amount'] as num?)?.toDouble() ?? 0;

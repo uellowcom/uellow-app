@@ -7,6 +7,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../api/uellow_api.dart';
 import '../../theme/uellow_theme.dart';
@@ -484,6 +485,44 @@ class _PurchaseDetailSheetState extends State<_PurchaseDetailSheet> {
     }
   }
 
+  /// Send the RFQ/PO to the vendor by email (server-side) or WhatsApp
+  /// (opens WhatsApp with a prefilled message + PDF link).
+  Future<void> _send(String channel, bool ar) async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      final r = await AdminApi.instance.purchaseSend(widget.poId, channel);
+      final data = ((r['data'] as Map?) ?? const {}).cast<String, dynamic>();
+      if (channel == 'whatsapp') {
+        final waUrl = (data['wa_url'] ?? '').toString();
+        if (waUrl.isNotEmpty) {
+          await launchUrl(Uri.parse(waUrl),
+              mode: LaunchMode.externalApplication);
+        }
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+              content: Text(ar ? 'تم فتح واتساب' : 'WhatsApp opened')));
+        }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+              content: Text(ar
+                  ? 'تم إرسال الطلب بالإيميل إلى ${data['to'] ?? 'المورد'}'
+                  : 'Order emailed to ${data['to'] ?? 'vendor'}')));
+        }
+      }
+      _reload();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(e.toString().replaceAll('Exception: ', '')),
+            backgroundColor: UellowColors.danger));
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final ar = widget.ar;
@@ -641,6 +680,15 @@ class _PurchaseDetailSheetState extends State<_PurchaseDetailSheet> {
     final id = widget.poId;
     bool flag(String k) => can[k] == true;
     final btns = <Widget>[];
+    // ── Send to vendor (Email / WhatsApp) ──
+    if (flag('send_email')) {
+      btns.add(_actBtn(ar ? '📧 إرسال بالإيميل' : '📧 Send by Email',
+          const Color(0xFF2563EB), () => _send('email', ar)));
+    }
+    if (flag('send')) {
+      btns.add(_actBtn(ar ? '🟢 إرسال عبر واتساب' : '🟢 Send via WhatsApp',
+          const Color(0xFF25D366), () => _send('whatsapp', ar)));
+    }
     if (flag('confirm')) {
       btns.add(_actBtn(ar ? '✅ تأكيد الطلب' : '✅ Confirm order',
           const Color(0xFF059669),

@@ -333,6 +333,12 @@ class AdminApi {
           [Map<String, dynamic>? body]) =>
       _post('/api/mobile/v2/admin/purchase/$id/pay', body);
 
+  /// Send the RFQ/PO to the vendor. channel = 'email' | 'whatsapp'.
+  /// Email → sends the purchase email (PDF attached). WhatsApp → returns
+  /// {wa_url, pdf_url} for the app to open in WhatsApp.
+  Future<Map<String, dynamic>> purchaseSend(int id, String channel) =>
+      _post('/api/mobile/v2/admin/purchase/$id/send', {'channel': channel});
+
   /// Purchases summary (month spend, RFQ/to-receive/to-bill counts, top
   /// vendors).
   Future<Map<String, dynamic>> purchaseStats() async {
