@@ -12,6 +12,7 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import '../../../api/uellow_api.dart';
 import '../../services/admin_mode.dart';
 import '../../theme/uellow_theme.dart';
+import 'admin_stock_screen.dart';
 
 Future<void> showAdminProductSheet(BuildContext context, int tmplId) {
   return showModalBottomSheet(
@@ -267,6 +268,8 @@ class _AdminProductSheetState extends State<_AdminProductSheet> {
                       setState(() => _continueSelling = v)),
             ]),
           ),
+          const SizedBox(height: 12),
+          _stockButton(ar),
           if (!hasVariants) ...[
             const SizedBox(height: 12),
             _barcodeField(ar, _barcode),
@@ -308,6 +311,51 @@ class _AdminProductSheetState extends State<_AdminProductSheet> {
         ),
       ),
     ]);
+  }
+
+  // v2.2.60 — open the full inventory ledger + adjustment screen.
+  Widget _stockButton(bool ar) {
+    final qty = _d?['qty'] as num? ?? 0;
+    return InkWell(
+      borderRadius: BorderRadius.circular(12),
+      onTap: () async {
+        final name = (ar ? _d!['name_ar'] : _d!['name'])?.toString();
+        await Navigator.push(context, MaterialPageRoute(
+            builder: (_) => AdminStockScreen(
+                tmplId: widget.tmplId, title: name)));
+        // refresh the sheet's on-hand chip in case it changed
+        if (mounted) _load();
+      },
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(13, 12, 10, 12),
+        decoration: BoxDecoration(
+            color: const Color(0xFFF7F8FA),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: const Color(0xFFECECEC))),
+        child: Row(children: [
+          const Icon(Icons.inventory_2_outlined, size: 18,
+              color: UellowColors.darkBrown),
+          const SizedBox(width: 8),
+          Expanded(child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(ar ? 'المخزون والحركة' : 'Stock & ledger',
+                style: const TextStyle(fontSize: 12.5,
+                    fontWeight: FontWeight.w800)),
+            Text(
+                ar ? 'تعديل الكمية • مشتريات • مبيعات • سجل'
+                   : 'Adjust qty • purchases • sales • history',
+                style: const TextStyle(fontSize: 10,
+                    color: UellowColors.muted)),
+          ])),
+          Text('$qty',
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w900,
+                  color: qty > 0
+                      ? const Color(0xFF059669) : UellowColors.danger)),
+          const Icon(Icons.chevron_right_rounded,
+              color: UellowColors.muted),
+        ]),
+      ),
+    );
   }
 
   Widget _categorySection(bool ar) {

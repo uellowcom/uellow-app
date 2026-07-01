@@ -137,6 +137,29 @@ class AdminApi {
     return (r['data'] as Map).cast<String, dynamic>();
   }
 
+  // ── v2.2.60 — stock ledger + inventory adjustment (with reason) ──────
+  Future<Map<String, dynamic>> productStock(int tmplId) async {
+    final r = await UellowApi.instance.getRaw(
+        '/api/mobile/v2/admin/product/$tmplId/stock', auth: true);
+    return (r['data'] as Map).cast<String, dynamic>();
+  }
+
+  Future<Map<String, dynamic>> stockAdjust(int tmplId,
+      {required double qty, required String reason, int? variantId}) async {
+    final r = await UellowApi.instance.postRaw(
+        '/api/mobile/v2/admin/product/$tmplId/stock/adjust',
+        body: {
+          'qty': qty,
+          'reason': reason,
+          if (variantId != null) 'variant_id': variantId,
+        },
+        auth: true);
+    if (r['success'] != true) {
+      throw Exception((r['error'] ?? r['code'] ?? 'adjust failed').toString());
+    }
+    return (r['data'] as Map).cast<String, dynamic>();
+  }
+
   // ── v2.2.41 — eCommerce category picker + sales actions ──────────────
   Future<List<Map<String, dynamic>>> categories() async {
     final r = await UellowApi.instance
