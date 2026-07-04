@@ -182,9 +182,98 @@ class WorldScreen extends StatelessWidget {
                 ),
               ),
             ),
+            // Shop by category — real, functional filters (unlike countries).
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 22, 16, 8),
+              child: Text(ar ? 'تسوّق حسب القسم' : 'Shop by Category',
+                  style: const TextStyle(
+                      color: _brandDark, fontWeight: FontWeight.w800, fontSize: 15)),
+            ),
+            const _WorldCategoryGrid(),
           ],
         ),
       ),
+    );
+  }
+}
+
+// ─── Category grid on the World entry (fetched, tap → filtered shop) ──
+class _WorldCategoryGrid extends StatefulWidget {
+  const _WorldCategoryGrid();
+  @override
+  State<_WorldCategoryGrid> createState() => _WorldCategoryGridState();
+}
+
+class _WorldCategoryGridState extends State<_WorldCategoryGrid> {
+  List<Map<String, dynamic>> _cats = [];
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final res = await UellowApi.instance.getRaw(
+          '/api/mobile/v2/dropship/categories', query: {'limit': 18});
+      final data = (res['data'] as Map?)?.cast<String, dynamic>() ?? res;
+      final list = (data['items'] as List?) ?? const [];
+      _cats = list.map((e) => (e as Map).cast<String, dynamic>()).toList();
+    } catch (_) {
+      _cats = [];
+    }
+    if (mounted) setState(() => _loading = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) {
+      return const Padding(
+        padding: EdgeInsets.all(20),
+        child: Center(child: CircularProgressIndicator(color: _brandYellow)));
+    }
+    if (_cats.isEmpty) return const SizedBox.shrink();
+    final ar = UellowApi.instance.lang == 'ar';
+    return GridView.count(
+      crossAxisCount: 3,
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      mainAxisSpacing: 12, crossAxisSpacing: 12, childAspectRatio: 0.92,
+      children: _cats.map((c) {
+        final label = (c['label'] as Map?)?.cast<String, dynamic>() ?? const {};
+        final title = (ar ? (label['ar'] ?? label['en']) : (label['en'] ?? label['ar']) ?? '').toString();
+        return GestureDetector(
+          onTap: () => Navigator.push(context, MaterialPageRoute(
+              builder: (_) => WorldShopScreen(
+                  category: (c['code'] ?? '').toString(),
+                  categoryLabel: title))),
+          child: Container(
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: const [BoxShadow(
+                  color: Color(0x0A000000), blurRadius: 8, offset: Offset(0, 2))],
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text((c['icon'] ?? '🏷️').toString(),
+                    style: const TextStyle(fontSize: 30)),
+                const SizedBox(height: 6),
+                Text(title,
+                    maxLines: 2, textAlign: TextAlign.center,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                        fontWeight: FontWeight.w700, color: _brandDark, fontSize: 11.5)),
+              ],
+            ),
+          ),
+        );
+      }).toList(),
     );
   }
 }
@@ -194,7 +283,9 @@ class WorldScreen extends StatelessWidget {
 // =============================================================================
 class WorldShopScreen extends StatefulWidget {
   final String? country;
-  const WorldShopScreen({super.key, this.country});
+  final String? category;        // dropship.category code (filter key)
+  final String? categoryLabel;   // display label for the app bar
+  const WorldShopScreen({super.key, this.country, this.category, this.categoryLabel});
   @override
   State<WorldShopScreen> createState() => _WorldShopScreenState();
 }
@@ -236,6 +327,7 @@ class _WorldShopScreenState extends State<WorldShopScreen> {
             'per_page': 20,
             if (_deals) 'deals_only': 1,
             if (widget.country != null) 'country': widget.country,
+            if (widget.category != null) 'category': widget.category,
           });
       final data = (res['data'] as Map?)?.cast<String, dynamic>() ?? res;
       final list = (data['items'] as List?) ?? const [];
@@ -279,7 +371,8 @@ class _WorldShopScreenState extends State<WorldShopScreen> {
           backgroundColor: Colors.white,
           foregroundColor: _brandDark,
           elevation: 0,
-          title: Text(ar ? '🌍 يلو وورلد' : '🌍 Uellow World',
+          title: Text(
+              widget.categoryLabel ?? (ar ? '🌍 يلو وورلد' : '🌍 Uellow World'),
               style: const TextStyle(
                   color: Color(0xFF1A1A1A), fontWeight: FontWeight.w800, fontSize: 17)),
           actions: [

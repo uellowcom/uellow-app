@@ -201,6 +201,8 @@ class _HomeScreenState extends State<HomeScreen> {
         physics: const AlwaysScrollableScrollPhysics(),
         slivers: [
           SliverToBoxAdapter(child: _TopBar()),
+          // v2.2.61 — prominent, labeled entry to the Uellow World store.
+          const SliverToBoxAdapter(child: _WorldBanner()),
           // v2.1.57 — targeted announcement strip (admin-controlled).
           // v2.1.59 — personal strip for the customer's specialist
           // requests (pending → replied).
@@ -564,6 +566,76 @@ class _IconButton extends StatelessWidget {
           borderRadius: BorderRadius.circular(12),
         ),
         child: Icon(icon, size: 18, color: UellowColors.text),
+      ),
+    );
+  }
+}
+
+// ─── Uellow World entry banner — prominent, labeled, opens the store ─
+
+class _WorldBanner extends StatelessWidget {
+  const _WorldBanner();
+  @override
+  Widget build(BuildContext context) {
+    final ar = UellowApi.instance.lang == 'ar';
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(10, 2, 10, 8),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: () => Navigator.push(context,
+            MaterialPageRoute(builder: (_) => const WorldScreen())),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            gradient: const LinearGradient(
+              begin: Alignment.centerLeft, end: Alignment.centerRight,
+              colors: [Color(0xFF412402), Color(0xFF6B3B0A)],
+            ),
+          ),
+          child: Row(children: [
+            Container(
+              width: 46, height: 46,
+              decoration: BoxDecoration(
+                color: UellowColors.yellow,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              alignment: Alignment.center,
+              child: const Text('🌍', style: TextStyle(fontSize: 24)),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(ar ? 'يلو وورلد' : 'Uellow World',
+                      style: const TextStyle(
+                          color: Colors.white, fontWeight: FontWeight.w900,
+                          fontSize: 16)),
+                  const SizedBox(height: 2),
+                  Text(
+                      ar ? 'تسوّق من الصين والعالم · أسعار الجملة'
+                         : 'Shop China & the world · wholesale prices',
+                      maxLines: 1, overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                          color: UellowColors.yellow.withOpacity(.95),
+                          fontWeight: FontWeight.w600, fontSize: 11.5)),
+                ],
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+              decoration: BoxDecoration(
+                color: UellowColors.yellow,
+                borderRadius: BorderRadius.circular(999),
+              ),
+              child: Text(ar ? 'تسوّق' : 'Shop',
+                  style: const TextStyle(
+                      color: Color(0xFF412402), fontWeight: FontWeight.w900,
+                      fontSize: 12.5)),
+            ),
+          ]),
+        ),
       ),
     );
   }
