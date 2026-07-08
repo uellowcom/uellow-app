@@ -3006,6 +3006,17 @@ class _SpecsDialog extends StatelessWidget {
       rows.add((ar ? 'الضمان' : 'Warranty',
           ar ? '${p.warrantyMonths} شهر' : '${p.warrantyMonths} months'));
     }
+    // v2.2.64 — dropship/AliExpress specification rows (World). Each entry is
+    // {name, value}; skip blanks and anything already listed above.
+    final seen = rows.map((r) => r.$1.toLowerCase().trim()).toSet();
+    for (final s in p.specifications) {
+      final k = (s['name'] ?? s['key'] ?? '').toString().trim();
+      final v = (s['value'] ?? s['val'] ?? '').toString().trim();
+      if (k.isEmpty || v.isEmpty) continue;
+      if (seen.contains(k.toLowerCase())) continue;
+      seen.add(k.toLowerCase());
+      rows.add((k, v));
+    }
     return Container(
       constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.88),
       decoration: const BoxDecoration(

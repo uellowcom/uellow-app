@@ -510,6 +510,8 @@ class UellowProductFull extends UellowProductCard {
   final Map<String, dynamic>? bundle;
   // v2.2.26 — Brain BNPL installments offer (margin-guarded), else null.
   final Map<String, dynamic>? installments;
+  // v2.2.64 — dropship/AliExpress specifications rows [{name,value}] (World).
+  final List<Map<String, dynamic>> specifications;
 
   UellowProductFull({
     required int id, required UellowText name, required String slug,
@@ -536,6 +538,7 @@ class UellowProductFull extends UellowProductCard {
     this.priceHistory,
     this.flashEndsAt, this.flashTitle,
     this.bundle, this.installments,
+    this.specifications = const [],
   }) : super(
             id: id, name: name, slug: slug, image: image, price: price,
             comparePrice: comparePrice, discountPct: discountPct,
@@ -608,6 +611,9 @@ class UellowProductFull extends UellowProductCard {
             : null,
         bundle: (j['bundle'] as Map?)?.cast<String, dynamic>(),
         installments: (j['installments'] as Map?)?.cast<String, dynamic>(),
+        specifications: ((j['specifications'] as List?) ?? const [])
+            .map((e) => (e as Map).cast<String, dynamic>())
+            .toList(),
       );
 }
 
