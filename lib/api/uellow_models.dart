@@ -434,6 +434,9 @@ class UellowProductCard {
   // card. Backend may omit them; defaults to 0 so layout stays stable.
   final int soldCount;
   final int viewCount;
+  // Uellow World (China dropship) product — cards show an honest "ships
+  // worldwide" line instead of the local "delivery in hours" line.
+  final bool isWorld;
 
   const UellowProductCard({
     required this.id, required this.name, required this.slug,
@@ -449,6 +452,7 @@ class UellowProductCard {
     this.promo,
     this.soldCount = 0,
     this.viewCount = 0,
+    this.isWorld = false,
   });
 
   factory UellowProductCard.fromJson(Map<String, dynamic> j) => UellowProductCard(
@@ -477,6 +481,7 @@ class UellowProductCard {
         promo: (j['promo'] as Map?)?.cast<String, dynamic>(),
         soldCount: (j['sold_count'] ?? 0) as int,
         viewCount: (j['view_count'] ?? 0) as int,
+        isWorld: (j['world'] ?? false) as bool,
       );
 }
 

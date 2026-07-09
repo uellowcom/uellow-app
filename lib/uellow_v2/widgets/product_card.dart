@@ -1264,7 +1264,11 @@ class _InfoTickerState extends State<_InfoTicker> {
       if (widget.saveAmount > 0)
         (ar ? '💰 وفّر ${widget.saveAmount.toStringAsFixed(3)} ${p.price.displaySymbol("ar")} الآن'
             : '💰 Save ${widget.saveAmount.toStringAsFixed(3)} ${p.price.displaySymbol("en")} now'),
-      ar ? '🚚 توصيل سريع خلال ساعات' : '🚚 Fast delivery in hours',
+      // World (China dropship) ships in days — never "in hours". Local Kuwait
+      // stock keeps the fast-delivery line.
+      p.isWorld
+          ? (ar ? '🚚 شحن دولي سريع من الصين' : '🚚 Fast worldwide shipping')
+          : (ar ? '🚚 توصيل سريع خلال ساعات' : '🚚 Fast delivery in hours'),
       if (p.viewCount > 0)
         (ar ? '👁 شاهده ${_fmt(p.viewCount)} شخص'
             : '👁 Viewed by ${_fmt(p.viewCount)} people'),
