@@ -187,9 +187,58 @@ class _HomeScreenState extends State<HomeScreen> {
         }),
       )),
       bottomNavigationBar: const UellowBottomNav(active: UNavTab.home),
+      floatingActionButton: _buildChinaFab(context),
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
       // v2.2.06 — page content shows THROUGH the floating strips area
       // (Beena bubble / reviewers banner): true transparency.
       extendBody: true,
+    );
+  }
+
+  // v2.2.68 — prominent "Shop from China" entry into Uellow World, above the
+  // bottom nav. Professional gradient pill with the 🇨🇳 flag.
+  Widget _buildChinaFab(BuildContext context) {
+    final ar = UellowApi.instance.lang == 'ar';
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(30),
+          onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const WorldScreen())),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 11),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                  colors: [Color(0xFF412402), Color(0xFF6B3D10)]),
+              borderRadius: BorderRadius.circular(30),
+              border: Border.all(color: const Color(0xFFF5C320), width: 1.4),
+              boxShadow: [
+                BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.28),
+                    blurRadius: 14, offset: const Offset(0, 5)),
+              ],
+            ),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              const Text('🇨🇳', style: TextStyle(fontSize: 19)),
+              const SizedBox(width: 9),
+              Text(ar ? 'اشترِ من الصين مباشرة' : 'Shop from China',
+                  style: const TextStyle(
+                      color: Colors.white, fontWeight: FontWeight.w800,
+                      fontSize: 14.5)),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.all(4),
+                decoration: const BoxDecoration(
+                    color: Color(0xFFF5C320), shape: BoxShape.circle),
+                child: const Icon(Icons.arrow_forward_rounded,
+                    size: 14, color: Color(0xFF412402)),
+              ),
+            ]),
+          ),
+        ),
+      ),
     );
   }
 
