@@ -179,9 +179,14 @@ class _ReelsScreenState extends State<ReelsScreen> {
               controller: _pageCtrl,
               scrollDirection: Axis.vertical,
               physics: const AlwaysScrollableScrollPhysics(),
+              // TikTok-speed: build the adjacent pages ahead of time so the
+              // next/prev video's controller pre-buffers while you watch the
+              // current one — swiping then plays instantly, no black wait.
+              allowImplicitScrolling: true,
               itemCount: _items.length,
               onPageChanged: _onPageChanged,
               itemBuilder: (_, i) => _ReelSlide(
+                key: ValueKey(_items[i]['video']?['id'] ?? i),
                 item: _items[i], active: i == _activeIdx, ar: ar),
             ),
           ),
@@ -352,7 +357,7 @@ class _SearchTile extends StatelessWidget {
 }
 
 class _ReelSlide extends StatefulWidget {
-  const _ReelSlide({required this.item, required this.active, required this.ar});
+  const _ReelSlide({super.key, required this.item, required this.active, required this.ar});
   final Map<String, dynamic> item;
   final bool active;
   final bool ar;
@@ -392,9 +397,21 @@ class _ReelSlideState extends State<_ReelSlide> with RouteAware {
   @override
   void didUpdateWidget(_ReelSlide old) {
     super.didUpdateWidget(old);
-    if (widget.active && !old.active) _maybeInitVideo();
-    if (!widget.active && old.active) _ctrl?.pause();
-    if (widget.active && _ctrl != null && _ctrl!.value.isInitialized) _ctrl!.play();
+    if (widget.active && !old.active) {
+      if (_ctrl == null) {
+        _maybeInitVideo();                       // not preloaded yet → init now
+      } else if (_ctrl!.value.isInitialized) {
+        // already buffered as a neighbour → start with sound instantly
+        _ctrl!
+          ..setVolume(reelsMuted.value ? 0 : 1)
+          ..play();
+        _reportView();
+      }
+    }
+    if (!widget.active && old.active) {
+      _ctrl?.pause();
+      _ctrl?.setVolume(0);
+    }
   }
 
   String? get _fileUrl {
@@ -419,11 +436,18 @@ class _ReelSlideState extends State<_ReelSlide> with RouteAware {
       _ctrl = VideoPlayerController.networkUrl(Uri.parse(url),
           formatHint: isHls ? VideoFormat.hls : null);
       await _ctrl!.initialize();
-      _ctrl!
-        ..setLooping(true)
-        ..setVolume(reelsMuted.value ? 0 : 1)
-        ..play();
-      _reportView();
+      _ctrl!.setLooping(true);
+      // A preloaded (non-active) neighbour buffers silently and stays paused;
+      // only the visible slide plays with sound. Becoming active later starts
+      // it instantly (handled in didUpdateWidget) since it's already buffered.
+      if (widget.active) {
+        _ctrl!
+          ..setVolume(reelsMuted.value ? 0 : 1)
+          ..play();
+        _reportView();
+      } else {
+        _ctrl!.setVolume(0);
+      }
       if (mounted) setState(() {});
     } catch (_) {
       if (mounted) setState(() => _initFailed = true);
