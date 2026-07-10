@@ -16,8 +16,18 @@ class UellowTokenStore {
   static const _kBase   = 'uellow_api_base_v2';
   static const _kAddr   = 'uellow_address_id_v2';
   static const _kSite   = 'uellow_website_id_v2';
+  static const _kCcy    = 'uellow_currency_v2';
 
   final SharedPreferences _prefs;
+
+  // User-selected display currency code (e.g. 'USD'); null = website default.
+  Future<String?> readCurrency() async => _prefs.getString(_kCcy);
+  Future<void> writeCurrency(String code) async {
+    await _prefs.setString(_kCcy, code);
+  }
+  Future<void> clearCurrency() async {
+    await _prefs.remove(_kCcy);
+  }
 
   static Future<UellowTokenStore> create() async {
     final prefs = await SharedPreferences.getInstance();

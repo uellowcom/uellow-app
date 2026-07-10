@@ -30,6 +30,8 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   String _lang = UellowApi.instance.lang;
   String? _countryCode;
+  String? _currency;                  // user-selected currency code (null = auto)
+  List<Map<String, dynamic>> _currencies = [];
   List<Map<String, dynamic>> _countries = [];
   List<Map<String, dynamic>> _langs = [];
   Map<String, dynamic>? _prefs;       // notification preferences payload
@@ -54,7 +56,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
         http.get(Uri.parse('$base/api/mobile/v2/app/languages')),
         http.get(Uri.parse('$base/api/mobile/v2/notifications/preferences'),
             headers: headers),
+        http.get(Uri.parse('$base/api/mobile/v2/app/currencies')),
       ]);
+      try {
+        final curBody = jsonDecode(utf8.decode(results[3].bodyBytes)) as Map<String, dynamic>;
+        if (curBody['success'] == true) {
+          _currencies = ((curBody['data']?['currencies']) as List? ?? [])
+              .cast<Map<String, dynamic>>();
+        }
+      } catch (_) {}
+      _currency = await UellowApi.instance.tokenStore.readCurrency();
       final cBody = jsonDecode(utf8.decode(results[0].bodyBytes)) as Map<String, dynamic>;
       if (cBody['success'] == true) {
         _countries = (cBody['data'] as List).cast<Map<String, dynamic>>();
@@ -176,6 +187,40 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  Future<void> _pickCurrency() async {
+    final ar = UellowApi.instance.lang == 'ar';
+    final picked = await showModalBottomSheet<String>(
+      context: context, isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _SearchPickerSheet(
+        title: ar ? 'اختر العملة' : 'Select currency',
+        items: _currencies.map((c) => _PickerItem(
+          id: (c['code'] as String?) ?? '',
+          label: (c['name'] as String?) ?? (c['code'] as String?) ?? '',
+          subtitle: (c['symbol'] as String?) ?? (c['code'] as String?) ?? '',
+          leadingEmoji: '💱',
+        )).toList(),
+        currentId: _currency ?? '',
+      ),
+    );
+    if (picked != null && picked.isNotEmpty && picked != _currency) {
+      await UellowApi.instance.tokenStore.writeCurrency(picked);
+      setState(() => _currency = picked);
+      // prices are server-converted per request → reload the app to refresh all
+      if (!mounted) return;
+      Navigator.of(context).pushNamedAndRemoveUntil('/', (_) => false);
+    }
+  }
+
+  String _currencyLabel() {
+    for (final c in _currencies) {
+      if ((c['code'] as String?) == _currency) {
+        return '${c['name'] ?? c['code']} (${c['symbol'] ?? ''})';
+      }
+    }
+    return _currency ?? (UellowApi.instance.lang == 'ar' ? 'تلقائي' : 'Automatic');
+  }
+
   Future<void> _savePref(String key, bool value) async {
     if (_prefs == null) return;
     setState(() => _prefs![key] = value);
@@ -259,6 +304,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
               subtitle: _currentCountry?['currency'] as String?,
               leadingEmoji: _flag(_countryCode ?? ''),
               onTap: _pickCountry,
+            ),
+            const SizedBox(height: 6),
+            _selectorTile(
+              icon: Icons.attach_money,
+              label: ar ? 'العملة' : 'Currency',
+              value: _currencyLabel(),
+              leadingEmoji: '💱',
+              onTap: _pickCurrency,
             ),
             const SizedBox(height: 24),
             _section(ar ? 'الإشعارات' : 'Notifications'),

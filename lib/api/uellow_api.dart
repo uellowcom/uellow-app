@@ -272,6 +272,12 @@ class UellowApi {
     if (siteId != null && siteId > 0) {
       headers['X-Website-Id'] = '$siteId';
     }
+    // v2.2.68 — user-selected display currency (Settings ▸ Currency). The
+    // server converts every price into it via fmt_price / web_currency.
+    final ccy = await tokenStore.readCurrency();
+    if (ccy != null && ccy.isNotEmpty) {
+      headers['X-Currency'] = ccy;
+    }
 
     http.Response resp;
     try {
