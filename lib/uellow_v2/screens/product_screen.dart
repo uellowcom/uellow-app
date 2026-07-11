@@ -4089,47 +4089,143 @@ class _ReviewsBlockState extends State<_ReviewsBlock> {
   // v2.1.38 — full reviews dialog: avg header + every review with photos.
   void _openAllReviews(BuildContext context,
       List reviews, double avg, int total) {
-    final ar = UellowApi.instance.lang == 'ar';
     showModalBottomSheet(
       context: context, isScrollControlled: true,
       backgroundColor: Colors.white,
       shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (ctx) => SizedBox(
-        height: MediaQuery.of(ctx).size.height * 0.85,
-        child: Column(children: [
-          const SizedBox(height: 10),
-          Container(width: 36, height: 4,
-              decoration: BoxDecoration(color: UellowColors.border,
-                  borderRadius: BorderRadius.circular(2))),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(18, 12, 18, 4),
-            child: Row(children: [
-              Text(ar ? 'التقييمات' : 'Reviews', style: UT.h2),
-              const SizedBox(width: 8),
-              const Icon(Icons.star_rounded,
-                  size: 16, color: UellowColors.yellow),
-              Text(' ${avg.toStringAsFixed(1)}',
-                  style: const TextStyle(fontSize: 14,
-                      fontWeight: FontWeight.w900,
-                      color: UellowColors.ink)),
-              Text(ar ? '  ·  $total تقييم' : '  ·  $total reviews',
-                  style: const TextStyle(fontSize: 12,
-                      color: UellowColors.muted,
-                      fontWeight: FontWeight.w600)),
-              const Spacer(),
-              IconButton(icon: const Icon(Icons.close, size: 20),
-                  onPressed: () => Navigator.pop(ctx)),
-            ]),
-          ),
-          Expanded(child: ListView.builder(
-            padding: const EdgeInsets.fromLTRB(16, 6, 16, 24),
-            itemCount: reviews.length,
-            itemBuilder: (_, i) =>
-                _reviewCard(reviews[i] as Map<String, dynamic>),
-          )),
-        ]),
+      builder: (ctx) => _AllReviewsSheet(
+        productId: widget.productId,
+        initial: List<Map<String, dynamic>>.from(
+            reviews.map((e) => Map<String, dynamic>.from(e as Map))),
+        avg: avg, total: total,
+        cardBuilder: (m) => _reviewCard(m),
       ),
+    );
+  }
+}
+
+// Infinite-scroll reviews sheet — starts with the reviews already loaded on the
+// product page and fetches more pages from /products/<id>/reviews?page=N as the
+// user scrolls to the bottom.
+class _AllReviewsSheet extends StatefulWidget {
+  const _AllReviewsSheet({
+    required this.productId, required this.initial,
+    required this.avg, required this.total, required this.cardBuilder,
+  });
+  final int productId;
+  final List<Map<String, dynamic>> initial;
+  final double avg;
+  final int total;
+  final Widget Function(Map<String, dynamic>) cardBuilder;
+  @override
+  State<_AllReviewsSheet> createState() => _AllReviewsSheetState();
+}
+
+class _AllReviewsSheetState extends State<_AllReviewsSheet> {
+  final _scroll = ScrollController();
+  late final List<Map<String, dynamic>> _items;
+  final _seen = <String>{};
+  int _page = 1;
+  bool _loading = false;
+  bool _hasMore = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _items = List<Map<String, dynamic>>.from(widget.initial);
+    for (final r in _items) {
+      _seen.add('${r['author'] ?? ''}|${r['body'] ?? r['text'] ?? ''}');
+    }
+    _hasMore = _items.length < widget.total;
+    _scroll.addListener(() {
+      if (_scroll.position.pixels >=
+              _scroll.position.maxScrollExtent - 400 &&
+          !_loading && _hasMore) {
+        _loadMore();
+      }
+    });
+  }
+
+  @override
+  void dispose() { _scroll.dispose(); super.dispose(); }
+
+  Future<void> _loadMore() async {
+    if (_loading || !_hasMore) return;
+    setState(() => _loading = true);
+    final next = _page + 1;
+    try {
+      final token = await UellowApi.instance.tokenStore.readToken();
+      final r = await http.get(
+        Uri.parse('${UellowApi.instance.baseUrl}/api/mobile/v2/products/'
+            '${widget.productId}/reviews?page=$next&per_page=20'),
+        headers: {
+          'Accept': 'application/json',
+          if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
+        },
+      );
+      final body = jsonDecode(utf8.decode(r.bodyBytes)) as Map<String, dynamic>;
+      final data = (body['data'] as Map?) ?? {};
+      final meta = (body['meta'] as Map?) ?? {};
+      final fresh = ((data['reviews'] as List?) ?? [])
+          .map((e) => Map<String, dynamic>.from(e as Map))
+          .where((r) => _seen.add('${r['author'] ?? ''}|${r['body'] ?? r['text'] ?? ''}'))
+          .toList();
+      if (!mounted) return;
+      setState(() {
+        _items.addAll(fresh);
+        _page = next;
+        _hasMore = (meta['has_next'] == true) && fresh.isNotEmpty;
+        _loading = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() { _loading = false; _hasMore = false; });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ar = UellowApi.instance.lang == 'ar';
+    return SizedBox(
+      height: MediaQuery.of(context).size.height * 0.9,
+      child: Column(children: [
+        const SizedBox(height: 10),
+        Container(width: 36, height: 4,
+            decoration: BoxDecoration(color: UellowColors.border,
+                borderRadius: BorderRadius.circular(2))),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(18, 12, 18, 4),
+          child: Row(children: [
+            Text(ar ? 'التقييمات' : 'Reviews', style: UT.h2),
+            const SizedBox(width: 8),
+            const Icon(Icons.star_rounded, size: 16, color: UellowColors.yellow),
+            Text(' ${widget.avg.toStringAsFixed(1)}',
+                style: const TextStyle(fontSize: 14,
+                    fontWeight: FontWeight.w900, color: UellowColors.ink)),
+            Text(ar ? '  ·  ${widget.total} تقييم' : '  ·  ${widget.total} reviews',
+                style: const TextStyle(fontSize: 12,
+                    color: UellowColors.muted, fontWeight: FontWeight.w600)),
+            const Spacer(),
+            IconButton(icon: const Icon(Icons.close, size: 20),
+                onPressed: () => Navigator.pop(context)),
+          ]),
+        ),
+        Expanded(child: ListView.builder(
+          controller: _scroll,
+          padding: const EdgeInsets.fromLTRB(16, 6, 16, 24),
+          itemCount: _items.length + (_hasMore ? 1 : 0),
+          itemBuilder: (_, i) {
+            if (i >= _items.length) {
+              return const Padding(
+                padding: EdgeInsets.symmetric(vertical: 16),
+                child: Center(child: CircularProgressIndicator(
+                    strokeWidth: 2, color: UellowColors.darkBrown)),
+              );
+            }
+            return widget.cardBuilder(_items[i]);
+          },
+        )),
+      ]),
     );
   }
 }
