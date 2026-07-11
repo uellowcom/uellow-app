@@ -196,9 +196,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
         title: ar ? 'اختر العملة' : 'Select currency',
         items: _currencies.map((c) => _PickerItem(
           id: (c['code'] as String?) ?? '',
-          label: (c['name'] as String?) ?? (c['code'] as String?) ?? '',
-          subtitle: (c['symbol'] as String?) ?? (c['code'] as String?) ?? '',
-          leadingEmoji: '💱',
+          label: _curName(c),
+          subtitle: (c['code'] as String?) ?? '',
+          leadingEmoji: _curFlag((c['code'] as String?) ?? ''),
         )).toList(),
         currentId: _currency ?? '',
       ),
@@ -215,7 +215,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String _currencyLabel() {
     for (final c in _currencies) {
       if ((c['code'] as String?) == _currency) {
-        return '${c['name'] ?? c['code']} (${c['symbol'] ?? ''})';
+        return '${_curName(c)} (${c['code']})';
       }
     }
     return _currency ?? (UellowApi.instance.lang == 'ar' ? 'تلقائي' : 'Automatic');
@@ -310,7 +310,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
               icon: Icons.attach_money,
               label: ar ? 'العملة' : 'Currency',
               value: _currencyLabel(),
-              leadingEmoji: '💱',
+              leadingEmoji: _currency != null && _currency!.isNotEmpty
+                  ? _curFlag(_currency!)
+                  : '💱',
               onTap: _pickCurrency,
             ),
             const SizedBox(height: 24),
@@ -464,6 +466,34 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (code.length != 2) return '🌐';
     const base = 127397;
     return String.fromCharCodes([code.codeUnitAt(0) + base, code.codeUnitAt(1) + base]);
+  }
+
+  // Arabic currency names + the country whose flag represents each currency.
+  static const Map<String, String> _kCurAr = {
+    'KWD': 'دينار كويتي', 'SAR': 'ريال سعودي', 'AED': 'درهم إماراتي',
+    'QAR': 'ريال قطري', 'BHD': 'دينار بحريني', 'OMR': 'ريال عُماني',
+    'JOD': 'دينار أردني', 'EGP': 'جنيه مصري', 'IQD': 'دينار عراقي',
+    'LBP': 'ليرة لبنانية', 'YER': 'ريال يمني', 'TRY': 'ليرة تركية',
+    'USD': 'دولار أمريكي', 'CNY': 'يوان صيني', 'EUR': 'يورو', 'GBP': 'جنيه إسترليني',
+  };
+  static const Map<String, String> _kCurCountry = {
+    'KWD': 'KW', 'SAR': 'SA', 'AED': 'AE', 'QAR': 'QA', 'BHD': 'BH',
+    'OMR': 'OM', 'JOD': 'JO', 'EGP': 'EG', 'IQD': 'IQ', 'LBP': 'LB',
+    'YER': 'YE', 'TRY': 'TR', 'USD': 'US', 'CNY': 'CN', 'EUR': 'EU', 'GBP': 'GB',
+  };
+
+  /// Localized currency name — Arabic name in AR mode, else the server name.
+  String _curName(Map<String, dynamic> c) {
+    final code = (c['code'] as String?) ?? '';
+    final ar = UellowApi.instance.lang == 'ar';
+    if (ar && _kCurAr.containsKey(code)) return _kCurAr[code]!;
+    return (c['name'] as String?) ?? code;
+  }
+
+  /// The country flag that represents a currency (💱 fallback).
+  String _curFlag(String code) {
+    final cc = _kCurCountry[code];
+    return cc != null ? _flag(cc) : '💱';
   }
 }
 
