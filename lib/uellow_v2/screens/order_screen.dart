@@ -77,11 +77,17 @@ class _OrderScreenState extends State<OrderScreen> {
             child: ListView(padding: EdgeInsets.zero, children: [
               _Header(order: order, ar: ar, refreshing: _refreshing,
                   onRefresh: _refresh),
-              if (order.deliveryTracking != null) _EtaCard(tracking: order.deliveryTracking!, ar: ar),
-              if (order.deliveryTracking != null)
-                _JourneyStrip(tracking: order.deliveryTracking!, ar: ar),
-              _MapBox(tracking: order.deliveryTracking, ar: ar),
-              if (order.timeline.isNotEmpty) _Timeline(timeline: order.timeline, ar: ar),
+              // Uellow World (China dropship): air-shipping tracking instead of
+              // the local driver map.
+              if (order.dropship != null)
+                _WorldTracking(dropship: order.dropship!, ar: ar)
+              else ...[
+                if (order.deliveryTracking != null) _EtaCard(tracking: order.deliveryTracking!, ar: ar),
+                if (order.deliveryTracking != null)
+                  _JourneyStrip(tracking: order.deliveryTracking!, ar: ar),
+                _MapBox(tracking: order.deliveryTracking, ar: ar),
+                if (order.timeline.isNotEmpty) _Timeline(timeline: order.timeline, ar: ar),
+              ],
               // v2.1.42 — cancellation-request banner (paid orders).
               if (order.cancelRequested) Container(
                 margin: const EdgeInsets.fromLTRB(14, 8, 14, 0),
@@ -1418,4 +1424,122 @@ class _RateDialogState extends State<_RateDialog> {
       ],
     );
   }
+}
+
+// ── Uellow World (China dropship) tracking — origin 🇨🇳 → ✈️ air → timeline ──
+class _WorldTracking extends StatelessWidget {
+  const _WorldTracking({required this.dropship, required this.ar});
+  final Map<String, dynamic> dropship;
+  final bool ar;
+
+  IconData _icon(String key) => switch (key) {
+        'receipt' => Icons.receipt_long_rounded,
+        'store' => Icons.store_mall_directory_rounded,
+        'flight' => Icons.flight_takeoff_rounded,
+        'local_shipping' => Icons.local_shipping_rounded,
+        'check_circle' => Icons.check_circle_rounded,
+        _ => Icons.circle,
+      };
+
+  @override
+  Widget build(BuildContext context) {
+    final origin = (dropship['origin'] as Map?) ?? const {};
+    final flag = (origin['flag'] as String?) ?? '🇨🇳';
+    final originName = (origin[ar ? 'ar' : 'en'] as String?) ?? (ar ? 'الصين' : 'China');
+    final tracking = (dropship['tracking_no'] as String?) ?? '';
+    final status = (dropship['status'] as String?) ?? '';
+    final steps = ((dropship['timeline'] as List?) ?? const [])
+        .map((e) => Map<String, dynamic>.from(e as Map))
+        .toList();
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(14, 10, 14, 0),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.06), blurRadius: 12, offset: const Offset(0, 4))],
+      ),
+      child: Column(children: [
+        // header: origin → plane → you
+        Container(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(colors: [Color(0xFF412402), Color(0xFF6B3D10)]),
+            borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+          ),
+          child: Column(children: [
+            Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+              _endpoint(flag, originName),
+              const Expanded(child: _FlightDash()),
+              _endpoint('📦', ar ? 'إليك' : 'To you'),
+            ]),
+            const SizedBox(height: 8),
+            Text(ar ? '✈️ شحن جوي دولي' : '✈️ International air shipping',
+                style: const TextStyle(color: Color(0xFFF5C320), fontWeight: FontWeight.w800, fontSize: 13)),
+            if (status.isNotEmpty)
+              Padding(padding: const EdgeInsets.only(top: 3),
+                  child: Text(status, style: const TextStyle(color: Colors.white70, fontSize: 11.5))),
+          ]),
+        ),
+        if (tracking.isNotEmpty)
+          Padding(padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+            child: Row(children: [
+              const Icon(Icons.qr_code_2_rounded, size: 16, color: Color(0xFF412402)),
+              const SizedBox(width: 6),
+              Text(ar ? 'رقم التتبّع: ' : 'Tracking: ', style: const TextStyle(fontSize: 12, color: Colors.black54)),
+              Expanded(child: SelectableText(tracking, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700))),
+            ])),
+        // vertical timeline
+        Padding(
+          padding: const EdgeInsets.fromLTRB(18, 12, 18, 16),
+          child: Column(children: [
+            for (int i = 0; i < steps.length; i++)
+              _step(steps[i], i == steps.length - 1),
+          ]),
+        ),
+      ]),
+    );
+  }
+
+  Widget _endpoint(String emoji, String label) => Column(mainAxisSize: MainAxisSize.min, children: [
+        Text(emoji, style: const TextStyle(fontSize: 26)),
+        const SizedBox(height: 2),
+        Text(label, style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600)),
+      ]);
+
+  Widget _step(Map<String, dynamic> s, bool last) {
+    final done = s['done'] == true;
+    final label = (s['label'] as Map?)?[ar ? 'ar' : 'en'] as String? ?? '';
+    final date = s['date'] as String?;
+    final green = const Color(0xFF1B7A2F);
+    final grey = const Color(0xFFBDBDBD);
+    return IntrinsicHeight(child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Column(children: [
+        Container(width: 30, height: 30,
+          decoration: BoxDecoration(color: done ? green.withValues(alpha: 0.12) : const Color(0xFFF2F2F2), shape: BoxShape.circle),
+          child: Icon(_icon((s['icon'] as String?) ?? ''), size: 17, color: done ? green : grey)),
+        if (!last) Expanded(child: Container(width: 2, color: done ? green.withValues(alpha: 0.4) : const Color(0xFFECECEC))),
+      ]),
+      const SizedBox(width: 12),
+      Expanded(child: Padding(padding: const EdgeInsets.only(top: 5, bottom: 14), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(label, style: TextStyle(fontSize: 13.5, fontWeight: done ? FontWeight.w700 : FontWeight.w500, color: done ? const Color(0xFF412402) : Colors.black45)),
+        if (date != null && date.isNotEmpty)
+          Text(date.split('T').first, style: const TextStyle(fontSize: 11, color: Colors.black38)),
+      ]))),
+    ]));
+  }
+}
+
+class _FlightDash extends StatelessWidget {
+  const _FlightDash();
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(horizontal: 6),
+    child: Row(children: [
+      Expanded(child: Container(height: 1.5, color: const Color(0xFFF5C320))),
+      const Padding(padding: EdgeInsets.symmetric(horizontal: 4),
+          child: Icon(Icons.flight_rounded, color: Color(0xFFF5C320), size: 22)),
+      Expanded(child: Container(height: 1.5, color: const Color(0xFFF5C320))),
+    ]),
+  );
 }

@@ -976,6 +976,10 @@ class UellowOrderDetail extends UellowOrderSummary {
   final bool canCancel;
   final bool cancelRequested;
   final bool isPaid;
+  /// Uellow World (China dropship) tracking: {is_dropship, ships_by_air,
+  /// origin{en,ar,flag}, tracking_no, carrier, status, timeline:[{key,icon,
+  /// label{en,ar}, done, date}]}. Null for normal orders.
+  final Map<String, dynamic>? dropship;
 
   UellowOrderDetail({
     required super.id, required super.name, required super.state,
@@ -987,7 +991,7 @@ class UellowOrderDetail extends UellowOrderSummary {
     required this.payment, required this.trackingNumber, required this.carrier,
     this.deliveryTracking, this.timeline = const [],
     this.canCancel = false, this.cancelRequested = false,
-    this.isPaid = false,
+    this.isPaid = false, this.dropship,
   });
 
   factory UellowOrderDetail.fromJson(Map<String, dynamic> j) => UellowOrderDetail(
@@ -1023,6 +1027,9 @@ class UellowOrderDetail extends UellowOrderSummary {
         canCancel: j['can_cancel'] == true,
         cancelRequested: j['cancel_requested'] == true,
         isPaid: j['is_paid'] == true,
+        dropship: (j['dropship'] is Map)
+            ? Map<String, dynamic>.from(j['dropship'] as Map)
+            : null,
       );
 }
 
