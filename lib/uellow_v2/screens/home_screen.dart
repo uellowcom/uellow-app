@@ -29,7 +29,6 @@ import '../widgets/update_gate.dart';
 import '../widgets/uellow_bottom_nav.dart';
 import '../widgets/updating_pane.dart';
 import 'dynamic_page_screen.dart';
-import 'world_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -535,11 +534,7 @@ class _TopBar extends StatelessWidget {
           ),
         )),
         const SizedBox(width: 6),
-        // Uellow World (global dropship store) — globe entry point.
-        _IconButton(icon: Icons.public,
-            onTap: () => Navigator.push(context,
-                MaterialPageRoute(builder: (_) => const WorldScreen()))),
-        const SizedBox(width: 6),
+        // Uellow World globe entry removed from the top bar (per request).
         _IconButton(icon: Icons.qr_code_scanner_outlined,
             onTap: () => Navigator.pushNamed(context, Routes.search)),
         const SizedBox(width: 6),
