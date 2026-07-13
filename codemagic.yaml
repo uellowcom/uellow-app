@@ -87,8 +87,17 @@ workflows:
         script: |
           # نسخة iOS التسويقية مستقلة عن pubspec (أندرويد) — لازم تكون أعلى من آخر نسخة على App Store
           # رقم البناء = أعلى رقم على المتجر + 1 (يتفادى التعارض مع البناءات الموجودة)
-          LATEST=$(app-store-connect get-latest-build-number "$APP_APPLE_ID" 2>/dev/null || echo "")
-          if [ -n "$LATEST" ]; then BUILD=$((LATEST + 1)); else BUILD="$BUILD_NUMBER"; fi
+          # رقم البناء لازم يكون أعلى من آخر رقم على App Store — ناخد الأقصى بين
+          # (استعلام المتجر + عدّاد Codemagic + أرضية معروفة) ونزوّد 1، عشان فشل الاستعلام
+          # ما يخليش البناء يعيد استخدام رقم موجود (كان بيسبب 409 duplicate).
+          LATEST=$(app-store-connect get-latest-build-number "$APP_APPLE_ID" --platform IOS 2>/dev/null || echo "")
+          case "$LATEST" in ''|*[!0-9]*) LATEST=0 ;; esac
+          CM=${BUILD_NUMBER:-0}; case "$CM" in ''|*[!0-9]*) CM=0 ;; esac
+          FLOOR=88   # آخر رقم بناء مرفوع على المتجر (2026-07-13); الاستعلام بيتخطّاه أوتوماتيك لما يشتغل
+          MAX=$FLOOR
+          if [ "$LATEST" -gt "$MAX" ]; then MAX=$LATEST; fi
+          if [ "$CM" -gt "$MAX" ]; then MAX=$CM; fi
+          BUILD=$((MAX + 1))
           echo "Building iOS $IOS_VERSION (build $BUILD)"
           flutter build ipa --release \
             --build-name="$IOS_VERSION" \
