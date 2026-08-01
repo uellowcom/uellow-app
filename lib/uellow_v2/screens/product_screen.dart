@@ -13,6 +13,7 @@ import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:webview_flutter/webview_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../api/uellow_api.dart';
 import '../../api/uellow_models.dart';
@@ -1013,7 +1014,12 @@ class _InstallmentsCard extends StatelessWidget {
           shape: const RoundedRectangleBorder(
               borderRadius: BorderRadius.vertical(top: Radius.circular(22))),
           builder: (_) => _InstallmentsSheet(
-              ar: ar, count: count, per: per, provider: provider),
+              ar: ar, count: count, per: per, provider: provider,
+              apps: (data['apps'] as List?)
+                      ?.whereType<Map>()
+                      .map((e) => e.cast<String, dynamic>())
+                      .toList() ??
+                  const []),
         ),
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
@@ -1039,11 +1045,25 @@ class _InstallmentsCard extends StatelessWidget {
 
 class _InstallmentsSheet extends StatelessWidget {
   const _InstallmentsSheet({required this.ar, required this.count,
-      required this.per, required this.provider});
+      required this.per, required this.provider, this.apps = const []});
   final bool ar;
   final int count;
   final double per;
   final String provider;
+  final List<Map<String, dynamic>> apps;
+
+  Future<void> _openApp(Map<String, dynamic> app) async {
+    final ios = (app['ios'] ?? '').toString();
+    final android = (app['android'] ?? '').toString();
+    var target = Platform.isIOS ? ios : android;
+    if (target.isEmpty) target = ios.isNotEmpty ? ios : android;
+    if (target.isEmpty) return;
+    final uri = Uri.tryParse(target);
+    if (uri == null) return;
+    try {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } catch (_) {}
+  }
 
   static const _teal = Color(0xFF0E8A6A);
   static const _tealDk = Color(0xFF0B6B53);
@@ -1131,6 +1151,15 @@ class _InstallmentsSheet extends StatelessWidget {
             _ProviderChip(name: 'Deema',
                 soon: true, soonLabel: ar ? 'قريباً' : 'soon'),
           ]),
+          if (apps.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            Text(ar ? 'حمّل التطبيقات' : 'Get the apps',
+                style: const TextStyle(fontSize: 13.5,
+                    fontWeight: FontWeight.w900, color: UellowColors.ink)),
+            const SizedBox(height: 8),
+            for (final app in apps)
+              _AppDownloadRow(ar: ar, app: app, onTap: () => _openApp(app)),
+          ],
           const SizedBox(height: 14),
           SizedBox(width: double.infinity, child: ElevatedButton(
             onPressed: () => Navigator.of(context).pop(),
@@ -1144,6 +1173,75 @@ class _InstallmentsSheet extends StatelessWidget {
                 style: const TextStyle(fontWeight: FontWeight.w900)),
           )),
         ]),
+      ),
+    );
+  }
+}
+
+class _AppDownloadRow extends StatelessWidget {
+  const _AppDownloadRow({required this.ar, required this.app, required this.onTap});
+  final bool ar;
+  final Map<String, dynamic> app;
+  final VoidCallback onTap;
+  @override
+  Widget build(BuildContext context) {
+    final name = (app['name'] ?? '').toString();
+    final sub = app['subtitle'];
+    final subtitle = (sub is Map)
+        ? (ar ? (sub['ar'] ?? '') : (sub['en'] ?? '')).toString()
+        : (sub ?? '').toString();
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF6F6F6),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: const Color(0xFFE6E6E6)),
+          ),
+          child: Row(children: [
+            Container(
+              width: 34, height: 34,
+              decoration: BoxDecoration(
+                  color: const Color(0xFF0E8A6A),
+                  borderRadius: BorderRadius.circular(9)),
+              child: const Icon(Icons.smartphone_rounded,
+                  size: 18, color: Colors.white),
+            ),
+            const SizedBox(width: 11),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(name,
+                      style: const TextStyle(fontSize: 13.5,
+                          fontWeight: FontWeight.w900, color: UellowColors.ink)),
+                  if (subtitle.isNotEmpty)
+                    Text(subtitle,
+                        style: const TextStyle(
+                            fontSize: 11, color: Color(0xFF7A8A85))),
+                ],
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
+              decoration: BoxDecoration(
+                  color: const Color(0xFF0B6B53),
+                  borderRadius: BorderRadius.circular(8)),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                const Icon(Icons.download_rounded, size: 14, color: Colors.white),
+                const SizedBox(width: 5),
+                Text(ar ? 'تحميل' : 'Get',
+                    style: const TextStyle(fontSize: 11.5,
+                        fontWeight: FontWeight.w900, color: Colors.white)),
+              ]),
+            ),
+          ]),
+        ),
       ),
     );
   }
