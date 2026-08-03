@@ -4685,9 +4685,8 @@ class _CtaBar extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 4),
       child: Column(mainAxisSize: MainAxisSize.min, children: [
-        // ── لمّة يلو — inline bundle bar + add-to-Lamma button ─────
+        // ── لمّة يلو — inline bundle bar above the CTA row ─────────
         const LammaBar(),
-        LammaButton(productId: p.id),
         const SizedBox(height: 8),
         Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
         // ── Beena bee with floating red "Any help?" pill ──────────
@@ -4709,8 +4708,9 @@ class _CtaBar extends StatelessWidget {
           onTap: () => _openBuySheet(context, p, isBuyNow: false),
         )),
         const SizedBox(width: 6),
-        // ── Red Buy now — 1/3 of the row ────────────────────────────
-        Expanded(flex: 1, child: _CtaButton(
+        // ── لمّة يلو takes the Buy-Now slot (falls back to Buy-Now when
+        //    Lamma is disabled for this country) ───────────────────────
+        Expanded(flex: 1, child: LammaBuyNowSlot(productId: p.id, fallback: _CtaButton(
           label: T.t('product.buy_now'),
           icon: Icons.bolt,
           gradient: const LinearGradient(
@@ -4721,7 +4721,7 @@ class _CtaBar extends StatelessWidget {
           side: const BorderRadius.all(Radius.circular(10)),
           shadow: const Color(0x33DC2626),
           onTap: () => _openBuySheet(context, p, isBuyNow: true),
-        )),
+        ))),
       ]),
       ]),
     );

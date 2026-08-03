@@ -157,19 +157,41 @@ class _LammaButtonState extends State<LammaButton> {
                 : null,
           ),
           child: Center(
-            child: Text(
-              inBundle
-                  ? (_ar ? '✓ في لمّتك' : '✓ in your Lamma')
-                  : (_ar ? '🧺 أضف للّمّة' : '🧺 Add to Lamma'),
-              style: TextStyle(
-                fontWeight: FontWeight.w800,
-                fontSize: 15,
-                color: inBundle ? const Color(0xFF4ADE80) : _ink,
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                inBundle
+                    ? (_ar ? '✓ في لمّتك' : '✓ in Lamma')
+                    : (_ar ? '🧺 أضف للّمّة' : '🧺 Add to Lamma'),
+                maxLines: 1,
+                style: TextStyle(
+                  fontWeight: FontWeight.w800,
+                  fontSize: 15,
+                  color: inBundle ? const Color(0xFF4ADE80) : _ink,
+                ),
               ),
             ),
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Shows the "add to Lamma" button in place of the Buy-Now button when Lamma is
+/// enabled for this country; otherwise falls back to the original Buy-Now widget.
+class LammaBuyNowSlot extends StatelessWidget {
+  const LammaBuyNowSlot({super.key, required this.productId, required this.fallback});
+  final int productId;
+  final Widget fallback;
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<Map<String, dynamic>?>(
+      valueListenable: LammaService.instance.config,
+      builder: (context, cfg, _) {
+        final enabled = cfg != null && cfg['enabled'] == true;
+        return enabled ? LammaButton(productId: productId) : fallback;
+      },
     );
   }
 }
@@ -304,8 +326,19 @@ void showLammaSheet(BuildContext context) {
                 decoration: BoxDecoration(color: const Color(0xFFF1F3F6), borderRadius: BorderRadius.circular(11)),
                 child: Row(children: [
                   _seg(ctx, s, 'normal', _ar ? 'عادي' : 'Normal'),
-                  _seg(ctx, s, 'installment', _ar ? 'أقساط · +٦.٥٪' : 'Installment · +6.5%'),
+                  _seg(ctx, s, 'installment', _ar ? 'أقساط' : 'Installment'),
                 ]),
+              ),
+              if (inst) Container(
+                margin: const EdgeInsets.only(top: 10),
+                padding: const EdgeInsets.all(11),
+                decoration: BoxDecoration(color: const Color(0xFFF4F0FF), borderRadius: BorderRadius.circular(12), border: Border.all(color: const Color(0xFFE6DCFF))),
+                child: Text(
+                  _ar
+                      ? '💳 الأقساط: قسّم طلبك على دفعات مريحة عبر Taly / Ci-Net — موافقة سريعة وبدون تعقيد. أضف منتجاتك واختر «الأقساط»، وأكمل الدفع بالتقسيط عند الدفع.'
+                      : '💳 Installments: split your order into easy payments via Taly / Ci-Net — quick approval, no hassle. Add items, pick Installments, and pay in instalments at checkout.',
+                  style: const TextStyle(color: Color(0xFF6B4EC7), fontSize: 12, fontWeight: FontWeight.w600, height: 1.5),
+                ),
               ),
               const SizedBox(height: 12),
               ...items.map((it) => Padding(
@@ -334,8 +367,8 @@ void showLammaSheet(BuildContext context) {
                   decoration: BoxDecoration(color: const Color(0xFF12241B), borderRadius: BorderRadius.circular(10)),
                   child: Text(
                     _ar
-                        ? '🛡️ الخصم موقوف عند ${(q['discount_pct'] ?? 0).toStringAsFixed(1)}% لحماية هامش الربح (≥ ${q['floor_margin_pct']}%).'
-                        : '🛡️ Discount capped at ${(q['discount_pct'] ?? 0).toStringAsFixed(1)}% to protect margin (≥ ${q['floor_margin_pct']}%).',
+                        ? '✔️ خصم اللمّة وصل حده الأقصى لهذه الباقة.'
+                        : '✔️ Lamma discount reached its maximum for this bundle.',
                     style: const TextStyle(color: Color(0xFF4ADE80), fontWeight: FontWeight.w700, fontSize: 12.5),
                   ),
                 ),
