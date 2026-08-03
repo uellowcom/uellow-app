@@ -319,23 +319,27 @@ void showLammaSheet(BuildContext context) {
                   ),
                 ),
               const SizedBox(height: 10),
-              Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, crossAxisAlignment: CrossAxisAlignment.end, children: [
-                Text(inst
-                    ? (_ar ? 'على أقساط · ${(q['monthly'] ?? 0).toStringAsFixed(3)} $cur/شهر' : '${(q['monthly'] ?? 0).toStringAsFixed(3)} $cur/mo')
-                    : (_ar ? 'وفّرت ${(q['saved'] ?? 0).toStringAsFixed(3)} $cur' : 'Saved ${(q['saved'] ?? 0).toStringAsFixed(3)} $cur'),
-                    style: const TextStyle(color: Color(0xFF12B76A), fontWeight: FontWeight.w800)),
-                Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
-                  if (((q['discount_pct'] ?? 0) as num) > 0) ...[
-                    // price BEFORE discount (strikethrough)
-                    Text('${(q['subtotal'] ?? 0).toStringAsFixed(3)}',
-                        style: const TextStyle(color: Color(0xFF98A2B3), fontSize: 13, decoration: TextDecoration.lineThrough)),
-                    const SizedBox(width: 6),
+              // professional price breakdown: subtotal / discount / net
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(color: const Color(0xFFF7F8FA), borderRadius: BorderRadius.circular(12)),
+                child: Column(children: [
+                  _brk(_ar ? 'الإجمالي قبل الخصم' : 'Subtotal',
+                      '${(q['subtotal'] ?? 0).toStringAsFixed(3)} $cur', const Color(0xFF667085), false),
+                  const SizedBox(height: 7),
+                  _brk((_ar ? 'الخصم' : 'Discount') +
+                          (((q['discount_pct'] ?? 0) as num) > 0 ? ' (-${(q['discount_pct'] ?? 0).toStringAsFixed(0)}%)' : ''),
+                      '− ${(q['saved'] ?? 0).toStringAsFixed(3)} $cur', const Color(0xFF12B76A), false),
+                  if (inst) ...[
+                    const SizedBox(height: 7),
+                    _brk(_ar ? 'التقسيط' : 'Installment',
+                        '${(q['monthly'] ?? 0).toStringAsFixed(3)} $cur/${_ar ? 'شهر' : 'mo'}', const Color(0xFF7A5AF8), false),
                   ],
-                  // price AFTER discount
-                  Text('${(q['pays'] ?? 0).toStringAsFixed(3)} $cur',
-                      style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 20, color: _ink)),
+                  const Padding(padding: EdgeInsets.symmetric(vertical: 9), child: Divider(height: 1)),
+                  _brk(_ar ? 'الصافي' : 'Net',
+                      '${(q['pays'] ?? 0).toStringAsFixed(3)} $cur', _ink, true),
                 ]),
-              ]),
+              ),
               const SizedBox(height: 12),
               SizedBox(
                 width: double.infinity,
@@ -361,6 +365,19 @@ void showLammaSheet(BuildContext context) {
       ),
     ),
   );
+}
+
+Widget _brk(String label, String value, Color color, bool big) {
+  return Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+    Text(label, style: TextStyle(
+        color: big ? _ink : const Color(0xFF667085),
+        fontWeight: big ? FontWeight.w800 : FontWeight.w600,
+        fontSize: big ? 15 : 13)),
+    Text(value, style: TextStyle(
+        color: color,
+        fontWeight: big ? FontWeight.w900 : FontWeight.w700,
+        fontSize: big ? 20 : 13.5)),
+  ]);
 }
 
 Widget _seg(BuildContext ctx, LammaService s, String t, String label) {
