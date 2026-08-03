@@ -84,14 +84,35 @@ class LammaService {
     } catch (_) {/* keep last quote */}
   }
 
-  /// Push the Lamma products into the app cart. Discount application on the app
-  /// cart is a server follow-up; for now items are added and the deal is shown.
-  Future<void> addAllToCart() async {
-    for (final id in _ids.toList()) {
-      try {
-        await UellowApi.instance.cart.add(productId: id, qty: 1);
-      } catch (_) {}
-    }
+  /// Push the Lamma into the app cart WITH the margin-protected discount, via
+  /// the server checkout endpoint (auth-aware — it resolves the partner/guest
+  /// cart from the Bearer + cart tokens). Returns true on success.
+  Future<bool> checkout() async {
+    if (_ids.isEmpty) return false;
+    try {
+      final headers = Map<String, String>.from(_headers);
+      final token = await UellowApi.instance.tokenStore.readToken();
+      if (token != null && token.isNotEmpty) {
+        headers['Authorization'] = 'Bearer $token';
+      }
+      final cartToken = await UellowApi.instance.tokenStore.readCartToken();
+      if (cartToken != null && cartToken.isNotEmpty) {
+        headers['X-Cart-Token'] = cartToken;
+      }
+      final r = await http.post(
+        Uri.parse('$_base/api/mobile/v2/lamma/checkout'),
+        headers: headers,
+        body: jsonEncode({'product_ids': _ids.toList(), 'type': type}),
+      );
+      if (r.statusCode == 200) {
+        final body = jsonDecode(r.body) as Map<String, dynamic>;
+        if (body['ok'] == true) {
+          clear();
+          return true;
+        }
+      }
+    } catch (_) {}
+    return false;
   }
 }
 
@@ -350,10 +371,10 @@ void showLammaSheet(BuildContext context) {
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
                   onPressed: () async {
-                    await s.addAllToCart();
+                    final ok = await s.checkout();
                     if (ctx.mounted) {
                       Navigator.pop(ctx);
-                      Navigator.pushNamed(context, '/cart');
+                      if (ok) Navigator.pushNamed(context, '/cart');
                     }
                   },
                   child: Text(_ar ? 'إتمام اللمّة' : 'Checkout Lamma', style: const TextStyle(fontWeight: FontWeight.w800)),
