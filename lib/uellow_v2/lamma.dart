@@ -335,29 +335,30 @@ void showLammaSheet(BuildContext context) {
                 decoration: BoxDecoration(color: const Color(0xFFF4F0FF), borderRadius: BorderRadius.circular(12), border: Border.all(color: const Color(0xFFE6DCFF))),
                 child: Text(
                   _ar
-                      ? '💳 الأقساط: قسّم طلبك على دفعات مريحة عبر Taly / Ci-Net — موافقة سريعة وبدون تعقيد. أضف منتجاتك واختر «الأقساط»، وأكمل الدفع بالتقسيط عند الدفع.'
-                      : '💳 Installments: split your order into easy payments via Taly / Ci-Net — quick approval, no hassle. Add items, pick Installments, and pay in instalments at checkout.',
+                      ? '💳 الأقساط: قسّم طلبك على دفعات مريحة عبر Taly / CINET — موافقة سريعة وبدون تعقيد. أضف منتجاتك واختر «الأقساط»، وأكمل الدفع بالتقسيط عند الدفع.'
+                      : '💳 Installments: split your order into easy payments via Taly / CINET — quick approval, no hassle. Add items, pick Installments, and pay in instalments at checkout.',
                   style: const TextStyle(color: Color(0xFF6B4EC7), fontSize: 12, fontWeight: FontWeight.w600, height: 1.5),
                 ),
               ),
               const SizedBox(height: 12),
               ...items.map((it) => Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 6),
+                    padding: const EdgeInsets.symmetric(vertical: 4),
                     child: Row(children: [
                       ClipRRect(
-                        borderRadius: BorderRadius.circular(10),
-                        child: Image.network('$base${it['image']}', width: 46, height: 46, fit: BoxFit.cover,
-                            errorBuilder: (_, __, ___) => Container(width: 46, height: 46, color: const Color(0xFFF0F2F5))),
+                        borderRadius: BorderRadius.circular(9),
+                        child: Image.network('$base${it['image']}', width: 38, height: 38, fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => Container(width: 38, height: 38, color: const Color(0xFFF0F2F5))),
                       ),
-                      const SizedBox(width: 10),
-                      Expanded(child: Text('${it['name']}', maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: _ink))),
-                      Text('${(it['price'] as num).toStringAsFixed(3)}', style: const TextStyle(fontWeight: FontWeight.w800, color: _orange)),
-                      const SizedBox(width: 8),
+                      const SizedBox(width: 9),
+                      Expanded(child: Text('${it['name']}', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: Color(0xFF344054), height: 1.3))),
+                      const SizedBox(width: 6),
+                      Text('${(it['price'] as num).toStringAsFixed(3)}', style: const TextStyle(fontWeight: FontWeight.w800, color: _orange, fontSize: 12)),
+                      const SizedBox(width: 6),
                       InkWell(
                         onTap: () => s.remove(it['id'] as int),
-                        child: Container(width: 26, height: 26, alignment: Alignment.center,
-                          decoration: BoxDecoration(color: const Color(0xFFFFF0F0), borderRadius: BorderRadius.circular(8)),
-                          child: const Text('✕', style: TextStyle(color: Color(0xFFF04438), fontWeight: FontWeight.w800))),
+                        child: Container(width: 24, height: 24, alignment: Alignment.center,
+                          decoration: BoxDecoration(color: const Color(0xFFFFF0F0), borderRadius: BorderRadius.circular(7)),
+                          child: const Text('✕', style: TextStyle(color: Color(0xFFF04438), fontWeight: FontWeight.w800, fontSize: 12))),
                       ),
                     ]),
                   )),
@@ -405,9 +406,16 @@ void showLammaSheet(BuildContext context) {
                   ),
                   onPressed: () async {
                     final ok = await s.checkout();
-                    if (ctx.mounted) {
+                    if (!ctx.mounted) return;
+                    if (ok) {
                       Navigator.pop(ctx);
-                      if (ok) Navigator.pushNamed(context, '/cart');
+                      Navigator.pushNamed(context, '/cart');
+                    } else {
+                      ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(
+                        content: Text(_ar
+                            ? 'تعذّر إتمام اللمّة — أضف منتجين على الأقل'
+                            : 'Could not checkout — add at least 2 products'),
+                      ));
                     }
                   },
                   child: Text(_ar ? 'إتمام اللمّة' : 'Checkout Lamma', style: const TextStyle(fontWeight: FontWeight.w800)),
