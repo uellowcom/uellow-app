@@ -18,6 +18,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../api/uellow_api.dart';
 import '../../api/uellow_models.dart';
 import '../../services/tiktok_tracker.dart';
+import '../lamma.dart';
 import '../router/uellow_router.dart';
 import '../services/first_launch_service.dart';
 import '../theme/uellow_l10n.dart';
@@ -88,6 +89,9 @@ class _ProductScreenState extends State<ProductScreen> {
   void initState() {
     super.initState();
     _future = UellowApi.instance.products.detail(widget.productId);
+    // لمّة يلو — load config + refresh the bundle summary for this session.
+    LammaService.instance.loadConfig();
+    LammaService.instance.refresh();
     // TikTok: ViewContent when the product detail loads.
     _future.then((p) {
       TikTokTracker.instance.viewContent(
@@ -4680,7 +4684,12 @@ class _CtaBar extends StatelessWidget {
     final ar = UellowApi.instance.lang == 'ar';
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 4),
-      child: Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        // ── لمّة يلو — inline bundle bar + add-to-Lamma button ─────
+        const LammaBar(),
+        LammaButton(productId: p.id),
+        const SizedBox(height: 8),
+        Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
         // ── Beena bee with floating red "Any help?" pill ──────────
         _BeenaHelpButton(onTap: () => Navigator.pushNamed(context, '/beena',
                 arguments: {'product_id': p.id}),
@@ -4713,6 +4722,7 @@ class _CtaBar extends StatelessWidget {
           shadow: const Color(0x33DC2626),
           onTap: () => _openBuySheet(context, p, isBuyNow: true),
         )),
+      ]),
       ]),
     );
   }
