@@ -5,6 +5,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 import '../api/uellow_api.dart';
 
 /// Singleton holding the current Lamma and talking to the server engine.
@@ -23,6 +24,32 @@ class LammaService {
 
   bool has(int id) => _ids.contains(id);
   int get count => _ids.length;
+  bool _restored = false;
+
+  /// Persist the bundle so it survives app restarts.
+  Future<void> _persist() async {
+    try {
+      final p = await SharedPreferences.getInstance();
+      await p.setString('lamma_ids_v1', jsonEncode(_ids.toList()));
+      await p.setString('lamma_type_v1', type);
+    } catch (_) {}
+  }
+
+  Future<void> restore() async {
+    if (_restored) return;
+    _restored = true;
+    try {
+      final p = await SharedPreferences.getInstance();
+      final s = p.getString('lamma_ids_v1');
+      if (s != null && s.isNotEmpty) {
+        _ids
+          ..clear()
+          ..addAll((jsonDecode(s) as List).map((e) => (e as num).toInt()));
+      }
+      type = p.getString('lamma_type_v1') ?? 'normal';
+    } catch (_) {}
+    if (_ids.isNotEmpty) await refresh();
+  }
 
   String get _base => UellowApi.instance.baseUrl;
   Map<String, String> get _headers => {
@@ -49,22 +76,26 @@ class LammaService {
     } else {
       _ids.add(id);
     }
+    _persist();
     await refresh();
   }
 
   Future<void> remove(int id) async {
     _ids.remove(id);
+    _persist();
     await refresh();
   }
 
   Future<void> setType(String t) async {
     type = (t == 'installment') ? 'installment' : 'normal';
+    _persist();
     await refresh();
   }
 
   void clear() {
     _ids.clear();
     quote.value = null;
+    _persist();
   }
 
   Future<void> refresh() async {
@@ -405,6 +436,11 @@ void showLammaSheet(BuildContext context) {
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
                   onPressed: () async {
+                    if (s.count < 2) {
+                      ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(
+                        content: Text(_ar ? 'أضف منتجين على الأقل للّمّة' : 'Add at least 2 products')));
+                      return;
+                    }
                     final ok = await s.checkout();
                     if (!ctx.mounted) return;
                     if (ok) {
@@ -412,10 +448,7 @@ void showLammaSheet(BuildContext context) {
                       Navigator.pushNamed(context, '/cart');
                     } else {
                       ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(
-                        content: Text(_ar
-                            ? 'تعذّر إتمام اللمّة — أضف منتجين على الأقل'
-                            : 'Could not checkout — add at least 2 products'),
-                      ));
+                        content: Text(_ar ? 'تعذّر إتمام اللمّة، حاول مجدداً' : 'Checkout failed, please try again')));
                     }
                   },
                   child: Text(_ar ? 'إتمام اللمّة' : 'Checkout Lamma', style: const TextStyle(fontWeight: FontWeight.w800)),

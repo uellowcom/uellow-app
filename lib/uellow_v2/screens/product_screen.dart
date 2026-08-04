@@ -89,9 +89,9 @@ class _ProductScreenState extends State<ProductScreen> {
   void initState() {
     super.initState();
     _future = UellowApi.instance.products.detail(widget.productId);
-    // لمّة يلو — load config + refresh the bundle summary for this session.
+    // لمّة يلو — load config + restore the saved bundle (survives app restarts).
     LammaService.instance.loadConfig();
-    LammaService.instance.refresh();
+    LammaService.instance.restore();
     // TikTok: ViewContent when the product detail loads.
     _future.then((p) {
       TikTokTracker.instance.viewContent(
