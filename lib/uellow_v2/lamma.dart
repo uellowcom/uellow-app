@@ -37,6 +37,16 @@ class LammaService {
     onProductPage.value = _productDepth > 0;
   }
 
+  /// True while the splash screen is up — the floating bar must never paint
+  /// over the splash.
+  final ValueNotifier<bool> onSplash = ValueNotifier<bool>(false);
+
+  /// Navigator key (set from main) so the floating bar — which lives ABOVE the
+  /// Navigator in MaterialApp.builder — can still open the sheet after a cold
+  /// start. Without it, tapping the bar found no Navigator and did nothing.
+  GlobalKey<NavigatorState>? navKey;
+  BuildContext? get _navCtx => navKey?.currentContext;
+
   bool has(int id) => _ids.contains(id);
   int get count => _ids.length;
   bool _restored = false;
@@ -205,6 +215,12 @@ class LammaService {
       Map<String, dynamic> body = {};
       try { body = jsonDecode(r.body) as Map<String, dynamic>; } catch (_) {}
       if (r.statusCode == 200 && body['ok'] == true) {
+        // Adopt the server cart token so the cart screen reads the SAME order we
+        // just filled — otherwise it opens empty right after checkout.
+        final ct = (body['cart_token'] ?? '').toString();
+        if (ct.isNotEmpty) {
+          try { await UellowApi.instance.tokenStore.writeCartToken(ct); } catch (_) {}
+        }
         clear();
         return null;
       }
@@ -443,6 +459,9 @@ void showLammaSheet(BuildContext context) {
           final items = (q['items'] as List?) ?? [];
           final base = UellowApi.instance.baseUrl;
           final capped = q['capped'] == true;
+          final excluded = ((q['excluded'] ?? 0) as num).toInt();
+          final savedAmt = (q['saved'] ?? 0).toDouble();
+          final nItems = ((q['n'] ?? 0) as num).toInt();
           final inst = s.type == 'installment';
           return Padding(
             padding: EdgeInsets.only(left: 16, right: 16, top: 14, bottom: 16 + MediaQuery.of(ctx).viewInsets.bottom),
@@ -493,17 +512,24 @@ void showLammaSheet(BuildContext context) {
                       ),
                     ]),
                   )),
-              if (capped)
-                Container(
-                  margin: const EdgeInsets.only(top: 8), padding: const EdgeInsets.all(9),
-                  decoration: BoxDecoration(color: const Color(0xFF12241B), borderRadius: BorderRadius.circular(10)),
-                  child: Text(
-                    _ar
-                        ? '✔️ خصم اللمّة وصل حده الأقصى لهذه الباقة.'
-                        : '✔️ Lamma discount reached its maximum for this bundle.',
-                    style: const TextStyle(color: Color(0xFF4ADE80), fontWeight: FontWeight.w700, fontSize: 12.5),
-                  ),
-                ),
+              if (excluded > 0 && savedAmt > 0)
+                _noteBox(
+                  _ar
+                      ? '✔️ طُبّق خصم اللمّة على المنتجات المؤهّلة، و$excluded ${excluded == 1 ? 'منتج' : 'منتجات'} عند حد الربح فبقيت بسعرها.'
+                      : '✔️ Discount applied to eligible items; $excluded item(s) are at the margin floor and kept full price.',
+                  amber: false)
+              else if (savedAmt <= 0 && nItems >= 2)
+                _noteBox(
+                  _ar
+                      ? 'ℹ️ منتجات هذه الباقة عند حد الربح حالياً، فلا يمكن تطبيق خصم اللمّة عليها.'
+                      : 'ℹ️ These items are at the margin floor, so no Lamma discount can apply right now.',
+                  amber: true)
+              else if (capped)
+                _noteBox(
+                  _ar
+                      ? '✔️ خصم اللمّة وصل حده الأقصى لهذه الباقة.'
+                      : '✔️ Lamma discount reached its maximum for this bundle.',
+                  amber: false),
               const SizedBox(height: 10),
               // professional price breakdown: subtotal / discount / net
               Container(
@@ -580,6 +606,25 @@ void showLammaSheet(BuildContext context) {
         },
       ),
     ),
+  );
+}
+
+Widget _noteBox(String text, {required bool amber}) {
+  return Container(
+    margin: const EdgeInsets.only(top: 8),
+    padding: const EdgeInsets.all(10),
+    decoration: BoxDecoration(
+      color: amber ? const Color(0xFFFFF4E5) : const Color(0xFF12241B),
+      borderRadius: BorderRadius.circular(10),
+      border: amber ? Border.all(color: const Color(0xFFFFD9A8)) : null,
+    ),
+    child: Text(text,
+        style: TextStyle(
+          color: amber ? const Color(0xFF8A5A12) : const Color(0xFF4ADE80),
+          fontWeight: FontWeight.w700,
+          fontSize: 12.5,
+          height: 1.45,
+        )),
   );
 }
 
@@ -709,11 +754,13 @@ class LammaGlobalBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final s = LammaService.instance;
     return AnimatedBuilder(
-      animation: Listenable.merge([s.quote, s.hidden, s.onProductPage]),
+      animation: Listenable.merge([s.quote, s.hidden, s.onProductPage, s.onSplash]),
       builder: (context, _) {
         final q = s.quote.value;
         if (q == null || (q['n'] ?? 0) == 0) return const SizedBox.shrink();
-        if (s.hidden.value || s.onProductPage.value) return const SizedBox.shrink();
+        if (s.hidden.value || s.onProductPage.value || s.onSplash.value) {
+          return const SizedBox.shrink();
+        }
         final cur = (q['currency'] ?? 'KD').toString();
         final pays = (q['pays'] ?? 0).toDouble();
         final pct = (q['discount_pct'] ?? 0).toDouble();
@@ -732,7 +779,7 @@ class LammaGlobalBar extends StatelessWidget {
               borderRadius: BorderRadius.circular(16),
               child: InkWell(
                 borderRadius: BorderRadius.circular(16),
-                onTap: () => showLammaSheet(context),
+                onTap: () => showLammaSheet(s._navCtx ?? context),
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                   decoration: BoxDecoration(

@@ -18,6 +18,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import '../lamma.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -59,7 +60,14 @@ class _SplashScreenState extends State<SplashScreen> {
   @override
   void initState() {
     super.initState();
+    LammaService.instance.onSplash.value = true; // keep the bar off the splash
     _bootstrap();
+  }
+
+  @override
+  void dispose() {
+    LammaService.instance.onSplash.value = false;
+    super.dispose();
   }
 
   Future<void> _bootstrap() async {

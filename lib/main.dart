@@ -50,6 +50,7 @@ Future<void> main() async {
   // v2.2.56 — customer journey tracking (screen views + app lifecycle).
   ActivityTracker.instance.start();
   // v2.2.85 — warm up لمّة يلو so the floating bar can appear on any screen.
+  LammaService.instance.navKey = rootNavigatorKey;
   unawaited(LammaService.instance.loadConfig());
   unawaited(LammaService.instance.restore());
   runApp(UellowApp(navigatorKey: rootNavigatorKey));
