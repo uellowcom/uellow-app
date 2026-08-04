@@ -95,7 +95,9 @@ class _HomeScreenState extends State<HomeScreen> {
       if (fresh != null) _dyn = fresh;
       _settled = true;
     });
-    CountrySwitchOverlay.hide(); // dismiss the switching loader once ready
+    // Only dismiss the country-switch loader once the NEW store actually
+    // loaded — never on a failed fetch that would leave the old country.
+    if (fresh != null) CountrySwitchOverlay.hide();
   }
 
   Future<_DynHome?> _readSnapshot() async {

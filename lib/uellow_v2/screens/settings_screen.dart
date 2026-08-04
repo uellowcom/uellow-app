@@ -273,6 +273,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
     } catch (_) {}
     if (!mounted) return;
     setState(() => _dirty = false);
+    // drop the cached home snapshot so the loader stays until the NEW
+    // country's home is fetched (no old-country flash underneath).
+    try {
+      for (final k in prefs.getKeys().where((k) => k.startsWith('home_page_cache_v1')).toList()) {
+        await prefs.remove(k);
+      }
+    } catch (_) {}
     CountrySwitchOverlay.show(context);
     Navigator.of(context).pushNamedAndRemoveUntil('/', (_) => false);
   }

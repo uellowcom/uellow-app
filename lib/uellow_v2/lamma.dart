@@ -344,6 +344,178 @@ class LammaBuyNowSlot extends StatelessWidget {
 
 /// Inline bar shown just above the CTA when the Lamma has items; tap → sheet.
 /// Returns an empty box when the Lamma is empty, so it takes no space.
+// Uellow "Temu-style" orange for the checkout CTA + count chip.
+const _temuA = Color(0xFFFF8A00);
+const _temuB = Color(0xFFFB4E00);
+
+/// The shared لمّة يلو bar card — clean white, product thumbnails, the net price
+/// with a red "كان (was)" pill emphasising the pre-discount price, and a bold
+/// orange checkout CTA. Used by both the floating global bar and the inline bar.
+Widget lammaBarCard(BuildContext context, Map<String, dynamic> q,
+    {required VoidCallback onTap, VoidCallback? onClose}) {
+  final cur = (q['currency'] ?? 'KD').toString();
+  final n = ((q['n'] ?? 0) as num).toInt();
+  final pays = (q['pays'] ?? 0).toDouble();
+  final subtotal = (q['subtotal'] ?? 0).toDouble();
+  final pct = (q['discount_pct'] ?? 0).toDouble();
+  final items = (q['items'] as List?) ?? const [];
+  final hasDiscount = pct > 0 && subtotal > pays + 0.0005;
+  return Material(
+    color: Colors.white,
+    elevation: 10,
+    shadowColor: Colors.black.withOpacity(0.26),
+    borderRadius: BorderRadius.circular(16),
+    child: InkWell(
+      borderRadius: BorderRadius.circular(16),
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(13, 10, 13, 10),
+        child: Row(children: [
+          _ThumbsLite(items: items, count: n),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                RichText(
+                  textDirection: _ar ? TextDirection.rtl : TextDirection.ltr,
+                  text: TextSpan(children: [
+                    TextSpan(
+                      text: pays.toStringAsFixed(3),
+                      style: const TextStyle(
+                          fontWeight: FontWeight.w900, fontSize: 16, color: _ink, height: 1),
+                    ),
+                    TextSpan(
+                      text: ' $cur',
+                      style: const TextStyle(
+                          fontWeight: FontWeight.w800, fontSize: 11, color: Color(0xFF98A2B3)),
+                    ),
+                  ]),
+                ),
+                const SizedBox(height: 4),
+                if (hasDiscount)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFFECEC),
+                      borderRadius: BorderRadius.circular(999),
+                      border: Border.all(color: const Color(0xFFFFD4D4)),
+                    ),
+                    child: RichText(
+                      textDirection: _ar ? TextDirection.rtl : TextDirection.ltr,
+                      text: TextSpan(children: [
+                        TextSpan(
+                          text: _ar ? 'كان ' : 'was ',
+                          style: const TextStyle(
+                              fontWeight: FontWeight.w800, fontSize: 11.5, color: Color(0xFFC23434)),
+                        ),
+                        TextSpan(
+                          text: subtotal.toStringAsFixed(3),
+                          style: const TextStyle(
+                              fontWeight: FontWeight.w800, fontSize: 11.5, color: Color(0xFFE05252),
+                              decoration: TextDecoration.lineThrough),
+                        ),
+                      ]),
+                    ),
+                  )
+                else
+                  Text(_ar ? '$n منتجات في لمّتك' : '$n items in your Lamma',
+                      style: const TextStyle(
+                          fontSize: 11.5, fontWeight: FontWeight.w700, color: Color(0xFF98A2B3))),
+              ],
+            ),
+          ),
+          const SizedBox(width: 10),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(colors: [_temuA, _temuB]),
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [
+                BoxShadow(
+                    color: const Color(0xFFFB4E00).withOpacity(0.32),
+                    blurRadius: 14, offset: const Offset(0, 6)),
+              ],
+            ),
+            child: Text(_ar ? 'أكمل اللمّة' : 'Checkout',
+                style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 13, color: Colors.white)),
+          ),
+          if (onClose != null) ...[
+            const SizedBox(width: 2),
+            InkWell(
+              onTap: onClose,
+              borderRadius: BorderRadius.circular(20),
+              child: const Padding(
+                padding: EdgeInsets.all(5),
+                child: Icon(Icons.close, size: 16, color: Color(0xFF98A2B3)),
+              ),
+            ),
+          ],
+        ]),
+      ),
+    ),
+  );
+}
+
+/// Overlapping product thumbnails (white) + a count chip, for the light bar.
+class _ThumbsLite extends StatelessWidget {
+  const _ThumbsLite({required this.items, required this.count});
+  final List items;
+  final int count;
+  @override
+  Widget build(BuildContext context) {
+    final base = UellowApi.instance.baseUrl;
+    final shown = items.take(3).toList();
+    const sz = 36.0, step = 25.0;
+    final slots = shown.length + 1; // + count chip
+    return SizedBox(
+      width: step * (slots - 1) + sz,
+      height: sz,
+      child: Stack(children: [
+        for (var i = 0; i < shown.length; i++)
+          Positioned(
+            top: 0,
+            right: i * step,
+            child: Container(
+              width: sz, height: sz,
+              decoration: BoxDecoration(
+                color: const Color(0xFFEEF1F6),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.white, width: 2),
+                boxShadow: [
+                  BoxShadow(color: Colors.black.withOpacity(0.12), blurRadius: 5, offset: const Offset(0, 2)),
+                ],
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: Image.network('$base${shown[i]['image']}',
+                    width: sz, height: sz, fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => const SizedBox()),
+              ),
+            ),
+          ),
+        Positioned(
+          top: 0,
+          right: shown.length * step,
+          child: Container(
+            width: sz, height: sz,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(colors: [_temuA, _temuB]),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: Colors.white, width: 2),
+            ),
+            child: Text('$count',
+                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 12)),
+          ),
+        ),
+      ]),
+    );
+  }
+}
+
+/// Inline bar shown just above the CTA on product pages when the Lamma has items.
 class LammaBar extends StatelessWidget {
   const LammaBar({super.key});
   @override
@@ -353,58 +525,9 @@ class LammaBar extends StatelessWidget {
       valueListenable: s.quote,
       builder: (context, q, _) {
         if (q == null || (q['n'] ?? 0) == 0) return const SizedBox.shrink();
-        final cur = (q['currency'] ?? 'KD').toString();
-        final pct = (q['discount_pct'] ?? 0).toDouble();
-        final pays = (q['pays'] ?? 0).toDouble();
-        final items = (q['items'] as List?) ?? [];
         return Padding(
           padding: const EdgeInsets.only(bottom: 8),
-          child: Material(
-            color: Colors.transparent,
-            child: InkWell(
-              borderRadius: BorderRadius.circular(14),
-              onTap: () => showLammaSheet(context),
-              child: Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: _ink,
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: const Color(0xFF2A3444)),
-                ),
-                child: Row(children: [
-                  _Thumbs(items: items),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: RichText(
-                      textDirection: _ar ? TextDirection.rtl : TextDirection.ltr,
-                      text: TextSpan(
-                        style: const TextStyle(fontSize: 12, color: Color(0xFFC3CAD6)),
-                        children: [
-                          TextSpan(text: _ar ? 'لمّتك · ' : 'Lamma · '),
-                          if (pct > 0)
-                            TextSpan(
-                              text: '${(q['subtotal'] ?? 0).toStringAsFixed(3)} ',
-                              style: const TextStyle(color: Color(0xFF8B97A8), decoration: TextDecoration.lineThrough),
-                            ),
-                          TextSpan(text: '${pays.toStringAsFixed(3)} $cur', style: const TextStyle(color: _yellow, fontWeight: FontWeight.w800)),
-                          if (pct > 0) TextSpan(text: '  -${pct.toStringAsFixed(0)}%'),
-                        ],
-                      ),
-                    ),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(colors: [_yellow, _orange]),
-                      borderRadius: BorderRadius.circular(9),
-                    ),
-                    child: Text(_ar ? 'التفاصيل' : 'View',
-                        style: const TextStyle(fontWeight: FontWeight.w800, color: _ink, fontSize: 12)),
-                  ),
-                ]),
-              ),
-            ),
-          ),
+          child: lammaBarCard(context, q, onTap: () => showLammaSheet(context)),
         );
       },
     );
@@ -761,71 +884,16 @@ class LammaGlobalBar extends StatelessWidget {
         if (s.hidden.value || s.onProductPage.value || s.onSplash.value) {
           return const SizedBox.shrink();
         }
-        final cur = (q['currency'] ?? 'KD').toString();
-        final pays = (q['pays'] ?? 0).toDouble();
-        final pct = (q['discount_pct'] ?? 0).toDouble();
-        final items = (q['items'] as List?) ?? const [];
-        final n = (q['n'] ?? 0);
         return Positioned(
           left: 12,
           right: 12,
           bottom: MediaQuery.of(context).padding.bottom + 74,
           child: Directionality(
             textDirection: _ar ? TextDirection.rtl : TextDirection.ltr,
-            child: Material(
-              color: _ink,
-              elevation: 12,
-              shadowColor: Colors.black45,
-              borderRadius: BorderRadius.circular(16),
-              child: InkWell(
-                borderRadius: BorderRadius.circular(16),
-                onTap: () => showLammaSheet(s._navCtx ?? context),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: const Color(0xFF2A3444)),
-                  ),
-                  child: Row(children: [
-                    _Thumbs(items: items),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: RichText(
-                        textDirection: _ar ? TextDirection.rtl : TextDirection.ltr,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        text: TextSpan(
-                          style: const TextStyle(fontSize: 12, color: Color(0xFFC3CAD6)),
-                          children: [
-                            TextSpan(text: _ar ? 'لمّتك ($n) · ' : 'Lamma ($n) · '),
-                            TextSpan(text: '${pays.toStringAsFixed(3)} $cur',
-                                style: const TextStyle(color: _yellow, fontWeight: FontWeight.w800)),
-                            if (pct > 0) TextSpan(text: '  -${pct.toStringAsFixed(0)}%'),
-                          ],
-                        ),
-                      ),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
-                      decoration: BoxDecoration(
-                        gradient: const LinearGradient(colors: [_yellow, _orange]),
-                        borderRadius: BorderRadius.circular(9),
-                      ),
-                      child: Text(_ar ? 'التفاصيل' : 'View',
-                          style: const TextStyle(fontWeight: FontWeight.w800, color: _ink, fontSize: 12)),
-                    ),
-                    const SizedBox(width: 4),
-                    InkWell(
-                      onTap: () => s.hidden.value = true,
-                      borderRadius: BorderRadius.circular(20),
-                      child: const Padding(
-                        padding: EdgeInsets.all(6),
-                        child: Icon(Icons.close, size: 16, color: Color(0xFF8B97A8)),
-                      ),
-                    ),
-                  ]),
-                ),
-              ),
+            child: lammaBarCard(
+              context, q,
+              onTap: () => showLammaSheet(s._navCtx ?? context),
+              onClose: () => s.hidden.value = true,
             ),
           ),
         );
