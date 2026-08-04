@@ -77,12 +77,31 @@ class _SplashScreenState extends State<SplashScreen> {
       final prefs = await SharedPreferences.getInstance();
       final alreadyPicked = prefs.getBool(_kCountryPickedKey) ?? false;
       if (alreadyPicked) {
-        final savedLang = prefs.getString('uellow_lang_v1');
-        if (savedLang != null && savedLang.isNotEmpty) {
-          UellowApi.instance.setLang(savedLang);
+        final savedCode = prefs.getString('uellow_country_code_v1');
+        // A "picked" flag with NO saved country (e.g. Android auto-backup
+        // partially restored prefs after a reinstall) must never fall through
+        // to a default country — that was opening the app on China. Re-pick.
+        if (savedCode != null && savedCode.isNotEmpty) {
+          final savedLang = prefs.getString('uellow_lang_v1');
+          if (savedLang != null && savedLang.isNotEmpty) {
+            UellowApi.instance.setLang(savedLang);
+          }
+          // Re-assert the country on the server session so content/currency
+          // match the saved choice even if only the base URL was restored.
+          try {
+            final uri = Uri.parse('${UellowApi.instance.baseUrl}${EP.appSetCountry()}');
+            await http.post(uri,
+                headers: {'Content-Type': 'application/json'},
+                body: jsonEncode({
+                  'country': savedCode,
+                  'lang': UellowApi.instance.lang.startsWith('ar') ? 'ar' : 'en',
+                })).timeout(const Duration(seconds: 6));
+          } catch (_) {}
+          if (mounted) Navigator.of(context).pushReplacementNamed(Routes.home);
+          return;
         }
-        if (mounted) Navigator.of(context).pushReplacementNamed(Routes.home);
-        return;
+        // stale flag without a country -> drop it and show the picker
+        try { await prefs.remove(_kCountryPickedKey); } catch (_) {}
       }
     } catch (_) {/* fall through to picker */}
 

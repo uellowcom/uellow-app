@@ -15,6 +15,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import '../widgets/country_switch_overlay.dart';
 
 import '../../api/uellow_api.dart';
 import '../../api/uellow_endpoints.dart';
@@ -94,6 +95,7 @@ class _HomeScreenState extends State<HomeScreen> {
       if (fresh != null) _dyn = fresh;
       _settled = true;
     });
+    CountrySwitchOverlay.hide(); // dismiss the switching loader once ready
   }
 
   Future<_DynHome?> _readSnapshot() async {

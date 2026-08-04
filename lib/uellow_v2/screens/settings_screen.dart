@@ -12,6 +12,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../api/uellow_api.dart';
+import '../widgets/country_switch_overlay.dart';
 import '../../api/uellow_endpoints.dart';
 import '../services/fcm_service.dart';
 import '../theme/uellow_theme.dart';
@@ -272,6 +273,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     } catch (_) {}
     if (!mounted) return;
     setState(() => _dirty = false);
+    CountrySwitchOverlay.show(context);
     Navigator.of(context).pushNamedAndRemoveUntil('/', (_) => false);
   }
 
