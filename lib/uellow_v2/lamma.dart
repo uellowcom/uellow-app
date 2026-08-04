@@ -41,10 +41,10 @@ class LammaService {
     try {
       final p = await SharedPreferences.getInstance();
       final s = p.getString('lamma_ids_v1');
-      if (s != null && s.isNotEmpty) {
-        _ids
-          ..clear()
-          ..addAll((jsonDecode(s) as List).map((e) => (e as num).toInt()));
+      // only load the saved bundle when nothing was added this session yet —
+      // never overwrite items the user just added.
+      if (s != null && s.isNotEmpty && _ids.isEmpty) {
+        _ids.addAll((jsonDecode(s) as List).map((e) => (e as num).toInt()));
       }
       type = p.getString('lamma_type_v1') ?? 'normal';
     } catch (_) {}
@@ -118,8 +118,19 @@ class LammaService {
   /// Push the Lamma into the app cart WITH the margin-protected discount, via
   /// the server checkout endpoint (auth-aware — it resolves the partner/guest
   /// cart from the Bearer + cart tokens). Returns true on success.
+  /// Product ids actually shown in the sheet (the quote) — the source of truth
+  /// the customer sees; falls back to the in-memory set.
+  List<int> shownIds() {
+    final items = (quote.value?['items'] as List?) ?? [];
+    if (items.isNotEmpty) {
+      return items.map((it) => (it['id'] as num).toInt()).toList();
+    }
+    return _ids.toList();
+  }
+
   Future<bool> checkout() async {
-    if (_ids.isEmpty) return false;
+    final ids = shownIds();
+    if (ids.length < 2) return false;
     try {
       final headers = Map<String, String>.from(_headers);
       final token = await UellowApi.instance.tokenStore.readToken();
@@ -133,7 +144,7 @@ class LammaService {
       final r = await http.post(
         Uri.parse('$_base/api/mobile/v2/lamma/checkout'),
         headers: headers,
-        body: jsonEncode({'product_ids': _ids.toList(), 'type': type}),
+        body: jsonEncode({'product_ids': ids, 'type': type}),
       );
       if (r.statusCode == 200) {
         final body = jsonDecode(r.body) as Map<String, dynamic>;
@@ -458,7 +469,8 @@ void showLammaSheet(BuildContext context) {
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
                   onPressed: () async {
-                    if (s.count < 2) {
+                    final shown = ((q['items'] as List?) ?? []).length;
+                    if (shown < 2) {
                       msg.value = _ar ? 'أضف منتجين على الأقل للّمّة' : 'Add at least 2 products';
                       return;
                     }
