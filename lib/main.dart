@@ -13,6 +13,7 @@ import 'package:uellow/uellow_v2/services/deep_link_service.dart';
 import 'package:uellow/uellow_v2/services/fcm_service.dart';
 import 'package:uellow/uellow_v2/services/push_service.dart';
 import 'package:uellow/uellow_v2/services/activity_tracker.dart';
+import 'package:uellow/uellow_v2/lamma.dart';
 
 final GlobalKey<NavigatorState> rootNavigatorKey = GlobalKey<NavigatorState>();
 
@@ -48,6 +49,9 @@ Future<void> main() async {
   unawaited(FcmService.instance.init());
   // v2.2.56 — customer journey tracking (screen views + app lifecycle).
   ActivityTracker.instance.start();
+  // v2.2.85 — warm up لمّة يلو so the floating bar can appear on any screen.
+  unawaited(LammaService.instance.loadConfig());
+  unawaited(LammaService.instance.restore());
   runApp(UellowApp(navigatorKey: rootNavigatorKey));
 }
 
@@ -110,7 +114,10 @@ class _UellowAppState extends State<UellowApp> with WidgetsBindingObserver {
           ],
           builder: (context, child) => Directionality(
             textDirection: isAr ? TextDirection.rtl : TextDirection.ltr,
-            child: child ?? const SizedBox.shrink(),
+            child: Stack(children: [
+              child ?? const SizedBox.shrink(),
+              const LammaGlobalBar(),
+            ]),
           ),
           initialRoute: Routes.splash,
           routes: UellowRouter.routes,

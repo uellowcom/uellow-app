@@ -13,7 +13,8 @@ class LammaService {
   LammaService._();
   static final LammaService instance = LammaService._();
 
-  final Set<int> _ids = <int>{};
+  final Set<int> _ids = <int>{};                 // product (template) ids
+  final Map<int, int> _variants = <int, int>{};  // templateId -> chosen variantId
   String type = 'normal';
 
   /// Latest server quote (margin-protected price). Widgets listen to rebuild.
@@ -21,6 +22,20 @@ class LammaService {
       ValueNotifier<Map<String, dynamic>?>(null);
   final ValueNotifier<Map<String, dynamic>?> config =
       ValueNotifier<Map<String, dynamic>?>(null);
+
+  /// The floating mini-bar is dismissed (X) — session only; a new add re-shows
+  /// it, and product pages always show their own inline bar regardless.
+  final ValueNotifier<bool> hidden = ValueNotifier<bool>(false);
+  /// True while any product screen is on the stack — the global bar yields to
+  /// the product page's own inline bar. Depth-counted so nested product→product
+  /// navigation stays correct.
+  final ValueNotifier<bool> onProductPage = ValueNotifier<bool>(false);
+  int _productDepth = 0;
+  void enterProduct() { _productDepth++; onProductPage.value = true; }
+  void leaveProduct() {
+    if (_productDepth > 0) _productDepth--;
+    onProductPage.value = _productDepth > 0;
+  }
 
   bool has(int id) => _ids.contains(id);
   int get count => _ids.length;
@@ -31,6 +46,8 @@ class LammaService {
     try {
       final p = await SharedPreferences.getInstance();
       await p.setString('lamma_ids_v1', jsonEncode(_ids.toList()));
+      await p.setString('lamma_variants_v1',
+          jsonEncode(_variants.map((k, v) => MapEntry(k.toString(), v))));
       await p.setString('lamma_type_v1', type);
     } catch (_) {}
   }
@@ -45,11 +62,20 @@ class LammaService {
       // never overwrite items the user just added.
       if (s != null && s.isNotEmpty && _ids.isEmpty) {
         _ids.addAll((jsonDecode(s) as List).map((e) => (e as num).toInt()));
+        final v = p.getString('lamma_variants_v1');
+        if (v != null && v.isNotEmpty) {
+          (jsonDecode(v) as Map).forEach((k, val) =>
+              _variants[int.parse(k.toString())] = (val as num).toInt());
+        }
       }
       type = p.getString('lamma_type_v1') ?? 'normal';
     } catch (_) {}
     if (_ids.isNotEmpty) await refresh();
   }
+
+  /// {templateId: variantId} for the products where a colour/variant was picked.
+  Map<String, int> _variantPayload() =>
+      _variants.map((k, v) => MapEntry(k.toString(), v));
 
   String get _base => UellowApi.instance.baseUrl;
   Map<String, String> get _headers => {
@@ -70,11 +96,14 @@ class LammaService {
     } catch (_) {/* silent — feature just stays hidden */}
   }
 
-  Future<void> toggle(int id) async {
+  Future<void> toggle(int id, {int? variantId}) async {
     if (_ids.contains(id)) {
       _ids.remove(id);
+      _variants.remove(id);
     } else {
       _ids.add(id);
+      if (variantId != null) _variants[id] = variantId;
+      hidden.value = false; // a fresh add always re-shows the mini-bar
     }
     _persist();
     await refresh();
@@ -82,6 +111,7 @@ class LammaService {
 
   Future<void> remove(int id) async {
     _ids.remove(id);
+    _variants.remove(id);
     _persist();
     await refresh();
   }
@@ -94,8 +124,21 @@ class LammaService {
 
   void clear() {
     _ids.clear();
+    _variants.clear();
     quote.value = null;
     _persist();
+  }
+
+  /// Fetch the selectable colours/variants for a product (for the picker).
+  Future<Map<String, dynamic>?> fetchVariants(int productId) async {
+    try {
+      final r = await http.get(
+        Uri.parse('$_base/api/mobile/v2/lamma/variants?product_id=$productId'),
+        headers: _headers,
+      );
+      if (r.statusCode == 200) return jsonDecode(r.body) as Map<String, dynamic>;
+    } catch (_) {}
+    return null;
   }
 
   Future<void> refresh() async {
@@ -107,7 +150,11 @@ class LammaService {
       final r = await http.post(
         Uri.parse('$_base/api/mobile/v2/lamma/quote'),
         headers: _headers,
-        body: jsonEncode({'product_ids': _ids.toList(), 'type': type}),
+        body: jsonEncode({
+          'product_ids': _ids.toList(),
+          'variants': _variantPayload(),
+          'type': type,
+        }),
       );
       if (r.statusCode == 200) {
         quote.value = jsonDecode(r.body) as Map<String, dynamic>;
@@ -128,9 +175,14 @@ class LammaService {
     return _ids.toList();
   }
 
-  Future<bool> checkout() async {
+  /// Runs checkout. Returns null on success, or a clear Arabic/English message
+  /// explaining exactly why it did not go through.
+  Future<String?> checkout() async {
     final ids = shownIds();
-    if (ids.length < 2) return false;
+    if (ids.length < 2) {
+      return _ar ? 'أضف منتجين على الأقل لإتمام اللمّة'
+                 : 'Add at least 2 products to check out';
+    }
     try {
       final headers = Map<String, String>.from(_headers);
       final token = await UellowApi.instance.tokenStore.readToken();
@@ -144,17 +196,39 @@ class LammaService {
       final r = await http.post(
         Uri.parse('$_base/api/mobile/v2/lamma/checkout'),
         headers: headers,
-        body: jsonEncode({'product_ids': ids, 'type': type}),
+        body: jsonEncode({
+          'product_ids': ids,
+          'variants': _variantPayload(),
+          'type': type,
+        }),
       );
-      if (r.statusCode == 200) {
-        final body = jsonDecode(r.body) as Map<String, dynamic>;
-        if (body['ok'] == true) {
-          clear();
-          return true;
-        }
+      Map<String, dynamic> body = {};
+      try { body = jsonDecode(r.body) as Map<String, dynamic>; } catch (_) {}
+      if (r.statusCode == 200 && body['ok'] == true) {
+        clear();
+        return null;
       }
-    } catch (_) {}
-    return false;
+      // map server error codes to a clear message
+      final err = (body['error'] ?? '').toString();
+      switch (err) {
+        case 'need_more':
+          return _ar ? 'أضف منتجين على الأقل لإتمام اللمّة'
+                     : 'Add at least 2 products to check out';
+        case 'disabled':
+          return _ar ? 'خدمة اللمّة غير متاحة في بلدك حالياً'
+                     : 'Lamma is not available in your country yet';
+        case 'no_order':
+          return _ar ? 'تعذّر إنشاء سلة الطلب، حدّث الصفحة وحاول مجدداً'
+                     : 'Could not create your cart, please retry';
+        default:
+          return _ar
+              ? 'حدث خطأ أثناء إتمام اللمّة — تواصل معنا إذا استمرت المشكلة'
+              : 'Something went wrong finishing your Lamma — contact us if it persists';
+      }
+    } catch (_) {
+      return _ar ? 'لا يوجد اتصال بالإنترنت، تحقّق من الشبكة وحاول مجدداً'
+                 : 'No internet connection, please check your network';
+    }
   }
 }
 
@@ -183,7 +257,21 @@ class _LammaButtonState extends State<LammaButton> {
       child: InkWell(
         borderRadius: BorderRadius.circular(14),
         onTap: () async {
-          await _s.toggle(widget.productId);
+          if (_s.has(widget.productId)) {
+            await _s.toggle(widget.productId); // already in bundle → remove
+          } else {
+            final data = await _s.fetchVariants(widget.productId);
+            if (!mounted) return;
+            if (data != null && data['multi'] == true) {
+              final chosen = await showVariantPicker(context, data);
+              if (chosen == null) return; // user cancelled the colour picker
+              await _s.toggle(widget.productId, variantId: chosen);
+            } else {
+              final vs = (data?['variants'] as List?) ?? const [];
+              final vid = vs.isNotEmpty ? (vs.first['variant_id'] as num).toInt() : null;
+              await _s.toggle(widget.productId, variantId: vid);
+            }
+          }
           if (mounted) setState(() {});
         },
         child: Container(
@@ -475,13 +563,13 @@ void showLammaSheet(BuildContext context) {
                       return;
                     }
                     msg.value = null;
-                    final ok = await s.checkout();
+                    final err = await s.checkout();
                     if (!ctx.mounted) return;
-                    if (ok) {
+                    if (err == null) {
                       Navigator.pop(ctx);
                       Navigator.pushNamed(context, '/cart');
                     } else {
-                      msg.value = _ar ? 'تعذّر إتمام اللمّة، حاول مجدداً' : 'Checkout failed, please try again';
+                      msg.value = err; // clear, specific reason
                     }
                   },
                   child: Text(_ar ? 'إتمام اللمّة' : 'Checkout Lamma', style: const TextStyle(fontWeight: FontWeight.w800)),
@@ -525,4 +613,246 @@ Widget _seg(BuildContext ctx, LammaService s, String t, String label) {
       ),
     ),
   );
+}
+
+Color? _parseHtmlColor(String s) {
+  var h = s.trim();
+  if (h.isEmpty) return null;
+  if (h.startsWith('#')) h = h.substring(1);
+  if (h.length == 6) {
+    final v = int.tryParse(h, radix: 16);
+    if (v != null) return Color(0xFF000000 | v);
+  }
+  return null;
+}
+
+/// Colour / variant picker shown when a product has more than one variant.
+/// Returns the chosen variant id, or null if the customer backed out.
+Future<int?> showVariantPicker(BuildContext context, Map<String, dynamic> data) {
+  final variants = (data['variants'] as List?) ?? const [];
+  final cur = (data['currency'] ?? 'KD').toString();
+  final base = UellowApi.instance.baseUrl;
+  return showModalBottomSheet<int>(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.white,
+    shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(22))),
+    builder: (ctx) => Directionality(
+      textDirection: _ar ? TextDirection.rtl : TextDirection.ltr,
+      child: Padding(
+        padding: EdgeInsets.only(left: 16, right: 16, top: 14, bottom: 16 + MediaQuery.of(ctx).viewInsets.bottom),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Container(width: 40, height: 4, decoration: BoxDecoration(color: const Color(0xFFE2E6EC), borderRadius: BorderRadius.circular(9))),
+          const SizedBox(height: 12),
+          Text(_ar ? 'اختر اللون / النوع 🎨' : 'Choose colour / variant 🎨',
+              style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 17, color: _ink)),
+          const SizedBox(height: 4),
+          Text(_ar ? 'حدّد الخيار الذي تريد إضافته للّمّة' : 'Pick the option to add to your Lamma',
+              style: const TextStyle(fontSize: 12, color: Color(0xFF98A2B3))),
+          const SizedBox(height: 12),
+          ConstrainedBox(
+            constraints: BoxConstraints(maxHeight: MediaQuery.of(ctx).size.height * 0.55),
+            child: ListView.separated(
+              shrinkWrap: true,
+              itemCount: variants.length,
+              separatorBuilder: (_, __) => const SizedBox(height: 8),
+              itemBuilder: (_, i) {
+                final v = variants[i] as Map;
+                final sw = _parseHtmlColor((v['color'] ?? '').toString());
+                return InkWell(
+                  borderRadius: BorderRadius.circular(12),
+                  onTap: () => Navigator.pop(ctx, (v['variant_id'] as num).toInt()),
+                  child: Container(
+                    padding: const EdgeInsets.all(9),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF7F8FA),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: const Color(0xFFECEFF3)),
+                    ),
+                    child: Row(children: [
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(9),
+                        child: Image.network('$base${v['image']}', width: 44, height: 44, fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => Container(width: 44, height: 44, color: const Color(0xFFF0F2F5))),
+                      ),
+                      const SizedBox(width: 10),
+                      if (sw != null) ...[
+                        Container(width: 16, height: 16, decoration: BoxDecoration(
+                            color: sw, shape: BoxShape.circle, border: Border.all(color: const Color(0xFFD0D5DD)))),
+                        const SizedBox(width: 8),
+                      ],
+                      Expanded(child: Text('${v['label']}', maxLines: 2, overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Color(0xFF344054)))),
+                      const SizedBox(width: 6),
+                      Text('${(v['price'] as num).toStringAsFixed(3)} $cur',
+                          style: const TextStyle(fontWeight: FontWeight.w800, color: _orange, fontSize: 12.5)),
+                      const SizedBox(width: 4),
+                      Icon(_ar ? Icons.chevron_left : Icons.chevron_right, size: 18, color: const Color(0xFF98A2B3)),
+                    ]),
+                  ),
+                );
+              },
+            ),
+          ),
+        ]),
+      ),
+    ),
+  );
+}
+
+/// Slim floating mini-bar shown on ALL screens (via MaterialApp.builder) when the
+/// Lamma has items. Dismissible (✕); product pages show their own inline bar so
+/// this one yields there. Returns a zero-size box (not Positioned) when hidden.
+class LammaGlobalBar extends StatelessWidget {
+  const LammaGlobalBar({super.key});
+  @override
+  Widget build(BuildContext context) {
+    final s = LammaService.instance;
+    return AnimatedBuilder(
+      animation: Listenable.merge([s.quote, s.hidden, s.onProductPage]),
+      builder: (context, _) {
+        final q = s.quote.value;
+        if (q == null || (q['n'] ?? 0) == 0) return const SizedBox.shrink();
+        if (s.hidden.value || s.onProductPage.value) return const SizedBox.shrink();
+        final cur = (q['currency'] ?? 'KD').toString();
+        final pays = (q['pays'] ?? 0).toDouble();
+        final pct = (q['discount_pct'] ?? 0).toDouble();
+        final items = (q['items'] as List?) ?? const [];
+        final n = (q['n'] ?? 0);
+        return Positioned(
+          left: 12,
+          right: 12,
+          bottom: MediaQuery.of(context).padding.bottom + 74,
+          child: Directionality(
+            textDirection: _ar ? TextDirection.rtl : TextDirection.ltr,
+            child: Material(
+              color: _ink,
+              elevation: 12,
+              shadowColor: Colors.black45,
+              borderRadius: BorderRadius.circular(16),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(16),
+                onTap: () => showLammaSheet(context),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: const Color(0xFF2A3444)),
+                  ),
+                  child: Row(children: [
+                    _Thumbs(items: items),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: RichText(
+                        textDirection: _ar ? TextDirection.rtl : TextDirection.ltr,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        text: TextSpan(
+                          style: const TextStyle(fontSize: 12, color: Color(0xFFC3CAD6)),
+                          children: [
+                            TextSpan(text: _ar ? 'لمّتك ($n) · ' : 'Lamma ($n) · '),
+                            TextSpan(text: '${pays.toStringAsFixed(3)} $cur',
+                                style: const TextStyle(color: _yellow, fontWeight: FontWeight.w800)),
+                            if (pct > 0) TextSpan(text: '  -${pct.toStringAsFixed(0)}%'),
+                          ],
+                        ),
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(colors: [_yellow, _orange]),
+                        borderRadius: BorderRadius.circular(9),
+                      ),
+                      child: Text(_ar ? 'التفاصيل' : 'View',
+                          style: const TextStyle(fontWeight: FontWeight.w800, color: _ink, fontSize: 12)),
+                    ),
+                    const SizedBox(width: 4),
+                    InkWell(
+                      onTap: () => s.hidden.value = true,
+                      borderRadius: BorderRadius.circular(20),
+                      child: const Padding(
+                        padding: EdgeInsets.all(6),
+                        child: Icon(Icons.close, size: 16, color: Color(0xFF8B97A8)),
+                      ),
+                    ),
+                  ]),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// Compact entry-point block for the account screen: shows the current Lamma
+/// contents (thumbs + total) and reopens the sheet. Hidden when empty.
+class LammaAccountBlock extends StatelessWidget {
+  const LammaAccountBlock({super.key});
+  @override
+  Widget build(BuildContext context) {
+    final s = LammaService.instance;
+    return ValueListenableBuilder<Map<String, dynamic>?>(
+      valueListenable: s.quote,
+      builder: (context, q, _) {
+        if (q == null || (q['n'] ?? 0) == 0) return const SizedBox.shrink();
+        final cur = (q['currency'] ?? 'KD').toString();
+        final pays = (q['pays'] ?? 0).toDouble();
+        final pct = (q['discount_pct'] ?? 0).toDouble();
+        final items = (q['items'] as List?) ?? const [];
+        final n = (q['n'] ?? 0);
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(16),
+              onTap: () => showLammaSheet(context),
+              child: Container(
+                padding: const EdgeInsets.all(11),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF12241B), _ink],
+                    begin: Alignment.centerRight, end: Alignment.centerLeft),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: const Color(0xFF243244)),
+                ),
+                child: Row(children: [
+                  _Thumbs(items: items),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(_ar ? 'لمّتك 🧺' : 'Your Lamma 🧺',
+                            style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13.5, color: Colors.white)),
+                        const SizedBox(height: 2),
+                        Text(
+                          _ar
+                              ? '$n منتج · ${pays.toStringAsFixed(3)} $cur${pct > 0 ? ' · وفّرت ${pct.toStringAsFixed(0)}%' : ''}'
+                              : '$n items · ${pays.toStringAsFixed(3)} $cur${pct > 0 ? ' · save ${pct.toStringAsFixed(0)}%' : ''}',
+                          style: const TextStyle(fontSize: 11.5, color: Color(0xFFB9C2CF), fontWeight: FontWeight.w600)),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(colors: [_yellow, _orange]),
+                      borderRadius: BorderRadius.circular(9),
+                    ),
+                    child: Text(_ar ? 'متابعة' : 'Open',
+                        style: const TextStyle(fontWeight: FontWeight.w800, color: _ink, fontSize: 12)),
+                  ),
+                ]),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
 }

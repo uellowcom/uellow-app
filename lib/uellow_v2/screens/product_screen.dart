@@ -92,6 +92,7 @@ class _ProductScreenState extends State<ProductScreen> {
     // لمّة يلو — load config + restore the saved bundle (survives app restarts).
     LammaService.instance.loadConfig();
     LammaService.instance.restore();
+    LammaService.instance.enterProduct();
     // TikTok: ViewContent when the product detail loads.
     _future.then((p) {
       TikTokTracker.instance.viewContent(
@@ -108,6 +109,7 @@ class _ProductScreenState extends State<ProductScreen> {
 
   @override
   void dispose() {
+    LammaService.instance.leaveProduct();
     _scrollCtrl.dispose();
     super.dispose();
   }

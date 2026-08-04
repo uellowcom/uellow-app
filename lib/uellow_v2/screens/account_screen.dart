@@ -13,6 +13,7 @@ import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../version.dart';
+import '../lamma.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../api/uellow_api.dart';
@@ -140,6 +141,7 @@ class _AccountScreenState extends State<AccountScreen> {
           bottom: 24 + kBottomNavigationBarHeight +
               MediaQuery.of(context).padding.bottom), children: [
         _ProfileHeader(user: user, isGuest: isGuest),
+        const LammaAccountBlock(),
         // v2.1.57 — targeted announcement strip (admin-controlled).
         if (isGuest) _GuestSigninBanner(),
         if (!isGuest) _BannersRow(banners: banners),
