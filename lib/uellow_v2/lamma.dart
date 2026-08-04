@@ -328,6 +328,7 @@ class _Thumbs extends StatelessWidget {
 
 void showLammaSheet(BuildContext context) {
   final s = LammaService.instance;
+  final msg = ValueNotifier<String?>(null); // in-sheet message (shows ON TOP of the sheet)
   showModalBottomSheet(
     context: context,
     isScrollControlled: true,
@@ -427,6 +428,27 @@ void showLammaSheet(BuildContext context) {
                 ]),
               ),
               const SizedBox(height: 12),
+              // in-sheet message banner — renders ON TOP of the sheet (not behind it)
+              ValueListenableBuilder<String?>(
+                valueListenable: msg,
+                builder: (ctx, m, _) {
+                  if (m == null) return const SizedBox.shrink();
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 10),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFFF4E5),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: const Color(0xFFFFD9A8)),
+                    ),
+                    child: Row(children: [
+                      const Text('⚠️', style: TextStyle(fontSize: 15)),
+                      const SizedBox(width: 8),
+                      Expanded(child: Text(m, style: const TextStyle(color: Color(0xFF8A5A12), fontWeight: FontWeight.w700, fontSize: 12.5))),
+                    ]),
+                  );
+                },
+              ),
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
@@ -437,18 +459,17 @@ void showLammaSheet(BuildContext context) {
                   ),
                   onPressed: () async {
                     if (s.count < 2) {
-                      ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(
-                        content: Text(_ar ? 'أضف منتجين على الأقل للّمّة' : 'Add at least 2 products')));
+                      msg.value = _ar ? 'أضف منتجين على الأقل للّمّة' : 'Add at least 2 products';
                       return;
                     }
+                    msg.value = null;
                     final ok = await s.checkout();
                     if (!ctx.mounted) return;
                     if (ok) {
                       Navigator.pop(ctx);
                       Navigator.pushNamed(context, '/cart');
                     } else {
-                      ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(
-                        content: Text(_ar ? 'تعذّر إتمام اللمّة، حاول مجدداً' : 'Checkout failed, please try again')));
+                      msg.value = _ar ? 'تعذّر إتمام اللمّة، حاول مجدداً' : 'Checkout failed, please try again';
                     }
                   },
                   child: Text(_ar ? 'إتمام اللمّة' : 'Checkout Lamma', style: const TextStyle(fontWeight: FontWeight.w800)),
