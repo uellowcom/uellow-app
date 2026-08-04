@@ -395,29 +395,51 @@ Widget lammaBarCard(BuildContext context, Map<String, dynamic> q,
                 ),
                 const SizedBox(height: 4),
                 if (hasDiscount)
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFFFECEC),
-                      borderRadius: BorderRadius.circular(999),
-                      border: Border.all(color: const Color(0xFFFFD4D4)),
-                    ),
-                    child: RichText(
-                      textDirection: _ar ? TextDirection.rtl : TextDirection.ltr,
-                      text: TextSpan(children: [
-                        TextSpan(
-                          text: _ar ? 'كان ' : 'was ',
-                          style: const TextStyle(
-                              fontWeight: FontWeight.w800, fontSize: 11.5, color: Color(0xFFC23434)),
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: _ar ? Alignment.centerRight : Alignment.centerLeft,
+                    child: Row(mainAxisSize: MainAxisSize.min, children: [
+                      // red "كان" pill — the pre-discount price
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFFECEC),
+                          borderRadius: BorderRadius.circular(999),
+                          border: Border.all(color: const Color(0xFFFFD4D4)),
                         ),
-                        TextSpan(
-                          text: subtotal.toStringAsFixed(3),
-                          style: const TextStyle(
-                              fontWeight: FontWeight.w800, fontSize: 11.5, color: Color(0xFFE05252),
-                              decoration: TextDecoration.lineThrough),
+                        child: RichText(
+                          textDirection: _ar ? TextDirection.rtl : TextDirection.ltr,
+                          text: TextSpan(children: [
+                            TextSpan(
+                              text: _ar ? 'كان ' : 'was ',
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.w800, fontSize: 11.5, color: Color(0xFFC23434)),
+                            ),
+                            TextSpan(
+                              text: subtotal.toStringAsFixed(3),
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.w800, fontSize: 11.5, color: Color(0xFFE05252),
+                                  decoration: TextDecoration.lineThrough),
+                            ),
+                          ]),
                         ),
-                      ]),
-                    ),
+                      ),
+                      const SizedBox(width: 5),
+                      // green "وفّرت" pill — the saved amount
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFE6F7EE),
+                          borderRadius: BorderRadius.circular(999),
+                          border: Border.all(color: const Color(0xFFC4EBD6)),
+                        ),
+                        child: Text(
+                          '${_ar ? 'وفّرت' : 'saved'} ${(subtotal - pays).toStringAsFixed(3)}',
+                          style: const TextStyle(
+                              fontWeight: FontWeight.w900, fontSize: 11.5, color: Color(0xFF0E9F6E)),
+                        ),
+                      ),
+                    ]),
                   )
                 else
                   Text(_ar ? '$n منتجات في لمّتك' : '$n items in your Lamma',
