@@ -122,8 +122,7 @@ class _ProductScreenState extends State<ProductScreen> {
         future: _future,
         builder: (context, snap) {
           if (snap.connectionState != ConnectionState.done) {
-            return const Center(
-                child: CircularProgressIndicator(color: UellowColors.darkBrown));
+            return const _ProductSkeleton();
           }
           if (snap.hasError) {
             return Center(child: Padding(
@@ -395,6 +394,74 @@ class _ProductScreenState extends State<ProductScreen> {
 }
 
 // ─── Gallery ───────────────────────────────────────────────────────
+
+/// Full-page skeleton shown INSTANTLY while the product loads — mimics the
+/// real layout (gallery + title + price + variants + section cards) with a
+/// gentle pulse, so the page feels immediate instead of a blank spinner.
+class _ProductSkeleton extends StatefulWidget {
+  const _ProductSkeleton();
+  @override
+  State<_ProductSkeleton> createState() => _ProductSkeletonState();
+}
+
+class _ProductSkeletonState extends State<_ProductSkeleton>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _c =
+      AnimationController(vsync: this, duration: const Duration(milliseconds: 950))
+        ..repeat(reverse: true);
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  Widget _b(double w, double h, {double r = 10}) => Container(
+        width: w, height: h,
+        decoration: BoxDecoration(
+            color: const Color(0xFFE7EAEE), borderRadius: BorderRadius.circular(r)),
+      );
+
+  @override
+  Widget build(BuildContext context) {
+    final w = MediaQuery.of(context).size.width;
+    return FadeTransition(
+      opacity: Tween<double>(begin: 0.5, end: 1.0)
+          .animate(CurvedAnimation(parent: _c, curve: Curves.easeInOut)),
+      child: ListView(
+        physics: const NeverScrollableScrollPhysics(),
+        padding: EdgeInsets.zero,
+        children: [
+          _b(w, w * 0.88, r: 0),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 14, 14, 0),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              _b(w * 0.82, 16),
+              const SizedBox(height: 9),
+              _b(w * 0.55, 16),
+              const SizedBox(height: 18),
+              _b(130, 28),
+              const SizedBox(height: 18),
+              Row(children: [
+                _b(36, 36, r: 11), const SizedBox(width: 9),
+                _b(36, 36, r: 11), const SizedBox(width: 9),
+                _b(36, 36, r: 11), const SizedBox(width: 9),
+                _b(36, 36, r: 11),
+              ]),
+              const SizedBox(height: 20),
+              _b(w - 28, 62, r: 14),
+              const SizedBox(height: 12),
+              _b(w - 28, 62, r: 14),
+              const SizedBox(height: 12),
+              _b(w - 28, 130, r: 14),
+              const SizedBox(height: 12),
+              _b(w - 28, 90, r: 14),
+            ]),
+          ),
+        ],
+      ),
+    );
+  }
+}
 
 /// Builds its heavy child a few frames AFTER the first paint so the
 /// above-the-fold buy content (gallery/price/variants/delivery) appears
