@@ -187,7 +187,15 @@ class LammaService {
 
   /// Runs checkout. Returns null on success, or a clear Arabic/English message
   /// explaining exactly why it did not go through.
+  bool _checkingOut = false;
   Future<String?> checkout() async {
+    // Re-entrancy guard: a double-tap must never fire two checkouts (which
+    // used to add the bundle + a discount twice).
+    if (_checkingOut) {
+      return _ar ? 'جارٍ إتمام اللمّة، انتظر لحظة…' : 'Finishing your Lamma, please wait…';
+    }
+    _checkingOut = true;
+    try {
     final ids = shownIds();
     if (ids.length < 2) {
       return _ar ? 'أضف منتجين على الأقل لإتمام اللمّة'
@@ -245,6 +253,9 @@ class LammaService {
       return _ar ? 'لا يوجد اتصال بالإنترنت، تحقّق من الشبكة وحاول مجدداً'
                  : 'No internet connection, please check your network';
     }
+    } finally {
+      _checkingOut = false;
+    }
   }
 }
 
@@ -263,6 +274,7 @@ class LammaButton extends StatefulWidget {
 
 class _LammaButtonState extends State<LammaButton> {
   final _s = LammaService.instance;
+  bool _busy = false; // guards against a double-tap racing add-then-remove
   @override
   Widget build(BuildContext context) {
     final cfg = _s.config.value;
@@ -273,22 +285,36 @@ class _LammaButtonState extends State<LammaButton> {
       child: InkWell(
         borderRadius: BorderRadius.circular(14),
         onTap: () async {
-          if (_s.has(widget.productId)) {
-            await _s.toggle(widget.productId); // already in bundle → remove
-          } else {
-            final data = await _s.fetchVariants(widget.productId);
-            if (!mounted) return;
-            if (data != null && data['multi'] == true) {
-              final chosen = await showVariantPicker(context, data);
-              if (chosen == null) return; // user cancelled the colour picker
-              await _s.toggle(widget.productId, variantId: chosen);
+          if (_busy) return;
+          _busy = true;
+          try {
+            if (_s.has(widget.productId)) {
+              await _s.toggle(widget.productId); // already in bundle → remove
             } else {
-              final vs = (data?['variants'] as List?) ?? const [];
-              final vid = vs.isNotEmpty ? (vs.first['variant_id'] as num).toInt() : null;
-              await _s.toggle(widget.productId, variantId: vid);
+              final data = await _s.fetchVariants(widget.productId);
+              if (!mounted) return;
+              // A null response = the options fetch FAILED — never silently add a
+              // multi-variant product with no colour chosen; ask to retry.
+              if (data == null) {
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                    content: Text(_ar ? 'تعذّر تحميل الخيارات، حاول مجدداً'
+                                      : 'Could not load options, please try again')));
+                return;
+              }
+              if (data['multi'] == true) {
+                final chosen = await showVariantPicker(context, data);
+                if (chosen == null) return; // user cancelled the colour picker
+                await _s.toggle(widget.productId, variantId: chosen);
+              } else {
+                final vs = (data['variants'] as List?) ?? const [];
+                final vid = vs.isNotEmpty ? (vs.first['variant_id'] as num).toInt() : null;
+                await _s.toggle(widget.productId, variantId: vid);
+              }
             }
+            if (mounted) setState(() {});
+          } finally {
+            _busy = false;
           }
-          if (mounted) setState(() {});
         },
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 14),
@@ -547,6 +573,7 @@ class LammaBar extends StatelessWidget {
       valueListenable: s.quote,
       builder: (context, q, _) {
         if (q == null || (q['n'] ?? 0) == 0) return const SizedBox.shrink();
+        if (s.config.value?['enabled'] == false) return const SizedBox.shrink();
         return Padding(
           padding: const EdgeInsets.only(bottom: 8),
           child: lammaBarCard(context, q, onTap: () => showLammaSheet(context)),
@@ -903,6 +930,7 @@ class LammaGlobalBar extends StatelessWidget {
       builder: (context, _) {
         final q = s.quote.value;
         if (q == null || (q['n'] ?? 0) == 0) return const SizedBox.shrink();
+        if (s.config.value?['enabled'] == false) return const SizedBox.shrink();
         if (s.hidden.value || s.onProductPage.value || s.onSplash.value) {
           return const SizedBox.shrink();
         }
