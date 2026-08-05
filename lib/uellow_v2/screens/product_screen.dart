@@ -38,7 +38,7 @@ class ProductScreen extends StatefulWidget {
   State<ProductScreen> createState() => _ProductScreenState();
 }
 
-class _ProductScreenState extends State<ProductScreen> {
+class _ProductScreenState extends State<ProductScreen> with RouteAware {
   late Future<UellowProductFull> _future;
   int _galleryPage = 0;
   int _selectedColor = 0;
@@ -92,7 +92,6 @@ class _ProductScreenState extends State<ProductScreen> {
     // لمّة يلو — load config + restore the saved bundle (survives app restarts).
     LammaService.instance.loadConfig();
     LammaService.instance.restore();
-    LammaService.instance.enterProduct();
     // TikTok: ViewContent when the product detail loads.
     _future.then((p) {
       TikTokTracker.instance.viewContent(
@@ -107,9 +106,42 @@ class _ProductScreenState extends State<ProductScreen> {
     _scrollCtrl.addListener(_onScroll);
   }
 
+  bool _lammaEntered = false;
+  bool _routeSubscribed = false;
+  void _enterLamma() {
+    if (!_lammaEntered) { _lammaEntered = true; LammaService.instance.enterProduct(); }
+  }
+  void _leaveLamma() {
+    if (_lammaEntered) { _lammaEntered = false; LammaService.instance.leaveProduct(); }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Track the VISIBLE route, not merely being mounted: the floating Lamma bar
+    // must reappear the moment we navigate AWAY from the product (e.g. to the
+    // cart) and hide only while the product page is actually on screen. The old
+    // initState/dispose pairing kept it hidden as long as the product stayed on
+    // the navigation stack — so it "disappeared by itself" on later screens.
+    final route = ModalRoute.of(context);
+    if (!_routeSubscribed && route != null) {
+      _routeSubscribed = true;
+      appRouteObserver.subscribe(this, route);
+      _enterLamma();
+    }
+  }
+
+  @override
+  void didPushNext() => _leaveLamma();   // another screen covered the product
+  @override
+  void didPopNext() => _enterLamma();    // returned to the product
+  @override
+  void didPop() => _leaveLamma();        // product popped
+
   @override
   void dispose() {
-    LammaService.instance.leaveProduct();
+    appRouteObserver.unsubscribe(this);
+    _leaveLamma();
     _scrollCtrl.dispose();
     super.dispose();
   }
