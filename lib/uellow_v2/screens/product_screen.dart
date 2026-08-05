@@ -319,6 +319,8 @@ class _ProductScreenState extends State<ProductScreen> {
           freeShipping: p.badges.contains('free_shipping'),
           onTap: () => _showDeliverySheet(context,
               freeShipping: p.badges.contains('free_shipping')))),
+      // world-class reassurance strip (fulfilled/warranty/returns/secure)
+      const SliverToBoxAdapter(child: _TrustStrip()),
       // v2.1.24 — Best Seller rank strip (tappable → that category).
       if (p.ranks.isNotEmpty)
         SliverToBoxAdapter(child: _RankStrip(ranks: p.ranks)),
@@ -394,6 +396,48 @@ class _ProductScreenState extends State<ProductScreen> {
 }
 
 // ─── Gallery ───────────────────────────────────────────────────────
+
+/// A slim trust-badges strip (fulfilled by Uellow / warranty / returns /
+/// secure pay) — world-class product-page reassurance, matches the approved
+/// mockup. Static, self-contained, styled to the page's white-section pattern.
+class _TrustStrip extends StatelessWidget {
+  const _TrustStrip();
+  @override
+  Widget build(BuildContext context) {
+    final ar = UellowApi.instance.lang == 'ar';
+    final items = <List<dynamic>>[
+      [Icons.verified_user_outlined, ar ? 'يشحنها يلو' : 'By Uellow'],
+      [Icons.shield_outlined, ar ? 'ضمان' : 'Warranty'],
+      [Icons.assignment_return_outlined, ar ? 'إرجاع 14 يوم' : '14-day return'],
+      [Icons.lock_outline, ar ? 'دفع آمن' : 'Secure pay'],
+    ];
+    return Container(
+      color: Colors.white,
+      padding: const EdgeInsets.fromLTRB(18, 0, 18, 8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 10),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF7F8FA),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(children: [
+          for (final it in items)
+            Expanded(
+              child: Column(children: [
+                Icon(it[0] as IconData, size: 20, color: UellowColors.darkBrown),
+                const SizedBox(height: 5),
+                Text(it[1] as String,
+                    textAlign: TextAlign.center, maxLines: 1,
+                    style: const TextStyle(
+                        fontSize: 9.5, fontWeight: FontWeight.w800,
+                        color: UellowColors.muted)),
+              ]),
+            ),
+        ]),
+      ),
+    );
+  }
+}
 
 /// Full-page skeleton shown INSTANTLY while the product loads — mimics the
 /// real layout (gallery + title + price + variants + section cards) with a
