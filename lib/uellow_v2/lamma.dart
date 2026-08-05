@@ -81,6 +81,36 @@ class LammaService {
       type = p.getString('lamma_type_v1') ?? 'normal';
     } catch (_) {}
     if (_ids.isNotEmpty) await refresh();
+    await maybeAutoStartFromCart();
+  }
+
+  /// Auto-start: when settings enable it and the Lamma is still empty, seed it
+  /// from whatever is already in the cart (2+ products) so it activates on its
+  /// own — mirrors the web behaviour. Safe/no-op otherwise. Called after both
+  /// config load and restore, so whichever finishes last triggers it.
+  Future<void> maybeAutoStartFromCart() async {
+    try {
+      if (!_restored || _ids.isNotEmpty) return;
+      if (config.value?['auto_start'] != true) return;
+      final headers = Map<String, String>.from(_headers);
+      final token = await UellowApi.instance.tokenStore.readToken();
+      if (token != null && token.isNotEmpty) headers['Authorization'] = 'Bearer $token';
+      final ct = await UellowApi.instance.tokenStore.readCartToken();
+      if (ct != null && ct.isNotEmpty) headers['X-Cart-Token'] = ct;
+      final r = await http.get(
+          Uri.parse('$_base/api/mobile/v2/lamma/cart-items'), headers: headers);
+      if (r.statusCode != 200) return;
+      final items = ((jsonDecode(r.body) as Map)['items'] as List?) ?? const [];
+      if (items.length < 2 || _ids.isNotEmpty) return;
+      for (final it in items) {
+        final pid = (it['product_id'] as num).toInt();
+        final vid = (it['variant_id'] as num?)?.toInt();
+        _ids.add(pid);
+        if (vid != null) _variants[pid] = vid;
+      }
+      _persist();
+      await refresh();
+    } catch (_) {}
   }
 
   /// {templateId: variantId} for the products where a colour/variant was picked.
@@ -104,6 +134,7 @@ class LammaService {
         config.value = jsonDecode(r.body) as Map<String, dynamic>;
       }
     } catch (_) {/* silent — feature just stays hidden */}
+    await maybeAutoStartFromCart(); // auto-activate from cart once config is known
   }
 
   Future<void> toggle(int id, {int? variantId}) async {
