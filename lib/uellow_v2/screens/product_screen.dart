@@ -326,39 +326,39 @@ class _ProductScreenState extends State<ProductScreen> {
       // v2.1.25 — price-history insight (sparkline + min/max).
       if (p.priceHistory != null
           && ((p.priceHistory!['points'] as List?)?.length ?? 0) >= 2)
-        SliverToBoxAdapter(child: _PriceHistoryBlock(
-            history: p.priceHistory!, trend: p.priceTrend)),
+        SliverToBoxAdapter(child: _DeferMount(minHeight: 96, delayMs: 30, child: _PriceHistoryBlock(
+            history: p.priceHistory!, trend: p.priceTrend))),
       // v2.1.35 — the "verified reviews" highlight strip was removed per
       // request; the full reviews block lower on the page remains.
       // v2.1.74 — Seller / Fulfilled-by-Uellow card sits directly ABOVE
       // the specialist reviews block (per latest spec).
       if (p.vendor != null && !p.vendor!.house)
-        SliverToBoxAdapter(child: _VendorCard(vendor: p.vendor!))
+        SliverToBoxAdapter(child: _DeferMount(minHeight: 80, delayMs: 60, child: _VendorCard(vendor: p.vendor!)))
       else
-        const SliverToBoxAdapter(child: _FulfilledByUellowCard()),
+        SliverToBoxAdapter(child: _DeferMount(minHeight: 80, delayMs: 60, child: const _FulfilledByUellowCard())),
       // v2.1.31 — specialist reviewers (uellow_reviewers): latest expert
       // verdicts + "ask a specialist" CTA.
-      SliverToBoxAdapter(child: _ExpertReviewsBlock(productId: p.id)),
+      SliverToBoxAdapter(child: _DeferMount(minHeight: 120, delayMs: 90, child: _ExpertReviewsBlock(productId: p.id))),
       // Show whenever there's at least one bulk tier — even a single
       // "buy 5+ → save 5%" hint is useful.
       if (p.bulkPricing.isNotEmpty)
-        SliverToBoxAdapter(child: _BulkPricing(
+        SliverToBoxAdapter(child: _DeferMount(minHeight: 90, delayMs: 120, child: _BulkPricing(
           tiers: p.bulkPricing,
           currentQty: _qty,
           onTierTap: (minQty) => setState(() => _qty = minQty),
-        )),
+        ))),
       SliverToBoxAdapter(child: KeyedSubtree(
-          key: _kDetails, child: _DescriptionBlock(product: p))),
-      SliverToBoxAdapter(child: _SpecsBlock(product: p,
-          onOpen: () => _showSpecsDialog(context, p))),
+          key: _kDetails, child: _DeferMount(minHeight: 120, delayMs: 150, child: _DescriptionBlock(product: p)))),
+      SliverToBoxAdapter(child: _DeferMount(minHeight: 100, delayMs: 180, child: _SpecsBlock(product: p,
+          onOpen: () => _showSpecsDialog(context, p)))),
       SliverToBoxAdapter(child: KeyedSubtree(
-          key: _kReviews, child: _ReviewsBlock(productId: p.id))),
+          key: _kReviews, child: _DeferMount(minHeight: 160, delayMs: 210, child: _ReviewsBlock(productId: p.id)))),
       // v2.2.36 — related products now continue into Beena (Yellow Brain)
       // picks inside the SAME block (no separate _BeenaPicks rail).
       SliverToBoxAdapter(child: KeyedSubtree(
-          key: _kRelated, child: _RelatedInfinite(
+          key: _kRelated, child: _DeferMount(minHeight: 320, delayMs: 240, child: _RelatedInfinite(
           productId: p.id,
-          categoryId: p.categories.isNotEmpty ? p.categories.first.id : null))),
+          categoryId: p.categories.isNotEmpty ? p.categories.first.id : null)))),
       const SliverToBoxAdapter(child: SizedBox(height: 80)),
     ]),
       // v2.1.59 — floating section tabs: hidden at the top, slide in on
@@ -395,6 +395,34 @@ class _ProductScreenState extends State<ProductScreen> {
 }
 
 // ─── Gallery ───────────────────────────────────────────────────────
+
+/// Builds its heavy child a few frames AFTER the first paint so the
+/// above-the-fold buy content (gallery/price/variants/delivery) appears
+/// INSTANTLY; the secondary sections then fill in staggered instead of all
+/// building in one janky frame. A stable-height placeholder keeps scrolling
+/// smooth. No behaviour/design change — pure render deferral.
+class _DeferMount extends StatefulWidget {
+  const _DeferMount({required this.child, this.minHeight = 120, this.delayMs = 16});
+  final Widget child;
+  final double minHeight;
+  final int delayMs;
+  @override
+  State<_DeferMount> createState() => _DeferMountState();
+}
+
+class _DeferMountState extends State<_DeferMount> {
+  bool _ready = false;
+  @override
+  void initState() {
+    super.initState();
+    Future.delayed(Duration(milliseconds: widget.delayMs), () {
+      if (mounted) setState(() => _ready = true);
+    });
+  }
+  @override
+  Widget build(BuildContext context) =>
+      _ready ? widget.child : SizedBox(height: widget.minHeight);
+}
 
 class _Gallery extends StatelessWidget {
   const _Gallery({
