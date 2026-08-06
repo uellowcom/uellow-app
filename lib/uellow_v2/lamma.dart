@@ -41,6 +41,11 @@ class LammaService {
   /// over the splash.
   final ValueNotifier<bool> onSplash = ValueNotifier<bool>(false);
 
+  /// Current top route name (fed by LammaRouteObserver). The global bar
+  /// only paints on the allowed pages; any modal/dialog (name == null)
+  /// hides it automatically.
+  final ValueNotifier<String?> currentRoute = ValueNotifier<String?>(null);
+
   /// Navigator key (set from main) so the floating bar — which lives ABOVE the
   /// Navigator in MaterialApp.builder — can still open the sheet after a cold
   /// start. Without it, tapping the bar found no Navigator and did nothing.
@@ -499,9 +504,7 @@ Widget lammaBarCard(BuildContext context, Map<String, dynamic> q,
                     ]),
                   )
                 else
-                  Text(_ar ? '$n منتجات في لمّتك' : '$n items in your Lamma',
-                      style: const TextStyle(
-                          fontSize: 11.5, fontWeight: FontWeight.w700, color: Color(0xFF98A2B3))),
+                  const SizedBox.shrink(),
               ],
             ),
           ),
@@ -715,13 +718,7 @@ void showLammaSheet(BuildContext context) {
                       ),
                     ]),
                   )),
-              if (excluded > 0 && savedAmt > 0)
-                _noteBox(
-                  _ar
-                      ? '✔️ طُبّق خصم اللمّة على المنتجات المؤهّلة، و$excluded ${excluded == 1 ? 'منتج' : 'منتجات'} عند حد الربح فبقيت بسعرها.'
-                      : '✔️ Discount applied to eligible items; $excluded item(s) are at the margin floor and kept full price.',
-                  amber: false)
-              else if (savedAmt <= 0 && nItems >= 2)
+              if (savedAmt <= 0 && nItems >= 2)
                 _noteBox(
                   _ar
                       ? 'ℹ️ منتجات هذه الباقة عند حد الربح حالياً، فلا يمكن تطبيق خصم اللمّة عليها.'
@@ -951,20 +948,37 @@ Future<int?> showVariantPicker(BuildContext context, Map<String, dynamic> data) 
 /// Slim floating mini-bar shown on ALL screens (via MaterialApp.builder) when the
 /// Lamma has items. Dismissible (✕); product pages show their own inline bar so
 /// this one yields there. Returns a zero-size box (not Positioned) when hidden.
+/// Tracks the visible route so the global Lamma bar restricts itself to a
+/// few pages and disappears while any modal/dialog is open.
+class LammaRouteObserver extends NavigatorObserver {
+  void _set(String? n) => LammaService.instance.currentRoute.value = n;
+  @override
+  void didPush(Route route, Route? prev) { super.didPush(route, prev); _set(route.settings.name); }
+  @override
+  void didPop(Route route, Route? prev) { super.didPop(route, prev); _set(prev?.settings.name); }
+  @override
+  void didReplace({Route? newRoute, Route? oldRoute}) { super.didReplace(newRoute: newRoute, oldRoute: oldRoute); _set(newRoute?.settings.name); }
+  @override
+  void didRemove(Route route, Route? prev) { super.didRemove(route, prev); _set(prev?.settings.name); }
+}
+
 class LammaGlobalBar extends StatelessWidget {
   const LammaGlobalBar({super.key});
   @override
   Widget build(BuildContext context) {
     final s = LammaService.instance;
     return AnimatedBuilder(
-      animation: Listenable.merge([s.quote, s.hidden, s.onProductPage, s.onSplash]),
+      animation: Listenable.merge([s.quote, s.hidden, s.currentRoute]),
       builder: (context, _) {
+        // Only these three surfaces show the Lamma bar; product pages use
+        // their own inline bar, and any open modal (route name == null)
+        // drops out of this set so the bar hides while a dialog is up.
+        const allowed = {'/home', '/category', '/collection'};
+        if (!allowed.contains(s.currentRoute.value)) return const SizedBox.shrink();
         final q = s.quote.value;
         if (q == null || (q['n'] ?? 0) == 0) return const SizedBox.shrink();
         if (s.config.value?['enabled'] == false) return const SizedBox.shrink();
-        if (s.hidden.value || s.onProductPage.value || s.onSplash.value) {
-          return const SizedBox.shrink();
-        }
+        if (s.hidden.value) return const SizedBox.shrink();
         return Positioned(
           left: 12,
           right: 12,

@@ -125,6 +125,7 @@ class _UellowAppState extends State<UellowApp> with WidgetsBindingObserver {
           onGenerateRoute: UellowRouter.generate,
           navigatorObservers: [
             appRouteObserver,
+            LammaRouteObserver(),
             ActivityTracker.instance.observer,
           ],
         );

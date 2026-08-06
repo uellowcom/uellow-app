@@ -1,0 +1,41 @@
+   Woah! You appear to be trying to run flutter as root.
+   We strongly recommend running the flutter tool without superuser privileges.
+  /
+📎
+
+Running Gradle task 'bundleRelease'...                          
+Your project is configured with Android NDK 26.3.11579264, but the following plugin(s) depend on a different Android NDK version:
+- app_links requires Android NDK 27.0.12077973
+- audioplayers_android requires Android NDK 27.0.12077973
+- facebook_app_events requires Android NDK 27.0.12077973
+- firebase_auth requires Android NDK 27.0.12077973
+- firebase_core requires Android NDK 27.0.12077973
+- firebase_messaging requires Android NDK 27.0.12077973
+- flutter_local_notifications requires Android NDK 27.0.12077973
+- flutter_plugin_android_lifecycle requires Android NDK 27.0.12077973
+- geolocator_android requires Android NDK 27.0.12077973
+- google_sign_in_android requires Android NDK 27.0.12077973
+- image_picker_android requires Android NDK 27.0.12077973
+- mobile_scanner requires Android NDK 27.0.12077973
+- path_provider_android requires Android NDK 27.0.12077973
+- permission_handler_android requires Android NDK 27.0.12077973
+- record_android requires Android NDK 27.0.12077973
+- share_plus requires Android NDK 27.0.12077973
+- shared_preferences_android requires Android NDK 27.0.12077973
+- sign_in_with_apple requires Android NDK 27.0.12077973
+- sqflite_android requires Android NDK 27.0.12077973
+- url_launcher_android requires Android NDK 27.0.12077973
+- video_player_android requires Android NDK 27.0.12077973
+- webview_flutter_android requires Android NDK 27.0.12077973
+Fix this issue by using the highest Android NDK version (they are backward compatible).
+Add the following to /root/uellow_app/android/app/build.gradle:
+
+    android {
+        ndkVersion = "27.0.12077973"
+        ...
+    }
+
+Caught exception: Already watching path: /opt/flutter/packages/flutter_tools/gradle
+Running Gradle task 'bundleRelease'...                             18.7s
+✓ Built build/app/outputs/bundle/release/app-release.aab (47.4MB)
+AAB_SIGNED_DONE
