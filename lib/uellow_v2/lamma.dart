@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../api/uellow_api.dart';
+import 'lamma_group.dart';
 
 /// Singleton holding the current Lamma and talking to the server engine.
 class LammaService {
@@ -799,6 +800,22 @@ void showLammaSheet(BuildContext context) {
                     }
                   },
                   child: Text(_ar ? 'إتمام اللمّة' : 'Checkout Lamma', style: const TextStyle(fontWeight: FontWeight.w800)),
+                ),
+              ),
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: const Color(0xFFFF7A1A),
+                    side: const BorderSide(color: Color(0xFFFFD0A8), width: 1.4),
+                    padding: const EdgeInsets.symmetric(vertical: 13),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  onPressed: () { Navigator.pop(ctx); startGroupLamma(context); },
+                  icon: const Text('🧺', style: TextStyle(fontSize: 16)),
+                  label: Text(_ar ? 'ابدأ لمّة جماعية — شارك التوفير' : 'Start a group Lamma',
+                      style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 13.5)),
                 ),
               ),
             ]),
