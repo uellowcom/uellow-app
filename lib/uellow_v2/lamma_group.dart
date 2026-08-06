@@ -539,13 +539,18 @@ class _GroupLammaScreenState extends State<GroupLammaScreen> {
     final state = d['state'] ?? 'open';
     final isHost = me?['is_host'] == true;
     if (state == 'open') {
+      // Pay is only offered AFTER the host locks — otherwise a member could
+      // check out an early share while others are still adding (which would
+      // change everyone's combined discount).
+      if (isHost) {
+        return _bottomBar([
+          Expanded(flex: 2, child: _bigBtn(_gar ? '➕ أضِف منتجاتي' : '➕ Add my items', _gradO, _addMine)),
+          const SizedBox(width: 9),
+          Expanded(child: _bigBtn(_gar ? 'إتمام' : 'Lock', _gradDark, _lock)),
+        ]);
+      }
       return _bottomBar([
-        Expanded(flex: 2, child: _bigBtn(_gar ? '➕ أضِف منتجاتي' : '➕ Add my items', _gradO, _addMine)),
-        const SizedBox(width: 9),
-        if (isHost)
-          Expanded(child: _bigBtn(_gar ? 'إتمام' : 'Lock', _gradDark, _lock))
-        else if ((me?['n'] ?? 0) > 0)
-          Expanded(child: _bigBtn(_gar ? 'ادفع نصيبي' : 'Pay mine', _gradDark, _pay)),
+        Expanded(child: _bigBtn(_gar ? '➕ أضِف منتجاتي' : '➕ Add my items', _gradO, _addMine)),
       ]);
     }
     if (state == 'locked') {
