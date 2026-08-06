@@ -17,6 +17,7 @@ import 'package:app_links/app_links.dart';
 import 'package:flutter/material.dart';
 
 import '../router/uellow_router.dart';
+import '../lamma_group.dart';
 
 class DeepLinkService {
   DeepLinkService._();
@@ -57,6 +58,12 @@ class DeepLinkService {
     }
     if (segs.isEmpty) {
       nav.pushNamedAndRemoveUntil(Routes.home, (r) => false);
+      return;
+    }
+    // /lamma/g/<code>  → group Lamma «شارك لمّتك»
+    if (segs.length >= 3 && segs[0] == 'lamma' && segs[1] == 'g') {
+      nav.push(MaterialPageRoute(
+          builder: (_) => GroupLammaScreen(code: segs[2].toUpperCase())));
       return;
     }
     // Odoo eCommerce categories: /shop/category/<slug>-<id>

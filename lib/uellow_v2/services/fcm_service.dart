@@ -18,6 +18,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../api/uellow_api.dart';
 import '../../main.dart' show rootNavigatorKey;
 import '../router/uellow_router.dart';
+import '../lamma_group.dart';
 import '../screens/admin/admin_orders_screen.dart';
 import '../screens/admin/admin_pos_screen.dart';
 import 'push_service.dart';
@@ -109,6 +110,13 @@ class FcmService {
         case 'driver_location':
           if (id != null) {
             nav.pushNamed(Routes.order, arguments: {'id': id});
+          }
+          break;
+        case 'lamma_group':
+          final code = (data['code'] ?? '').toString();
+          if (code.isNotEmpty) {
+            nav.push(MaterialPageRoute(
+                builder: (_) => GroupLammaScreen(code: code.toUpperCase())));
           }
           break;
         default:
