@@ -93,7 +93,7 @@ workflows:
           LATEST=$(app-store-connect get-latest-build-number "$APP_APPLE_ID" --platform IOS 2>/dev/null || echo "")
           case "$LATEST" in ''|*[!0-9]*) LATEST=0 ;; esac
           CM=${BUILD_NUMBER:-0}; case "$CM" in ''|*[!0-9]*) CM=0 ;; esac
-          FLOOR=88   # آخر رقم بناء مرفوع على المتجر (2026-07-13); الاستعلام بيتخطّاه أوتوماتيك لما يشتغل
+          FLOOR=93   # آخر رقم بناء مرفوع على المتجر (2026-08-07 → 93)؛ الاستعلام يتخطّاه لما يشتغل
           MAX=$FLOOR
           if [ "$LATEST" -gt "$MAX" ]; then MAX=$LATEST; fi
           if [ "$CM" -gt "$MAX" ]; then MAX=$CM; fi
