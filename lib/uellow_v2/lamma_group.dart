@@ -27,6 +27,33 @@ const _avatColors = [
 String _cur() => _gar ? 'د.ك' : 'KD';
 String _m(v) => (v == null ? 0.0 : (v as num).toDouble()).toStringAsFixed(3);
 
+/// Branded, floating toast — replaces the default dark-grey SnackBar.
+void _gToast(BuildContext context, String msg, {bool good = true}) {
+  final m = ScaffoldMessenger.maybeOf(context);
+  if (m == null) return;
+  m
+    ..hideCurrentSnackBar()
+    ..showSnackBar(SnackBar(
+      content: Row(mainAxisSize: MainAxisSize.min, children: [
+        Text(good ? '✅ ' : 'ℹ️ ', style: const TextStyle(fontSize: 14)),
+        Flexible(
+          child: Text(msg,
+              style: const TextStyle(
+                  fontWeight: FontWeight.w800, color: Colors.white, fontSize: 13.5)),
+        ),
+      ]),
+      backgroundColor: good ? const Color(0xFF12241B) : const Color(0xFF151515),
+      behavior: SnackBarBehavior.floating,
+      elevation: 10,
+      duration: const Duration(milliseconds: 2200),
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 20),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+          side: const BorderSide(color: Color(0xFF243244))),
+    ));
+}
+
 /// Singleton API + persistent device token for group identity.
 class LammaGroupApi {
   LammaGroupApi._();
@@ -54,9 +81,17 @@ class LammaGroupApi {
   Future<Map<String, dynamic>> _post(String path, Map<String, dynamic> body) async {
     try {
       body['token'] = await token();
+      // Carry the app's auth + cart token so the server operates on the SAME
+      // cart the app screen reads (otherwise `pay` fills a detached order and
+      // the cart opens empty) and can link the member's partner for push.
+      final headers = Map<String, String>.from(_headers);
+      final t = await UellowApi.instance.tokenStore.readToken();
+      if (t != null && t.isNotEmpty) headers['Authorization'] = 'Bearer $t';
+      final ct = await UellowApi.instance.tokenStore.readCartToken();
+      if (ct != null && ct.isNotEmpty) headers['X-Cart-Token'] = ct;
       final res = await http
           .post(Uri.parse('$_base/api/mobile/v2/lamma/group/$path'),
-              headers: _headers, body: jsonEncode(body))
+              headers: headers, body: jsonEncode(body))
           .timeout(const Duration(seconds: 20));
       final j = jsonDecode(res.body);
       return (j is Map) ? Map<String, dynamic>.from(j) : {'error': 'bad'};
@@ -108,8 +143,7 @@ Future<void> startGroupLamma(BuildContext context) async {
   if (!context.mounted) return;
   final code = d['code'] as String?;
   if (code == null) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(_gar ? 'تعذّر إنشاء اللمّة الجماعية' : 'Could not start the group')));
+    _gToast(context, _gar ? 'تعذّر إنشاء اللمّة الجماعية' : 'Could not start the group', good: false);
     return;
   }
   Navigator.push(context,
@@ -191,10 +225,9 @@ class _GroupLammaScreenState extends State<GroupLammaScreen> {
     if (!mounted) return;
     setState(() { _busy = false; if (d['error'] == null) _d = d; });
     if (d['error'] != null) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(_gar ? 'تعذّر تنفيذ العملية' : 'Action failed')));
+      _gToast(context, _gar ? 'تعذّر تنفيذ العملية' : 'Action failed', good: false);
     } else if (ok != null) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(ok)));
+      _gToast(context, ok);
     }
   }
 
@@ -526,8 +559,7 @@ class _GroupLammaScreenState extends State<GroupLammaScreen> {
             Expanded(
               child: _smallBtn('🔗 ${_gar ? 'نسخ الرابط' : 'Copy link'}', Colors.white, _gInk, () {
                 Clipboard.setData(ClipboardData(text: (d['share_url'] ?? '').toString()));
-                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                    content: Text(_gar ? 'نُسخ الرابط ✅' : 'Link copied ✅')));
+                _gToast(context, _gar ? 'نُسخ الرابط' : 'Link copied');
               }, border: true),
             ),
           ]),
@@ -573,8 +605,8 @@ class _GroupLammaScreenState extends State<GroupLammaScreen> {
   Future<void> _addMine() async {
     final items = _myLammaItems();
     if (items.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(_gar ? 'أضِف منتجات للمّتك من المتجر أولًا' : 'Add items from the shop first')));
+      _gToast(context, _gar ? 'أضِف منتجات للمّتك من المتجر أولًا' : 'Add items from the shop first',
+          good: false);
       return;
     }
     setState(() => _busy = true);
@@ -586,8 +618,7 @@ class _GroupLammaScreenState extends State<GroupLammaScreen> {
     }
     if (!mounted) return;
     setState(() { _busy = false; if (d['error'] == null) _d = d; });
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(_gar ? 'أُضيفت منتجاتك ✅' : 'Your items were added ✅')));
+    _gToast(context, _gar ? 'أُضيفت منتجاتك للّمة' : 'Your items were added');
   }
 
   void _lock() => _run(() => _api.lock(widget.code), ok: _gar ? 'اللمّة جاهزة للدفع' : 'Ready to pay');
@@ -598,12 +629,21 @@ class _GroupLammaScreenState extends State<GroupLammaScreen> {
     if (!mounted) return;
     setState(() => _busy = false);
     if (d['ok'] == true) {
+      // Adopt the cart token of the order the server just filled so the cart
+      // screen opens on the SAME order (otherwise it shows empty).
+      final ct = (d['cart_token'] ?? '').toString();
+      if (ct.isNotEmpty) {
+        try { await UellowApi.instance.tokenStore.writeCartToken(ct); } catch (_) {}
+      }
+      if (!mounted) return;
       Navigator.pushNamed(context, '/cart');
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(d['error'] == 'empty'
+      _gToast(
+          context,
+          d['error'] == 'empty'
               ? (_gar ? 'أضِف منتجاتك أولًا' : 'Add your items first')
-              : (_gar ? 'تعذّر الدفع' : 'Payment failed'))));
+              : (_gar ? 'تعذّر الدفع' : 'Payment failed'),
+          good: false);
     }
   }
 
