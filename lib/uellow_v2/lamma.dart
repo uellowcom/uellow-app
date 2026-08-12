@@ -731,6 +731,61 @@ void showLammaSheet(BuildContext context) {
                       ? '✔️ خصم اللمّة وصل حده الأقصى لهذه الباقة.'
                       : '✔️ Lamma discount reached its maximum for this bundle.',
                   amber: false),
+              // ── tier progress toward next discount (legendary) ──
+              if (q['next_tier'] != null)
+                Builder(builder: (_) {
+                  final nt = q['next_tier'] as Map;
+                  final prog = ((q['progress'] ?? 0) as num).toDouble().clamp(0.0, 1.0);
+                  final tp = ((q['tier_pct'] ?? 0) as num).toDouble();
+                  final needItems = ((nt['need_items'] ?? 0) as num).toInt();
+                  final needAmt = ((nt['need_amount'] ?? 0) as num).toDouble();
+                  final need = needItems > 0
+                      ? '$needItems ${_ar ? 'منتج' : 'items'}'
+                      : '${needAmt.toStringAsFixed(3)} $cur';
+                  final nextPct = ((nt['pct'] ?? 0) as num).toStringAsFixed(0);
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 10),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFFF7E3),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: const Color(0xFFF2D98A)),
+                    ),
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                      Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                        Text('${_ar ? 'خصمك' : 'Discount'} ${tp.toStringAsFixed(0)}%',
+                            style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 12.5, color: Color(0xFFC85A00))),
+                        Flexible(child: Text('${_ar ? 'أضف' : 'Add'} $need ← $nextPct% 🔥',
+                            textAlign: TextAlign.end, overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 11.5, color: Color(0xFF8A5A00)))),
+                      ]),
+                      const SizedBox(height: 8),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(100),
+                        child: LinearProgressIndicator(
+                          value: prog, minHeight: 10,
+                          backgroundColor: const Color(0xFFF0EAD9),
+                          valueColor: const AlwaysStoppedAnimation(Color(0xFFFF7A1A)),
+                        ),
+                      ),
+                    ]),
+                  );
+                })
+              else if (((q['tier_pct'] ?? 0) as num) > 0)
+                Container(
+                  margin: const EdgeInsets.only(bottom: 10),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFF7E3),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: const Color(0xFFF2D98A)),
+                  ),
+                  child: Text(
+                    '🎉 ${_ar ? 'وصلت أقصى خصم' : 'Max discount reached'} ${((q['tier_pct'] ?? 0) as num).toStringAsFixed(0)}%',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 13, color: Color(0xFFC85A00)),
+                  ),
+                ),
               const SizedBox(height: 10),
               // professional price breakdown: subtotal / discount / net
               Container(
