@@ -36,7 +36,7 @@ android {
         // and record_android, both of which declare minSdk 23. API 21/22
         // (Android 5.x, 2014-15) is <1% of devices, so this is a safe floor.
         minSdk = 23
-        targetSdk = flutter.targetSdkVersion
+        targetSdk = 36  // Android 16 — Play policy (was flutter default 35)
         versionCode = flutter.versionCode
         versionName = flutter.versionName
         multiDexEnabled = true
