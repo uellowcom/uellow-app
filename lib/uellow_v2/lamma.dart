@@ -786,6 +786,24 @@ void showLammaSheet(BuildContext context) {
                     style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 13, color: Color(0xFFC85A00)),
                   ),
                 ),
+              Builder(builder: (bctx) => GestureDetector(
+                onTap: () => LammaHubScreen.open(bctx),
+                child: Container(
+                  margin: const EdgeInsets.only(bottom: 10),
+                  padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 14),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFF7E3),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: const Color(0xFFF2D98A)),
+                  ),
+                  child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                    Text(_ar ? '🏆 لوحة الصدارة والإنجازات' : '🏆 Leaderboard & badges',
+                        style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 13, color: Color(0xFF8A5A00))),
+                    const SizedBox(width: 6),
+                    const Icon(Icons.chevron_left, size: 18, color: Color(0xFF8A5A00)),
+                  ]),
+                ),
+              )),
               const SizedBox(height: 10),
               // professional price breakdown: subtotal / discount / net
               Container(
@@ -1135,6 +1153,183 @@ class LammaAccountBlock extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+}
+
+
+// ── Lamma Hub: savings + badges + community leaderboard (v2.2.105) ──
+class LammaHubScreen extends StatefulWidget {
+  const LammaHubScreen({super.key});
+  static void open(BuildContext context) {
+    Navigator.of(context).push(MaterialPageRoute(builder: (_) => const LammaHubScreen()));
+  }
+  @override
+  State<LammaHubScreen> createState() => _LammaHubScreenState();
+}
+
+class _LammaHubScreenState extends State<LammaHubScreen> {
+  Map<String, dynamic>? _d;
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final headers = <String, String>{'X-Lang': UellowApi.instance.lang};
+      final token = await UellowApi.instance.tokenStore.readToken();
+      if (token != null && token.isNotEmpty) headers['Authorization'] = 'Bearer $token';
+      final r = await http.get(
+          Uri.parse('${UellowApi.instance.baseUrl}/api/mobile/v2/lamma/hub?days=30'),
+          headers: headers);
+      if (r.statusCode == 200) {
+        _d = (jsonDecode(r.body) as Map).cast<String, dynamic>();
+      }
+    } catch (_) {}
+    if (mounted) setState(() => _loading = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ar = UellowApi.instance.lang == 'ar';
+    final lb = (_d?['leaderboard'] as Map?) ?? const {};
+    final rows = (lb['rows'] as List?) ?? const [];
+    final cur = (lb['currency'] ?? 'KD').toString();
+    final authed = _d?['authed'] == true;
+    final savings = (_d?['savings'] as Map?) ?? const {};
+    final badges = ((_d?['badges'] as Map?)?['badges'] as List?) ?? const [];
+    return Directionality(
+      textDirection: ar ? TextDirection.rtl : TextDirection.ltr,
+      child: Scaffold(
+        backgroundColor: const Color(0xFFF3EDE0),
+        appBar: AppBar(
+          backgroundColor: const Color(0xFF412402),
+          foregroundColor: const Color(0xFFF5C320),
+          title: Text(ar ? 'لمّة يلو 🏆' : 'Lamma Hub 🏆',
+              style: const TextStyle(fontWeight: FontWeight.w900, color: Color(0xFFF5C320))),
+        ),
+        body: _loading
+            ? const Center(child: CircularProgressIndicator(color: Color(0xFF412402)))
+            : ListView(padding: const EdgeInsets.all(14), children: [
+                if (authed) _savingsCard(ar, savings, cur),
+                if (authed && badges.isNotEmpty) ...[
+                  const SizedBox(height: 14),
+                  _title(ar ? 'إنجازاتك 🏅' : 'Your badges 🏅'),
+                  const SizedBox(height: 8),
+                  _badgesGrid(badges),
+                ],
+                const SizedBox(height: 14),
+                _title(ar ? 'أكبر لمّات اليوم 🏆' : 'Top lammas 🏆'),
+                _communityCard(ar, lb, cur),
+                ...rows.asMap().entries.map((e) => _lbRow(e.key, e.value as Map, cur)),
+                if (rows.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Text(ar ? 'لا لمّات بعد — كن الأول! 🧺' : 'No lammas yet — be first! 🧺',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(color: Color(0xFF9a8763), fontWeight: FontWeight.w700)),
+                  ),
+              ]),
+      ),
+    );
+  }
+
+  Widget _title(String t) => Text(t,
+      style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 15, color: Color(0xFF3A2705)));
+
+  Widget _savingsCard(bool ar, Map s, String cur) {
+    final saved = ((s['saved'] ?? 0) as num).toDouble();
+    final count = ((s['count'] ?? 0) as num).toInt();
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(colors: [Color(0xFFEAFAF0), Colors.white]),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFC7ECD5)),
+      ),
+      child: Column(children: [
+        Text(ar ? 'وفّرت عبر اللمّة 🎉' : 'Saved with Lamma 🎉',
+            style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 12.5, color: Color(0xFF0A7536))),
+        Text('${saved.toStringAsFixed(3)} $cur',
+            style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 34, color: Color(0xFF0A8A3F))),
+        Text(ar ? 'عبر $count لمّة (٣٠ يوم)' : 'across $count lammas (30d)',
+            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12, color: Color(0xFF6b5836))),
+      ]),
+    );
+  }
+
+  Widget _badgesGrid(List badges) => GridView.count(
+        crossAxisCount: 3,
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        mainAxisSpacing: 10,
+        crossAxisSpacing: 10,
+        childAspectRatio: 0.95,
+        children: badges.map((b) {
+          final m = b as Map;
+          final earned = m['earned'] == true;
+          return Opacity(
+            opacity: earned ? 1 : 0.4,
+            child: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: const Color(0xFFECECEC))),
+              child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                Text((m['emoji'] ?? '🏅').toString(), style: const TextStyle(fontSize: 26)),
+                const SizedBox(height: 5),
+                Text((m['name'] ?? '').toString(),
+                    textAlign: TextAlign.center, maxLines: 2, overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800, color: Color(0xFF20242c))),
+              ]),
+            ),
+          );
+        }).toList(),
+      );
+
+  Widget _communityCard(bool ar, Map lb, String cur) {
+    final total = ((lb['community_total'] ?? 0) as num).toDouble();
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 8),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(colors: [Color(0xFFFFF2D6), Colors.white]),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFF2D98A)),
+      ),
+      child: Column(children: [
+        Text(ar ? 'وفّره المجتمع اليوم' : 'Community saved today',
+            style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 12, color: Color(0xFF8A5A00))),
+        Text('${total.toStringAsFixed(3)} $cur',
+            style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 26, color: Color(0xFFC85A00))),
+      ]),
+    );
+  }
+
+  Widget _lbRow(int i, Map r, String cur) {
+    final medal = i == 0 ? '🥇' : i == 1 ? '🥈' : i == 2 ? '🥉' : '${i + 1}';
+    final saved = ((r['saved'] ?? 0) as num).toDouble();
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: const Color(0xFFECECEC))),
+      child: Row(children: [
+        SizedBox(width: 30, child: Text(medal, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900))),
+        const SizedBox(width: 6),
+        Expanded(
+            child: Text((r['name'] ?? '').toString(),
+                style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 12.5, color: Color(0xFF20242c)))),
+        Text('${saved.toStringAsFixed(3)} $cur',
+            style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 12.5, color: Color(0xFF0A8A3F))),
+      ]),
     );
   }
 }
