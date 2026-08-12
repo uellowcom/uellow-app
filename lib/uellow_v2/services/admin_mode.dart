@@ -87,11 +87,21 @@ class AdminApi {
     return (r['data'] as Map).cast<String, dynamic>();
   }
 
-  Future<Map<String, dynamic>> posSessions({int page = 1}) async {
+  Future<Map<String, dynamic>> posSessions(
+      {int page = 1, String state = '', String? dateFrom,
+      String? dateTo}) async {
+    final q = <String, dynamic>{'page': '$page'};
+    if (state.isNotEmpty) q['state'] = state;
+    if (dateFrom != null) q['date_from'] = dateFrom;
+    if (dateTo != null) q['date_to'] = dateTo;
     final r = await UellowApi.instance.getRaw(
-        '/api/mobile/v2/admin/pos/sessions',
-        query: {'page': '$page'},
-        auth: true);
+        '/api/mobile/v2/admin/pos/sessions', query: q, auth: true);
+    return (r['data'] as Map).cast<String, dynamic>();
+  }
+
+  Future<Map<String, dynamic>> posSessionDetail(int id) async {
+    final r = await UellowApi.instance
+        .getRaw('/api/mobile/v2/admin/pos/session/$id', auth: true);
     return (r['data'] as Map).cast<String, dynamic>();
   }
 

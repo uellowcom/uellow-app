@@ -74,6 +74,9 @@ class _SessionsTabState extends State<_SessionsTab>
   final List<Map<String, dynamic>> _rows = [];
   int _page = 1, _pages = 1;
   bool _loading = false;
+  String _state = '';
+  DateTime? _from;
+  DateTime? _to;
 
   @override
   void initState() {
@@ -102,7 +105,9 @@ class _SessionsTabState extends State<_SessionsTab>
     }
     setState(() => _loading = true);
     try {
-      final d = await AdminApi.instance.posSessions(page: _page);
+      final d = await AdminApi.instance.posSessions(
+          page: _page, state: _state,
+          dateFrom: _fmt(_from), dateTo: _fmt(_to));
       _pages = (d['pages'] as num?)?.toInt() ?? 1;
       _rows.addAll(((d['sessions'] as List?) ?? const [])
           .map((e) => (e as Map).cast<String, dynamic>()));
@@ -114,6 +119,111 @@ class _SessionsTabState extends State<_SessionsTab>
   Widget build(BuildContext context) {
     super.build(context);
     final ar = UellowApi.instance.lang == 'ar';
+    return Column(children: [
+      _filterBar(ar),
+      Expanded(child: _body(ar)),
+    ]);
+  }
+
+  String? _fmt(DateTime? d) => d == null
+      ? null
+      : '${d.year}-${d.month.toString().padLeft(2, '0')}-'
+          '${d.day.toString().padLeft(2, '0')}';
+
+  Widget _filterBar(bool ar) {
+    Widget chip(String label, String val) {
+      final on = _state == val;
+      return Padding(
+        padding: const EdgeInsets.only(right: 6),
+        child: GestureDetector(
+          onTap: () {
+            setState(() => _state = val);
+            _load(reset: true);
+          },
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+            decoration: BoxDecoration(
+                color: on ? UellowColors.darkBrown : Colors.white,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                    color: on ? UellowColors.darkBrown
+                        : const Color(0xFFE4D8BF))),
+            child: Text(label, style: TextStyle(fontSize: 11.5,
+                fontWeight: FontWeight.w800,
+                color: on ? UellowColors.yellow : UellowColors.darkBrown)),
+          ),
+        ),
+      );
+    }
+    final hasDate = _from != null && _to != null;
+    return Container(
+      color: Colors.white,
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+      child: Row(children: [
+        Expanded(
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(children: [
+              chip(ar ? 'الكل' : 'All', ''),
+              chip(ar ? 'مفتوحة' : 'Open', 'opened'),
+              chip(ar ? 'مغلقة' : 'Closed', 'closed'),
+            ]),
+          ),
+        ),
+        GestureDetector(
+          onTap: () async {
+            final r = await showDateRangePicker(
+              context: context,
+              firstDate: DateTime(2023),
+              lastDate: DateTime.now().add(const Duration(days: 1)),
+              initialDateRange: hasDate
+                  ? DateTimeRange(start: _from!, end: _to!) : null,
+            );
+            if (r != null) {
+              setState(() {
+                _from = r.start;
+                _to = r.end;
+              });
+              _load(reset: true);
+            }
+          },
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+            decoration: BoxDecoration(
+                color: hasDate ? const Color(0xFFFFF7DE) : Colors.white,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: const Color(0xFFE4D8BF))),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              const Icon(Icons.date_range_rounded, size: 15,
+                  color: UellowColors.darkBrown),
+              const SizedBox(width: 4),
+              Text(hasDate ? '${_fmt(_from)} → ${_fmt(_to)}'
+                  : (ar ? 'التاريخ' : 'Date'),
+                  style: const TextStyle(fontSize: 10.5,
+                      fontWeight: FontWeight.w800,
+                      color: UellowColors.darkBrown)),
+              if (hasDate) ...[
+                const SizedBox(width: 4),
+                GestureDetector(
+                  onTap: () {
+                    setState(() {
+                      _from = null;
+                      _to = null;
+                    });
+                    _load(reset: true);
+                  },
+                  child: const Icon(Icons.close_rounded, size: 14,
+                      color: UellowColors.muted),
+                ),
+              ],
+            ]),
+          ),
+        ),
+      ]),
+    );
+  }
+
+  Widget _body(bool ar) {
     if (_rows.isEmpty && _loading) {
       return const Center(child: CircularProgressIndicator(
           color: UellowColors.darkBrown));
@@ -551,20 +661,183 @@ Widget _profitPill(bool ar, Map? profit, dynamic marginPct, [Map? cost]) {
   );
 }
 
-class _SessionOrdersScreen extends StatelessWidget {
+class _SessionOrdersScreen extends StatefulWidget {
   const _SessionOrdersScreen({required this.sessionId, required this.title});
   final int sessionId;
   final String title;
   @override
-  Widget build(BuildContext context) => Scaffold(
-    backgroundColor: const Color(0xFFF2F3F5),
-    appBar: AppBar(
-      backgroundColor: const Color(0xFF412402),
-      foregroundColor: UellowColors.yellow,
-      iconTheme: const IconThemeData(color: UellowColors.yellow),
-      title: Text(title, style: const TextStyle(fontSize: 15,
-          fontWeight: FontWeight.w900, color: UellowColors.yellow)),
-    ),
-    body: _PosOrdersTab(sessionId: sessionId),
-  );
+  State<_SessionOrdersScreen> createState() => _SessionOrdersScreenState();
+}
+
+class _SessionOrdersScreenState extends State<_SessionOrdersScreen> {
+  Map<String, dynamic>? _d;
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final d = await AdminApi.instance.posSessionDetail(widget.sessionId);
+      if (mounted) setState(() { _d = d; _loading = false; });
+    } catch (_) {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  String _m(dynamic x) {
+    if (x is Map) {
+      final a = (x['amount'] as num? ?? 0)
+          .toStringAsFixed((x['digits'] as num?)?.toInt() ?? 3);
+      return '$a ${x['symbol'] ?? ''}'.trim();
+    }
+    return x?.toString() ?? '';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFFF2F3F5),
+      appBar: AppBar(
+        backgroundColor: const Color(0xFF412402),
+        foregroundColor: UellowColors.yellow,
+        iconTheme: const IconThemeData(color: UellowColors.yellow),
+        title: Text(widget.title, style: const TextStyle(fontSize: 15,
+            fontWeight: FontWeight.w900, color: UellowColors.yellow)),
+      ),
+      body: Column(children: [
+        if (_loading)
+          const LinearProgressIndicator(minHeight: 2)
+        else if (_d != null)
+          _SessionStatsHeader(d: _d!, fmt: _m),
+        Expanded(child: _PosOrdersTab(sessionId: widget.sessionId)),
+      ]),
+    );
+  }
+}
+
+// Stats header shown atop a session: cash / KNET / sales + products sold.
+class _SessionStatsHeader extends StatelessWidget {
+  const _SessionStatsHeader({required this.d, required this.fmt});
+  final Map<String, dynamic> d;
+  final String Function(dynamic) fmt;
+
+  @override
+  Widget build(BuildContext context) {
+    final ar = UellowApi.instance.lang == 'ar';
+    final sess = (d['session'] as Map?) ?? const {};
+    final payments = (d['payments'] as List?) ?? const [];
+    final products = (d['products'] as List?) ?? const [];
+    Widget stat(String label, String val, Color c, IconData ic) => Expanded(
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 3),
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
+        decoration: BoxDecoration(color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: const Color(0xFFECECEC))),
+        child: Column(children: [
+          Icon(ic, size: 18, color: c),
+          const SizedBox(height: 4),
+          Text(val, maxLines: 1, overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w900,
+                  color: c)),
+          const SizedBox(height: 2),
+          Text(label, style: const TextStyle(fontSize: 10,
+              color: UellowColors.muted, fontWeight: FontWeight.w700)),
+        ]),
+      ),
+    );
+    return Container(
+      color: const Color(0xFFF2F3F5),
+      padding: const EdgeInsets.fromLTRB(11, 10, 11, 4),
+      child: Column(children: [
+        Row(children: [
+          stat(ar ? 'كاش' : 'Cash', fmt(d['cash_total']),
+              const Color(0xFF059669), Icons.payments_rounded),
+          stat(ar ? 'كي نت' : 'KNET', fmt(d['knet_total']),
+              const Color(0xFF2563EB), Icons.credit_card_rounded),
+          stat(ar ? 'المبيعات' : 'Sales', fmt(sess['total']),
+              UellowColors.darkBrown, Icons.receipt_long_rounded),
+        ]),
+        if (payments.length > 2)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Wrap(spacing: 6, runSpacing: 6, children: [
+              for (final p in payments)
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                  decoration: BoxDecoration(color: Colors.white,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: const Color(0xFFECECEC))),
+                  child: Text(
+                      '${(p as Map)['method'] ?? ''}: ${fmt(p['amount'])}',
+                      style: const TextStyle(fontSize: 10.5,
+                          fontWeight: FontWeight.w800,
+                          color: UellowColors.darkBrown)),
+                ),
+            ]),
+          ),
+        const SizedBox(height: 8),
+        Container(
+          decoration: BoxDecoration(color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFFECECEC))),
+          child: Theme(
+            data:
+                Theme.of(context).copyWith(dividerColor: Colors.transparent),
+            child: ExpansionTile(
+              initiallyExpanded: true,
+              tilePadding: const EdgeInsets.symmetric(horizontal: 12),
+              childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+              leading: const Icon(Icons.inventory_2_rounded, size: 18,
+                  color: UellowColors.darkBrown),
+              title: Text(
+                  '${ar ? 'المنتجات المباعة' : 'Products sold'} (${products.length})',
+                  style: const TextStyle(fontSize: 12.5,
+                      fontWeight: FontWeight.w900,
+                      color: UellowColors.darkBrown)),
+              children: [
+                if (products.isEmpty)
+                  Padding(padding: const EdgeInsets.all(8),
+                      child: Text(ar ? 'لا منتجات' : 'No products',
+                          style: const TextStyle(fontSize: 11,
+                              color: UellowColors.muted))),
+                for (final p in products)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Row(children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 7, vertical: 2),
+                        decoration: BoxDecoration(
+                            color: const Color(0xFFFFF7DE),
+                            borderRadius: BorderRadius.circular(6)),
+                        child: Text('${(p as Map)['qty'] ?? 0}×',
+                            style: const TextStyle(fontSize: 11,
+                                fontWeight: FontWeight.w900,
+                                color: Color(0xFF7A5B00))),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(child: Text(p['name']?.toString() ?? '',
+                          maxLines: 2, overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 11.5,
+                              color: UellowColors.darkBrown))),
+                      const SizedBox(width: 6),
+                      Text(fmt(p['total']),
+                          style: const TextStyle(fontSize: 11.5,
+                              fontWeight: FontWeight.w900,
+                              color: UellowColors.darkBrown)),
+                    ]),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ]),
+    );
+  }
 }
