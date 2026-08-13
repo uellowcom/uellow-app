@@ -16,6 +16,7 @@ class LammaService {
 
   final Set<int> _ids = <int>{};                 // product (template) ids
   final Map<int, int> _variants = <int, int>{};  // templateId -> chosen variantId
+  final Map<int, int> _quantities = <int, int>{}; // templateId -> quantity
   String type = 'normal';
 
   /// Latest server quote (margin-protected price). Widgets listen to rebuild.
@@ -64,6 +65,8 @@ class LammaService {
       await p.setString('lamma_ids_v1', jsonEncode(_ids.toList()));
       await p.setString('lamma_variants_v1',
           jsonEncode(_variants.map((k, v) => MapEntry(k.toString(), v))));
+      await p.setString('lamma_qty_v1',
+          jsonEncode(_quantities.map((k, v) => MapEntry(k.toString(), v))));
       await p.setString('lamma_type_v1', type);
     } catch (_) {}
   }
@@ -82,6 +85,11 @@ class LammaService {
         if (v != null && v.isNotEmpty) {
           (jsonDecode(v) as Map).forEach((k, val) =>
               _variants[int.parse(k.toString())] = (val as num).toInt());
+        }
+        final qv = p.getString('lamma_qty_v1');
+        if (qv != null && qv.isNotEmpty) {
+          (jsonDecode(qv) as Map).forEach((k, val) =>
+              _quantities[int.parse(k.toString())] = (val as num).toInt());
         }
       }
       type = p.getString('lamma_type_v1') ?? 'normal';
@@ -147,9 +155,11 @@ class LammaService {
     if (_ids.contains(id)) {
       _ids.remove(id);
       _variants.remove(id);
+      _quantities.remove(id);
     } else {
       _ids.add(id);
       if (variantId != null) _variants[id] = variantId;
+      _quantities[id] = 1;
       hidden.value = false; // a fresh add always re-shows the mini-bar
     }
     _persist();
@@ -159,6 +169,15 @@ class LammaService {
   Future<void> remove(int id) async {
     _ids.remove(id);
     _variants.remove(id);
+    _quantities.remove(id);
+    _persist();
+    await refresh();
+  }
+
+  /// Set the quantity of a product already in the Lamma (1..99), then re-quote.
+  Future<void> setQty(int id, int qty) async {
+    if (qty < 1 || !_ids.contains(id)) return;
+    _quantities[id] = qty > 99 ? 99 : qty;
     _persist();
     await refresh();
   }
@@ -200,6 +219,7 @@ class LammaService {
         body: jsonEncode({
           'product_ids': _ids.toList(),
           'variants': _variantPayload(),
+          'quantities': _quantities.map((k, v) => MapEntry(k.toString(), v)),
           'type': type,
         }),
       );
@@ -709,7 +729,29 @@ void showLammaSheet(BuildContext context) {
                       const SizedBox(width: 9),
                       Expanded(child: Text('${it['name']}', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: Color(0xFF344054), height: 1.3))),
                       const SizedBox(width: 6),
-                      Text('${(it['price'] as num).toStringAsFixed(3)}', style: const TextStyle(fontWeight: FontWeight.w800, color: _orange, fontSize: 12)),
+                      Container(
+                        decoration: BoxDecoration(
+                            border: Border.all(color: const Color(0xFFE7DFCB)),
+                            borderRadius: BorderRadius.circular(8)),
+                        child: Row(mainAxisSize: MainAxisSize.min, children: [
+                          InkWell(
+                            onTap: () => s.setQty(it['id'] as int,
+                                (((it['qty'] as num?)?.toInt() ?? 1) - 1)),
+                            child: const SizedBox(width: 24, height: 24,
+                                child: Icon(Icons.remove, size: 13, color: Color(0xFF8A5A00))),
+                          ),
+                          Text('${(it['qty'] as num?)?.toInt() ?? 1}',
+                              style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 12, color: Color(0xFF3A2F22))),
+                          InkWell(
+                            onTap: () => s.setQty(it['id'] as int,
+                                (((it['qty'] as num?)?.toInt() ?? 1) + 1)),
+                            child: const SizedBox(width: 24, height: 24,
+                                child: Icon(Icons.add, size: 13, color: Color(0xFF8A5A00))),
+                          ),
+                        ]),
+                      ),
+                      const SizedBox(width: 8),
+                      Text('${((it['line_total'] ?? it['price']) as num).toStringAsFixed(3)}', style: const TextStyle(fontWeight: FontWeight.w800, color: _orange, fontSize: 12)),
                       const SizedBox(width: 6),
                       InkWell(
                         onTap: () => s.remove(it['id'] as int),
@@ -1209,6 +1251,7 @@ class _LammaHubScreenState extends State<LammaHubScreen> {
         appBar: AppBar(
           backgroundColor: const Color(0xFF412402),
           foregroundColor: const Color(0xFFF5C320),
+          iconTheme: const IconThemeData(color: Color(0xFFF5C320)),
           title: Text(ar ? 'لمّة يلو 🏆' : 'Lamma Hub 🏆',
               style: const TextStyle(fontWeight: FontWeight.w900, color: Color(0xFFF5C320))),
         ),
@@ -1432,4 +1475,67 @@ class _LammaJoinTileState extends State<LammaJoinTile> {
       ),
     );
   }
+}
+
+
+// Join-a-Lamma dialog (opened from the account action icon next to Warranties).
+void showJoinLammaDialog(BuildContext context) {
+  final ar = UellowApi.instance.lang == 'ar';
+  final ctrl = TextEditingController();
+  showDialog(
+    context: context,
+    builder: (dctx) => Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          const Text('🧺', style: TextStyle(fontSize: 34)),
+          const SizedBox(height: 6),
+          Text(ar ? 'الانضمام إلى لمّة' : 'Join a Lamma',
+              style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 17, color: Color(0xFF412402))),
+          const SizedBox(height: 4),
+          Text(ar ? 'أدخل كود اللمّة الذي وصلك وانضم للتوفير الجماعي' : 'Enter the Lamma code you received',
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 12, color: Color(0xFF8A7A5A), fontWeight: FontWeight.w600)),
+          const SizedBox(height: 14),
+          TextField(
+            controller: ctrl,
+            textAlign: TextAlign.center,
+            textCapitalization: TextCapitalization.characters,
+            onSubmitted: (_) {
+              final code = ctrl.text.trim().toUpperCase();
+              if (code.isEmpty) return;
+              Navigator.of(dctx).pop();
+              Navigator.of(context).push(MaterialPageRoute(builder: (_) => GroupLammaScreen(code: code)));
+            },
+            decoration: InputDecoration(
+              hintText: ar ? 'كود اللمّة · مثال YL-4682' : 'Lamma code · e.g. YL-4682',
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+          ),
+          const SizedBox(height: 14),
+          SizedBox(
+            width: double.infinity,
+            height: 48,
+            child: ElevatedButton(
+              onPressed: () {
+                final code = ctrl.text.trim().toUpperCase();
+                if (code.isEmpty) return;
+                Navigator.of(dctx).pop();
+                Navigator.of(context).push(MaterialPageRoute(builder: (_) => GroupLammaScreen(code: code)));
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFFF7A1A),
+                foregroundColor: Colors.white,
+                elevation: 0,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              child: Text(ar ? 'انضم' : 'Join',
+                  style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 15)),
+            ),
+          ),
+        ]),
+      ),
+    ),
+  );
 }

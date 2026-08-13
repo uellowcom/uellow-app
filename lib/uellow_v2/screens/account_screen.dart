@@ -142,7 +142,6 @@ class _AccountScreenState extends State<AccountScreen> {
               MediaQuery.of(context).padding.bottom), children: [
         _ProfileHeader(user: user, isGuest: isGuest),
         const LammaAccountBlock(),
-        const LammaJoinTile(),
         // v2.1.57 — targeted announcement strip (admin-controlled).
         if (isGuest) _GuestSigninBanner(),
         if (!isGuest) _BannersRow(banners: banners),
@@ -1090,9 +1089,9 @@ class _ActionTilesState extends State<_ActionTiles> {
 
   // v2.1.66 — Settings tile removed (the gear stays in the header only).
   static const _en = ['Wishlist','Alerts','Coupons','Loyalty',
-                      'Wallet','Smart Fit','Tracking','My Reviews','Warranties'];
+                      'Wallet','Smart Fit','Tracking','My Reviews','Warranties','Join Lamma'];
   static const _ar = ['المفضلة','التنبيهات','الكوبونات','الولاء',
-                      'المحفظة','مقاسي','التتبع','آراء المختصين','ضماناتي'];
+                      'المحفظة','مقاسي','التتبع','آراء المختصين','ضماناتي','انضم للمّة'];
   // Public tiles work for guests too — the rest need a session, so guests
   // get bounced to /auth.
   static const _public = {Routes.tryOn};
@@ -1109,6 +1108,7 @@ class _ActionTilesState extends State<_ActionTiles> {
     // v2.1.62 — specialist-review history (product + the review itself).
     (Icons.rate_review_outlined, Routes.myReviews),
     (Icons.verified_user_outlined, Routes.warranties),
+    (Icons.group_add_outlined, 'lamma_join'),
   ];
   @override
   Widget build(BuildContext context) {
@@ -1130,6 +1130,10 @@ class _ActionTilesState extends State<_ActionTiles> {
         final needsAuth = isGuest && !_public.contains(route);
         return InkWell(
           onTap: () {
+            if (route == 'lamma_join') {
+              showJoinLammaDialog(context);
+              return;
+            }
             if (needsAuth) {
               Navigator.pushNamed(context, '/auth');
               return;
