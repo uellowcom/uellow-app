@@ -1333,3 +1333,103 @@ class _LammaHubScreenState extends State<LammaHubScreen> {
     );
   }
 }
+
+
+// ── Join a group Lamma by code (account page) ──
+class LammaJoinTile extends StatefulWidget {
+  const LammaJoinTile({super.key});
+  @override
+  State<LammaJoinTile> createState() => _LammaJoinTileState();
+}
+
+class _LammaJoinTileState extends State<LammaJoinTile> {
+  final _c = TextEditingController();
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  void _join() {
+    final code = _c.text.trim().toUpperCase();
+    if (code.isEmpty) return;
+    FocusScope.of(context).unfocus();
+    Navigator.of(context)
+        .push(MaterialPageRoute(builder: (_) => GroupLammaScreen(code: code)));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ar = UellowApi.instance.lang == 'ar';
+    OutlineInputBorder br(Color c, [double w = 1.0]) => OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide(color: c, width: w));
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      child: Container(
+        padding: const EdgeInsets.all(13),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: const Color(0xFFEDE4CC)),
+          boxShadow: const [
+            BoxShadow(color: Color(0x0F000000), blurRadius: 8, offset: Offset(0, 2))
+          ],
+        ),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Row(children: [
+            const Text('🧺', style: TextStyle(fontSize: 18)),
+            const SizedBox(width: 8),
+            Text(ar ? 'الانضمام إلى لمّة' : 'Join a Lamma',
+                style: const TextStyle(
+                    fontWeight: FontWeight.w900, fontSize: 14, color: Color(0xFF412402))),
+          ]),
+          const SizedBox(height: 4),
+          Text(
+              ar
+                  ? 'أدخل كود اللمّة الذي وصلك وانضم للتوفير الجماعي'
+                  : 'Enter the Lamma code you received and join the group saving',
+              style: const TextStyle(
+                  fontSize: 11.5, color: Color(0xFF8A7A5A), fontWeight: FontWeight.w600)),
+          const SizedBox(height: 10),
+          Row(children: [
+            Expanded(
+              child: TextField(
+                controller: _c,
+                textCapitalization: TextCapitalization.characters,
+                textAlign: ar ? TextAlign.right : TextAlign.left,
+                onSubmitted: (_) => _join(),
+                decoration: InputDecoration(
+                  hintText: ar ? 'كود اللمّة · مثال YL-4682' : 'Lamma code · e.g. YL-4682',
+                  isDense: true,
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                  border: br(const Color(0xFFE4D8BF)),
+                  enabledBorder: br(const Color(0xFFE4D8BF)),
+                  focusedBorder: br(const Color(0xFFF5C320), 1.6),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            SizedBox(
+              height: 46,
+              child: ElevatedButton(
+                onPressed: _join,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFFF7A1A),
+                  foregroundColor: Colors.white,
+                  elevation: 0,
+                  shape:
+                      RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                ),
+                child: Text(ar ? 'انضم' : 'Join',
+                    style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 13.5)),
+              ),
+            ),
+          ]),
+        ]),
+      ),
+    );
+  }
+}

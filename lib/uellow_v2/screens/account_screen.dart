@@ -142,6 +142,7 @@ class _AccountScreenState extends State<AccountScreen> {
               MediaQuery.of(context).padding.bottom), children: [
         _ProfileHeader(user: user, isGuest: isGuest),
         const LammaAccountBlock(),
+        const LammaJoinTile(),
         // v2.1.57 — targeted announcement strip (admin-controlled).
         if (isGuest) _GuestSigninBanner(),
         if (!isGuest) _BannersRow(banners: banners),
