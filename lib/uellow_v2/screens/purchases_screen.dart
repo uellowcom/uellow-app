@@ -124,7 +124,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                     : const Color(0xFFE7F0FF),
                 borderRadius: BorderRadius.circular(7)),
             child: Text(
-                isPos ? (ar ? 'سيلز 🧾' : 'POS 🧾') : (ar ? 'معرض 🛍️' : 'Store 🛍️'),
+                isPos ? (ar ? 'المعرض 🏬' : 'In-store 🏬') : (ar ? 'اونلاين 🛍️' : 'Online 🛍️'),
                 style: TextStyle(
                     fontSize: 10.5,
                     fontWeight: FontWeight.w900,
