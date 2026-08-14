@@ -98,6 +98,10 @@ workflows:
           if [ "$LATEST" -gt "$MAX" ]; then MAX=$LATEST; fi
           if [ "$CM" -gt "$MAX" ]; then MAX=$CM; fi
           BUILD=$((MAX + 1))
+          # PERMANENT FIX: marketing version tracks the (monotonic) build
+          # number so it is ALWAYS higher than the last approved version —
+          # no more manual bumps / 90062 / 90186 train-closed collisions.
+          IOS_VERSION="4.1.$BUILD"
           echo "Building iOS $IOS_VERSION (build $BUILD)"
           flutter build ipa --release \
             --build-name="$IOS_VERSION" \
