@@ -609,7 +609,8 @@ class _AuthApi {
       phone: user.phone,
       email: user.email,
     );
-    return UellowAuthResult(token: token, user: user);
+    return UellowAuthResult(token: token, user: user,
+        returningCustomer: data['returning_customer'] == true);
   }
 }
 

@@ -142,7 +142,9 @@ class UellowPage<T> {
 class UellowAuthResult {
   final String token;
   final UellowUser user;
-  const UellowAuthResult({required this.token, required this.user});
+  final bool returningCustomer;
+  const UellowAuthResult(
+      {required this.token, required this.user, this.returningCustomer = false});
 }
 
 class UellowUser {

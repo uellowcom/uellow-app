@@ -14,6 +14,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../version.dart';
 import '../lamma.dart';
+import 'purchases_screen.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../api/uellow_api.dart';
@@ -1089,9 +1090,9 @@ class _ActionTilesState extends State<_ActionTiles> {
 
   // v2.1.66 — Settings tile removed (the gear stays in the header only).
   static const _en = ['Wishlist','Alerts','Coupons','Loyalty',
-                      'Wallet','Smart Fit','Tracking','My Reviews','Warranties','Join Lamma'];
+                      'Wallet','Smart Fit','Tracking','My Reviews','Warranties','My Purchases','Join Lamma'];
   static const _ar = ['المفضلة','التنبيهات','الكوبونات','الولاء',
-                      'المحفظة','مقاسي','التتبع','آراء المختصين','ضماناتي','انضم للمّة'];
+                      'المحفظة','مقاسي','التتبع','آراء المختصين','ضماناتي','مشترياتي','انضم للمّة'];
   // Public tiles work for guests too — the rest need a session, so guests
   // get bounced to /auth.
   static const _public = {Routes.tryOn};
@@ -1108,6 +1109,7 @@ class _ActionTilesState extends State<_ActionTiles> {
     // v2.1.62 — specialist-review history (product + the review itself).
     (Icons.rate_review_outlined, Routes.myReviews),
     (Icons.verified_user_outlined, Routes.warranties),
+    (Icons.receipt_long_outlined, 'my_purchases'),
     (Icons.group_add_outlined, 'lamma_join'),
   ];
   @override
@@ -1132,6 +1134,11 @@ class _ActionTilesState extends State<_ActionTiles> {
           onTap: () {
             if (route == 'lamma_join') {
               showJoinLammaDialog(context);
+              return;
+            }
+            if (route == 'my_purchases') {
+              Navigator.push(context, MaterialPageRoute(
+                  builder: (_) => const PurchasesScreen()));
               return;
             }
             if (needsAuth) {

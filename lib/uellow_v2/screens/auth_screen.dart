@@ -57,11 +57,14 @@ class _AuthScreenState extends State<AuthScreen> {
         // v2.1.64 — link the FCM token to the logged-in customer.
         unawaited(FcmService.instance.register());
       } else {
-        await UellowApi.instance.auth.register(
+        final _reg = await UellowApi.instance.auth.register(
           name: _name.text, email: _email.text,
           password: _password.text, phone: _phone.text,
         );
         unawaited(FcmService.instance.register());  // v2.2.02 — push link
+        if (_reg.returningCustomer && mounted) {
+          await _showWelcomeBack(context);
+        }
       }
       if (!mounted) return;
       if (widget.asSheet) {
@@ -74,6 +77,52 @@ class _AuthScreenState extends State<AuthScreen> {
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  Future<void> _showWelcomeBack(BuildContext ctx) async {
+    final ar = UellowApi.instance.lang == 'ar';
+    await showDialog(
+      context: ctx,
+      barrierDismissible: false,
+      builder: (dctx) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(24, 28, 24, 20),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            Container(
+              width: 84, height: 84,
+              decoration: const BoxDecoration(color: Color(0xFFFFF3CE), shape: BoxShape.circle),
+              child: const Center(child: Text('🎉', style: TextStyle(fontSize: 42))),
+            ),
+            const SizedBox(height: 16),
+            Text(ar ? 'أهلاً بعودتك! 🐝' : 'Welcome back! 🐝',
+                style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 22, color: Color(0xFF412402))),
+            const SizedBox(height: 8),
+            Text(
+                ar
+                    ? 'أنت عميل سابق لدينا — ربطنا حسابك بكل مشترياتك ونقاطك السابقة. كل شيء بانتظارك.'
+                    : 'You are a returning customer — your account is linked to all your past purchases and points.',
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 13.5, color: Color(0xFF6B5A37), fontWeight: FontWeight.w600, height: 1.6)),
+            const SizedBox(height: 20),
+            SizedBox(
+              width: double.infinity, height: 50,
+              child: ElevatedButton(
+                onPressed: () => Navigator.of(dctx).pop(),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFF5C320),
+                  foregroundColor: const Color(0xFF412402),
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                ),
+                child: Text(ar ? 'يلا نكمّل التسوّق 🛍️' : "Let's shop 🛍️",
+                    style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 15)),
+              ),
+            ),
+          ]),
+        ),
+      ),
+    );
   }
 
   @override
