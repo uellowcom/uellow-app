@@ -24,7 +24,7 @@ workflows:
       vars:
         BUNDLE_ID: "com.uellow.app"         # نفس المعرّف على App Store
         APP_APPLE_ID: "6769010765"          # Apple ID الرقمي للتطبيق (لحساب رقم البناء)
-        IOS_VERSION: "4.1.25"               # iOS marketing version — must be higher than last approved; 4.1.18-4.1.24 closed (90062/90186)
+        IOS_VERSION: "4.1.26"               # iOS marketing version — must be higher than last approved; 4.1.18-4.1.25 closed (90062/90186)
     scripts:
       - name: Flutter packages get
         script: |
