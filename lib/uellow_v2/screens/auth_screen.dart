@@ -17,6 +17,7 @@ import '../theme/uellow_l10n.dart';
 import '../theme/uellow_theme.dart';
 import '../widgets/uellow_logo.dart';
 import 'phone_login_screen.dart';
+import 'package:intl_phone_field/intl_phone_field.dart';
 
 class AuthScreen extends StatefulWidget {
   const AuthScreen({super.key, this.asSheet = false});
@@ -48,6 +49,7 @@ class _AuthScreenState extends State<AuthScreen> {
   final _password = TextEditingController();
   final _name = TextEditingController();
   final _phone = TextEditingController();
+  String _fullPhone = '';
 
   Future<void> _submit() async {
     setState(() { _busy = true; _err = null; });
@@ -59,7 +61,8 @@ class _AuthScreenState extends State<AuthScreen> {
       } else {
         final _reg = await UellowApi.instance.auth.register(
           name: _name.text, email: _email.text,
-          password: _password.text, phone: _phone.text,
+          password: _password.text,
+          phone: _fullPhone.isNotEmpty ? _fullPhone : _phone.text,
         );
         unawaited(FcmService.instance.register());  // v2.2.02 — push link
         if (_reg.returningCustomer && mounted) {
@@ -232,7 +235,7 @@ class _AuthScreenState extends State<AuthScreen> {
         if (_tab == 1) _field(T.t('account.name'), _name, hint: T.t('account.name')),
         _field(_tab == 1 ? T.t('account.email') : T.t('account.email_or_phone'),
             _email, hint: 'you@example.com'),
-        if (_tab == 1) _field(T.t('account.phone'), _phone, hint: '+965 9999 0000'),
+        if (_tab == 1) _phoneField(),
         _field(T.t('account.password'), _password, hint: '••••••••', obscure: true),
         if (_err != null) Padding(
           padding: const EdgeInsets.only(top: 8),
@@ -341,6 +344,46 @@ class _AuthScreenState extends State<AuthScreen> {
             color: on ? UellowColors.yellowLight : UellowColors.text,
             fontWeight: FontWeight.w800, fontSize: 13)),
       ),
+    );
+  }
+
+  Widget _phoneField() {
+    final ar = UellowApi.instance.lang == 'ar';
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: Text(T.t('account.phone').toUpperCase(),
+                style: const TextStyle(
+                    fontSize: 11, color: UellowColors.muted,
+                    fontWeight: FontWeight.w800, letterSpacing: 0.5))),
+        IntlPhoneField(
+          languageCode: ar ? 'ar' : 'en',
+          initialCountryCode: 'KW',
+          disableLengthCheck: true,
+          showCountryFlag: true,
+          flagsButtonPadding: const EdgeInsets.symmetric(horizontal: 6),
+          dropdownTextStyle: const TextStyle(
+              fontWeight: FontWeight.w800, color: UellowColors.darkBrown),
+          decoration: InputDecoration(
+            hintText: '9999 0000',
+            fillColor: UellowColors.yellowFaint,
+            filled: true,
+            border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: UellowColors.border, width: 1.5)),
+            enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: UellowColors.border, width: 1.5)),
+            focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: UellowColors.yellow, width: 1.8)),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+          ),
+          onChanged: (phone) => _fullPhone = phone.completeNumber,
+        ),
+      ]),
     );
   }
 
