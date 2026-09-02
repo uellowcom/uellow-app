@@ -1234,10 +1234,54 @@ class _MenuList extends StatefulWidget {
 
 class _MenuListState extends State<_MenuList> {
   Map<String, dynamic>? _urls;
+  int _hdUnread = 0;
   @override
   void initState() {
     super.initState();
     _loadUrls();
+    _loadUnread();
+  }
+
+  Future<void> _loadUnread() async {
+    try {
+      final token = await UellowApi.instance.tokenStore.readToken();
+      final r = await http.get(
+        Uri.parse('${UellowApi.instance.baseUrl}/api/mobile/v2/helpdesk/unread'),
+        headers: {
+          'Accept': 'application/json',
+          if (token != null) 'Authorization': 'Bearer $token',
+        });
+      final b = jsonDecode(utf8.decode(r.bodyBytes)) as Map<String, dynamic>;
+      if (b['success'] == true && mounted) {
+        setState(() => _hdUnread = (b['data']?['unread'] as int?) ?? 0);
+      }
+    } catch (_) {}
+  }
+
+  Widget _leadingIcon(IconData icon) {
+    final base = Container(
+      width: 32, height: 32,
+      decoration: const BoxDecoration(
+        color: UellowColors.border,
+        borderRadius: BorderRadius.all(Radius.circular(8)),
+      ),
+      child: Icon(icon, size: 16, color: UellowColors.muted),
+    );
+    if (icon == Icons.chat_bubble_outline && _hdUnread > 0) {
+      return Stack(clipBehavior: Clip.none, children: [
+        base,
+        Positioned(right: -4, top: -4, child: Container(
+          padding: const EdgeInsets.all(3),
+          constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+          decoration: const BoxDecoration(
+              color: UellowColors.danger, shape: BoxShape.circle),
+          child: Text('$_hdUnread', textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.white,
+                  fontSize: 9, fontWeight: FontWeight.w900)),
+        )),
+      ]);
+    }
+    return base;
   }
   Future<void> _loadUrls() async {
     try {
@@ -1264,12 +1308,8 @@ class _MenuListState extends State<_MenuList> {
       (Icons.handshake_outlined, ar ? '🤝 شركاء يلو — اربح معنا' : '🤝 Uellow Partners — earn with us',
         () => Navigator.pushNamed(context, '/affiliate')),
       (Icons.chat_bubble_outline, ar ? 'الدعم الفني' : 'Customer support',
-        () {
-          final hd = (_urls?['helpdesk'] as String?) ?? '';
-          if (hd.isNotEmpty) _openWeb(hd, ar ? 'الدعم الفني' : 'Customer support');
-          else ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text(ar ? 'لم يتم إعداد رابط الدعم' : 'Helpdesk URL not configured')));
-        }),
+        () => Navigator.pushNamed(context, '/helpdesk-tickets')
+            .then((_) { if (mounted) _loadUnread(); })),
       (Icons.shield_outlined, ar ? 'الخصوصية والأمان' : 'Privacy & security',
         () {
           final u = (_urls?['privacy'] as String?) ?? '';
@@ -1308,14 +1348,7 @@ class _MenuListState extends State<_MenuList> {
         for (var i = 0; i < items.length; i++) ...[
           if (i > 0) const Divider(height: 1, indent: 16, endIndent: 16),
           ListTile(
-            leading: Container(
-              width: 32, height: 32,
-              decoration: const BoxDecoration(
-                color: UellowColors.border,
-                borderRadius: BorderRadius.all(Radius.circular(8)),
-              ),
-              child: Icon(items[i].$1, size: 16, color: UellowColors.muted),
-            ),
+            leading: _leadingIcon(items[i].$1),
             title: Text(items[i].$2,
                 style: const TextStyle(fontSize: 13, color: UellowColors.ink)),
             trailing: const Icon(Icons.chevron_right,

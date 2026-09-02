@@ -42,6 +42,7 @@ import '../screens/tryon_screen.dart';
 import '../screens/smart_fit_screen.dart';
 import '../screens/beena_screen.dart';
 import '../screens/helpdesk_screen.dart';
+import '../screens/helpdesk_tickets_screen.dart';
 import '../screens/dynamic_page_screen.dart';
 import '../screens/reels_screen.dart';
 import '../screens/free_shipping_screen.dart';
@@ -257,6 +258,11 @@ class UellowRouter {
           builder: (_) => OrdersListScreen(
             filterState: args['filter'] as String?,
           ),
+        );
+      case '/helpdesk-tickets':
+        return MaterialPageRoute(
+          settings: settings,
+          builder: (_) => const HelpdeskTicketsScreen(),
         );
       case Routes.helpdesk:
         final args = (settings.arguments as Map?) ?? const {};

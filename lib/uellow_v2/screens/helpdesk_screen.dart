@@ -11,6 +11,7 @@ import 'package:http/http.dart' as http;
 
 import '../../api/uellow_api.dart';
 import '../theme/uellow_theme.dart';
+import 'helpdesk_conversation_screen.dart';
 
 class HelpdeskScreen extends StatefulWidget {
   const HelpdeskScreen({super.key, this.orderRef, this.category});
@@ -89,12 +90,22 @@ class _HelpdeskScreenState extends State<HelpdeskScreen> {
       final b = jsonDecode(utf8.decode(r.bodyBytes)) as Map<String, dynamic>;
       if (b['success'] == true) {
         final d = b['data'] as Map<String, dynamic>;
+        final subj = _subject.text.trim();
+        _subject.clear(); _body.clear();
+        if (mounted && d['ticket_id'] != null) {
+          Navigator.pushReplacement(context, MaterialPageRoute(
+              builder: (_) => HelpdeskConversationScreen(
+                    ticketId: d['ticket_id'] as int,
+                    ref: (d['number'] ?? '').toString(),
+                    subject: subj,
+                  )));
+          return;
+        }
         setState(() {
           _busy = false;
           _result = ar
-              ? 'تم إنشاء التذكرة #${d['number']} ❤️\nسيتواصل معك فريق الدعم قريباً.'
-              : 'Ticket #${d['number']} created.\nOur support team will reach out shortly.';
-          _subject.clear(); _body.clear();
+              ? 'تم إنشاء التذكرة #${d['number']} ❤️'
+              : 'Ticket #${d['number']} created.';
         });
       } else {
         setState(() {
