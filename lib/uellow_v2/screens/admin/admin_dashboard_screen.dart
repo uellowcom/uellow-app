@@ -17,6 +17,7 @@ import 'admin_orders_screen.dart';
 import 'admin_pos_screen.dart';
 import 'admin_products_screen.dart';
 import 'admin_purchase_screen.dart';
+import 'admin_notifications_screen.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
   const AdminDashboardScreen({super.key});
@@ -368,6 +369,11 @@ class _ManagementGrid extends StatelessWidget {
           const Color(0xFF0EA5E9),
           () => Navigator.push(context, MaterialPageRoute(
               builder: (_) => const AdminActivityScreen()))),
+      (Icons.campaign_rounded, ar ? 'الإشعارات' : 'Notifications',
+          ar ? 'إرسال Push + إحصائيات' : 'Send push + stats',
+          const Color(0xFFC2410C),
+          () => Navigator.push(context, MaterialPageRoute(
+              builder: (_) => const AdminNotificationsScreen()))),
     ];
     return Padding(
       padding: const EdgeInsets.fromLTRB(14, 8, 14, 0),

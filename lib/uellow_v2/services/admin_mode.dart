@@ -408,4 +408,51 @@ class AdminApi {
   Future<Map<String, dynamic>> purchaseUpdateLines(int id,
           Map<String, dynamic> body) =>
       _post('/api/mobile/v2/admin/purchase/$id/update-lines', body);
+
+  // ── Push Notifications (broadcast) ──────────────────────────────────
+  /// Form options (categories/audiences/segments/actions), audience reach
+  /// counts, and aggregate broadcast stats.
+  Future<Map<String, dynamic>> notifyMeta() async {
+    final r = await UellowApi.instance
+        .getRaw('/api/mobile/v2/admin/notify/meta', auth: true);
+    return ((r['data'] as Map?) ?? const {}).cast<String, dynamic>();
+  }
+
+  /// Estimate how many devices/customers a target would reach (no send).
+  Future<Map<String, dynamic>> notifyEstimate(Map<String, dynamic> body) =>
+      _post('/api/mobile/v2/admin/notify/estimate', body);
+
+  /// Create + send (or schedule) a broadcast with all options.
+  Future<Map<String, dynamic>> notifySend(Map<String, dynamic> body) =>
+      _post('/api/mobile/v2/admin/notify/send', body);
+
+  /// Paginated history of past broadcasts + per-broadcast stats.
+  Future<Map<String, dynamic>> notifyHistory(
+      {int page = 1, String state = '', String category = ''}) async {
+    final r = await UellowApi.instance.getRaw(
+        '/api/mobile/v2/admin/notify/history',
+        query: {
+          'page': '$page',
+          if (state.isNotEmpty) 'state': state,
+          if (category.isNotEmpty) 'category': category,
+        },
+        auth: true);
+    return ((r['data'] as Map?) ?? const {}).cast<String, dynamic>();
+  }
+
+  /// One broadcast detail + recipients + by-platform breakdown.
+  Future<Map<String, dynamic>> notifyDetail(int id) async {
+    final r = await UellowApi.instance
+        .getRaw('/api/mobile/v2/admin/notify/$id', auth: true);
+    return ((r['data'] as Map?) ?? const {}).cast<String, dynamic>();
+  }
+
+  /// Customer picker for 'specific' targeting (customers with a device).
+  Future<List<Map<String, dynamic>>> notifyCustomers({String q = ''}) async {
+    final r = await UellowApi.instance.getRaw(
+        '/api/mobile/v2/admin/notify/customers',
+        query: {if (q.isNotEmpty) 'q': q}, auth: true);
+    final list = ((r['data'] as Map?)?['items'] as List?) ?? const [];
+    return list.map((e) => (e as Map).cast<String, dynamic>()).toList();
+  }
 }
