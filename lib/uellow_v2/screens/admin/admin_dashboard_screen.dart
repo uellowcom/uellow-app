@@ -18,6 +18,7 @@ import 'admin_pos_screen.dart';
 import 'admin_products_screen.dart';
 import 'admin_purchase_screen.dart';
 import 'admin_notifications_screen.dart';
+import 'admin_gift_screen.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
   const AdminDashboardScreen({super.key});
@@ -374,6 +375,11 @@ class _ManagementGrid extends StatelessWidget {
           const Color(0xFFC2410C),
           () => Navigator.push(context, MaterialPageRoute(
               builder: (_) => const AdminNotificationsScreen()))),
+      (Icons.card_giftcard_rounded, ar ? 'خدمة الهدايا' : 'Gift Service',
+          ar ? 'الهدية المجانية والإعدادات' : 'Free gift & settings',
+          const Color(0xFFCA8A04),
+          () => Navigator.push(context, MaterialPageRoute(
+              builder: (_) => const AdminGiftScreen()))),
     ];
     return Padding(
       padding: const EdgeInsets.fromLTRB(14, 8, 14, 0),
