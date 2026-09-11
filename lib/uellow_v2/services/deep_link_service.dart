@@ -66,6 +66,11 @@ class DeepLinkService {
           builder: (_) => GroupLammaScreen(code: segs[2].toUpperCase())));
       return;
     }
+    // /c/<slug>  → premium campaign / brand page (WebView, native product taps)
+    if (segs.length >= 2 && segs[0] == 'c') {
+      nav.pushNamed(Routes.campaign, arguments: {'slug': segs[1]});
+      return;
+    }
     // Odoo eCommerce categories: /shop/category/<slug>-<id>
     // (checked BEFORE the product rule so a category isn't mistaken for a
     // product by its trailing id).

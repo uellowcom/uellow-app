@@ -250,6 +250,10 @@ class _UellowBottomNavState extends State<UellowBottomNav> {
         final id = int.tryParse(it.targetValue) ?? 0;
         if (id > 0) UellowRouter.goProduct(context, id);
         break;
+      case 'campaign':
+        UellowRouter.goCampaign(context,
+            slug: it.targetValue.isEmpty ? 'anker' : it.targetValue);
+        break;
       case 'category':
         final id = int.tryParse(it.targetValue) ?? 0;
         if (id > 0) UellowRouter.goCollection(context, id);

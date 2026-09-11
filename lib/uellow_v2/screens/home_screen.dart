@@ -210,6 +210,7 @@ class _HomeScreenState extends State<HomeScreen> {
           // v2.1.59 — personal strip for the customer's specialist
           // requests (pending → replied).
           const SliverToBoxAdapter(child: ReviewRequestsStrip()),
+          const SliverToBoxAdapter(child: _AnkerCampaignBanner()),
           SliverList.builder(
             itemCount: dyn.blocks.length,
             itemBuilder: (ctx, i) => RepaintBoundary(
@@ -1330,6 +1331,72 @@ class _ExploreMoreSliverState extends State<_ExploreMoreSliver> {
                   style: TextStyle(color: UellowColors.muted)))),
         ),
       ]),
+    );
+  }
+}
+
+// v2.2.115 — tappable Anker September-Sale banner → premium campaign WebView.
+class _AnkerCampaignBanner extends StatelessWidget {
+  const _AnkerCampaignBanner();
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 2),
+      child: GestureDetector(
+        onTap: () => UellowRouter.goCampaign(context, slug: 'anker'),
+        child: Container(
+          height: 92,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(20),
+            gradient: const LinearGradient(
+              colors: [Color(0xFF063D45), Color(0xFF00B2CA)],
+              begin: Alignment.centerLeft,
+              end: Alignment.centerRight,
+            ),
+            boxShadow: [
+              BoxShadow(
+                  color: Colors.black.withOpacity(0.12),
+                  blurRadius: 14,
+                  offset: const Offset(0, 6)),
+            ],
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 18),
+          child: Row(children: [
+            Expanded(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: const [
+                  Text('anker',
+                      style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 26,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.5)),
+                  SizedBox(height: 2),
+                  Text('عروض سبتمبر — حتى 55% خصم',
+                      style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700)),
+                ],
+              ),
+            ),
+            Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                  color: const Color(0xFFF5C320),
+                  borderRadius: BorderRadius.circular(12)),
+              child: const Text('تسوّق',
+                  style: TextStyle(
+                      color: Color(0xFF1A1400),
+                      fontWeight: FontWeight.w900,
+                      fontSize: 13)),
+            ),
+          ]),
+        ),
+      ),
     );
   }
 }

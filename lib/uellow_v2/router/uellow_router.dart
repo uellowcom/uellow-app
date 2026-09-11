@@ -49,6 +49,7 @@ import '../screens/free_shipping_screen.dart';
 import '../screens/delivery_coverage_screen.dart';
 import '../screens/admin/admin_dashboard_screen.dart';
 import '../screens/new_customer_screen.dart';
+import '../screens/campaign_screen.dart';
 
 // Shared route observer so screens (e.g. Reels) can pause heavy work when a
 // route is pushed on top of them and resume when it returns.
@@ -100,6 +101,7 @@ class Routes {
   static const deliveryCoverage = '/delivery-coverage'; // v2.1.1 — Shipping Pro lookup
   static const admin         = '/admin';     // v2.2.10 — 🛡️ owner console
   static const newCustomer   = '/new-customer'; // v2.2.11 — 🌟 first-order zone
+  static const campaign      = '/campaign';     // arg: slug — premium WebView page
 }
 
 class UellowRouter {
@@ -279,9 +281,20 @@ class UellowRouter {
           settings: settings,
           builder: (_) => DynamicPageScreen(slug: slug),
         );
+      case Routes.campaign:
+        final cslug = (settings.arguments as Map?)?['slug'] as String? ?? 'anker';
+        return MaterialPageRoute(
+          settings: settings,
+          builder: (_) => CampaignScreen(slug: cslug),
+        );
     }
     return null;
   }
+
+  /// Open a premium campaign / brand page (server-rendered) in a WebView,
+  /// with native product taps.
+  static void goCampaign(BuildContext context, {String slug = 'anker'}) =>
+      Navigator.of(context).pushNamed(Routes.campaign, arguments: {'slug': slug});
 
   static void goDynPage(BuildContext context, String slug) =>
       Navigator.of(context).pushNamed(Routes.dynPage, arguments: {'slug': slug});
@@ -331,7 +344,13 @@ class UellowRouter {
         if (title != null) 'title': title,
       });
 
-  static void goBrand(BuildContext context, int brandValueId, String name) =>
-      Navigator.of(context).pushNamed(Routes.collection,
-          arguments: {'brand_value_id': brandValueId, 'brand_name': name});
+  static void goBrand(BuildContext context, int brandValueId, String name) {
+    // Anker gets the premium campaign page instead of the plain collection.
+    if (name.trim().toLowerCase() == 'anker') {
+      goCampaign(context, slug: 'anker');
+      return;
+    }
+    Navigator.of(context).pushNamed(Routes.collection,
+        arguments: {'brand_value_id': brandValueId, 'brand_name': name});
+  }
 }
