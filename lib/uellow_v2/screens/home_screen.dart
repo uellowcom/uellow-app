@@ -9,6 +9,7 @@
 //   • Hero slider · features chips · category icons · flash · product rails
 // =============================================================================
 import 'dart:async';
+import 'dart:io' show Platform;
 import 'dart:convert';
 
 import 'package:cached_network_image/cached_network_image.dart';
@@ -56,6 +57,10 @@ class _HomeScreenState extends State<HomeScreen> {
       // (shows only when a delivered order has unreviewed items).
       Future.delayed(const Duration(seconds: 3), () {
         if (mounted) ReviewPromptService.maybeShow(context);
+      });
+      // v2.2.116 — «هدية يلو» launch popup (once/day) if the user is eligible.
+      Future.delayed(const Duration(milliseconds: 1400), () {
+        if (mounted) _maybeShowGift();
       });
     });
     // v2.1.29 — warm the wishlist cache so card hearts render red.
@@ -167,6 +172,85 @@ class _HomeScreenState extends State<HomeScreen> {
       if (fresh != null) _dyn = fresh;
       _settled = true;
     });
+  }
+
+  // v2.2.116 — «هدية يلو»: show the free-gift launch popup once/day if eligible.
+  Future<void> _maybeShowGift() async {
+    try {
+      final plat = Platform.isIOS ? 'ios' : (Platform.isAndroid ? 'android' : 'web');
+      final o = await UellowApi.instance.gift.offer(platform: plat);
+      if (o['show'] != true || o['show_popup'] != true) return;
+      final prefs = await SharedPreferences.getInstance();
+      final key = 'gift_popup_' + DateTime.now().toIso8601String().substring(0, 10);
+      if (prefs.getBool(key) == true) return;
+      await prefs.setBool(key, true);
+      if (!mounted) return;
+      _showGiftDialog(o);
+    } catch (_) {}
+  }
+
+  void _showGiftDialog(Map<String, dynamic> o) {
+    final ar = UellowApi.instance.lang == 'ar';
+    final title = (o['title'] as String?) ??
+        (ar ? 'لديك هديّة مجّانيّة!' : 'You have a free gift!');
+    final sub = (o['subtitle'] as String?) ?? '';
+    final cta = (o['cta'] as String?) ?? (ar ? '🎉 اختر هديّتك' : '🎉 Choose your gift');
+    showDialog(
+      context: context,
+      barrierColor: Colors.black.withOpacity(0.62),
+      builder: (dctx) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 26),
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(22, 24, 22, 22),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(24),
+            gradient: const LinearGradient(
+                begin: Alignment.topCenter, end: Alignment.bottomCenter,
+                colors: [Color(0xFFFFE68A), Color(0xFFF5C320), Color(0xFFE09800)]),
+            boxShadow: [BoxShadow(color: Colors.black.withOpacity(.3),
+                blurRadius: 30, offset: const Offset(0, 12))],
+          ),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            Align(
+              alignment: ar ? Alignment.topLeft : Alignment.topRight,
+              child: GestureDetector(
+                onTap: () => Navigator.of(dctx).pop(),
+                child: const Icon(Icons.close, color: Color(0xFF5A3F00), size: 22)),
+            ),
+            const Text('🎁', style: TextStyle(fontSize: 72)),
+            const SizedBox(height: 8),
+            Text(title, textAlign: TextAlign.center,
+                style: const TextStyle(color: Color(0xFF241A00),
+                    fontSize: 22, fontWeight: FontWeight.w900)),
+            if (sub.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text(sub, textAlign: TextAlign.center,
+                  style: const TextStyle(color: Color(0xFF5A3F00),
+                      fontSize: 13, fontWeight: FontWeight.w600)),
+            ],
+            const SizedBox(height: 18),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: () {
+                  Navigator.of(dctx).pop();
+                  UellowRouter.goGift(context);
+                },
+                style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF241804),
+                    foregroundColor: const Color(0xFFF5C320),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14))),
+                child: Text(cta, style: const TextStyle(
+                    fontSize: 15, fontWeight: FontWeight.w900)),
+              ),
+            ),
+          ]),
+        ),
+      ),
+    );
   }
 
   @override

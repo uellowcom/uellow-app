@@ -50,6 +50,7 @@ import '../screens/delivery_coverage_screen.dart';
 import '../screens/admin/admin_dashboard_screen.dart';
 import '../screens/new_customer_screen.dart';
 import '../screens/campaign_screen.dart';
+import '../screens/gift_screen.dart';
 
 // Shared route observer so screens (e.g. Reels) can pause heavy work when a
 // route is pushed on top of them and resume when it returns.
@@ -102,6 +103,7 @@ class Routes {
   static const admin         = '/admin';     // v2.2.10 — 🛡️ owner console
   static const newCustomer   = '/new-customer'; // v2.2.11 — 🌟 first-order zone
   static const campaign      = '/campaign';     // arg: slug — premium WebView page
+  static const gift          = '/gift-zone';    // «هدية يلو» free-gift zone (WebView)
 }
 
 class UellowRouter {
@@ -114,6 +116,7 @@ class UellowRouter {
     Routes.auth:          (ctx) => const AuthScreen(),
     Routes.home:          (ctx) => const HomeScreen(),
     Routes.cart:          (ctx) => const CartScreen(),
+    Routes.gift:          (ctx) => const GiftScreen(),
     Routes.checkout:      (ctx) {
       // Selective checkout: cart passes {'line_ids': [..]} to pay for
       // only the selected lines.
@@ -293,6 +296,9 @@ class UellowRouter {
 
   /// Open a premium campaign / brand page (server-rendered) in a WebView,
   /// with native product taps.
+  static void goGift(BuildContext context) =>
+      Navigator.of(context).pushNamed(Routes.gift);
+
   static void goCampaign(BuildContext context, {String slug = 'anker'}) =>
       Navigator.of(context).pushNamed(Routes.campaign, arguments: {'slug': slug});
 

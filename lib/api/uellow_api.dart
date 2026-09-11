@@ -99,6 +99,7 @@ class UellowApi {
     announcements = _AnnouncementsApi(this);
     affiliate     = _AffiliateApi(this);
     cart          = _CartApi(this);
+    gift          = _GiftApi(this);
     orders        = _OrdersApi(this);
     addresses     = _AddressesApi(this);
     wishlist      = _WishlistApi(this);
@@ -210,6 +211,7 @@ class UellowApi {
   late final _AnnouncementsApi announcements;
   late final _AffiliateApi affiliate;
   late final _CartApi cart;
+  late final _GiftApi gift;
   late final _OrdersApi orders;
   late final _AddressesApi addresses;
   late final _WishlistApi wishlist;
@@ -917,6 +919,35 @@ class _CategoriesApi {
     final res = await _c._get('/api/mobile/v2/brands');
     return List<Map<String, dynamic>>.from(
         (res['data']?['brands'] as List?) ?? const []);
+  }
+}
+
+/// Free-gift service (هدية يلو): what to show + add the chosen gift to cart.
+class _GiftApi {
+  _GiftApi(this._c);
+  final UellowApi _c;
+
+  /// The offer to show this user right now (or {show:false}).
+  Future<Map<String, dynamic>> offer({String? country, String? platform}) async {
+    final res = await _c._get('/api/mobile/v2/gift/offer', query: {
+      if (country != null && country.isNotEmpty) 'country': country,
+      if (platform != null && platform.isNotEmpty) 'platform': platform,
+      'lang': _c.lang,
+    });
+    return (res['data'] as Map?)?.cast<String, dynamic>() ?? {'show': false};
+  }
+
+  /// Add the chosen free gift (price 0) to the current cart. Returns the
+  /// gate state {has_gift, paid_count, gate_open, min_order_amount, ...}.
+  Future<Map<String, dynamic>> add(int variantId) async {
+    final res = await _c._post('/api/mobile/v2/gift/add',
+        body: {'variant_id': variantId});
+    final data = (res['data'] as Map?)?.cast<String, dynamic>() ?? {};
+    final tok = data['cart_token'] as String?;
+    if (tok != null && tok.isNotEmpty) {
+      await _c.tokenStore.writeCartToken(tok);
+    }
+    return data;
   }
 }
 
