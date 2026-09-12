@@ -11,6 +11,7 @@ import '../../../api/uellow_api.dart';
 import '../../services/admin_mode.dart';
 import '../../theme/uellow_theme.dart';
 import 'admin_product_sheet.dart';
+import 'admin_product_create_screen.dart';
 
 class AdminProductsScreen extends StatefulWidget {
   const AdminProductsScreen({super.key});
@@ -79,6 +80,18 @@ class _AdminProductsScreenState extends State<AdminProductsScreen> {
             '${_total > 0 ? ' ($_total)' : ''}',
             style: const TextStyle(fontSize: 16,
                 fontWeight: FontWeight.w900, color: UellowColors.yellow)),
+        actions: [
+          IconButton(
+            tooltip: (UellowApi.instance.lang == 'ar') ? 'منتج جديد' : 'New product',
+            icon: const Icon(Icons.add_circle_outline),
+            onPressed: () async {
+              final created = await Navigator.of(context).push<bool>(
+                  MaterialPageRoute(
+                      builder: (_) => const AdminProductCreateScreen()));
+              if (created == true) _load(reset: true);
+            },
+          ),
+        ],
       ),
       body: Column(children: [
         Container(

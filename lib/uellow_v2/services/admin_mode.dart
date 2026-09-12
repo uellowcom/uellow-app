@@ -178,6 +178,23 @@ class AdminApi {
     return list.map((e) => (e as Map).cast<String, dynamic>()).toList();
   }
 
+  // ── new product: metadata for pickers + create ───────────────────────
+  Future<Map<String, dynamic>> productMeta() async {
+    final r = await UellowApi.instance
+        .getRaw('/api/mobile/v2/admin/product/meta', auth: true);
+    return (r['data'] as Map).cast<String, dynamic>();
+  }
+
+  Future<Map<String, dynamic>> productCreate(Map<String, dynamic> body) async {
+    final r = await UellowApi.instance
+        .postRaw('/api/mobile/v2/admin/product/create', body: body, auth: true);
+    if (r['success'] != true) {
+      throw Exception(
+          (r['error'] ?? r['code'] ?? 'create failed').toString());
+    }
+    return (r['data'] as Map).cast<String, dynamic>();
+  }
+
   Future<Map<String, dynamic>> _post(String path,
       [Map<String, dynamic>? body]) async {
     final r = await UellowApi.instance
