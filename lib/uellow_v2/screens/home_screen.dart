@@ -282,6 +282,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
   // ── Dynamic body — top bar + dynamic blocks from /api/mobile/v2/pages/home
   Widget _buildDynamic(BuildContext context, _DynHome dyn) {
+    final _flashIdx = dyn.blocks.indexWhere(
+        (b) => (b['kind']?.toString() ?? '') == 'flash');
+    final _ankerAnchor = _flashIdx >= 0 ? _flashIdx : dyn.blocks.length - 1;
     return Container(
       color: dyn.theme.pageBg,
       child: CustomScrollView(
@@ -294,14 +297,20 @@ class _HomeScreenState extends State<HomeScreen> {
           // v2.1.59 — personal strip for the customer's specialist
           // requests (pending → replied).
           const SliverToBoxAdapter(child: ReviewRequestsStrip()),
-          const SliverToBoxAdapter(child: _AnkerCampaignBanner()),
           SliverList.builder(
             itemCount: dyn.blocks.length,
-            itemBuilder: (ctx, i) => RepaintBoundary(
-              child: renderDynamicBlock(ctx, dyn.blocks[i], dyn.theme),
-            ),
+            itemBuilder: (ctx, i) {
+              final block = RepaintBoundary(
+                child: renderDynamicBlock(ctx, dyn.blocks[i], dyn.theme),
+              );
+              if (i == _ankerAnchor) {
+                return Column(
+                    children: [block, const _AnkerCampaignBanner()]);
+              }
+              return block;
+            },
             addAutomaticKeepAlives: false,
-            addRepaintBoundaries: false, // we add it manually for tighter control
+            addRepaintBoundaries: false,
           ),
           const SliverToBoxAdapter(child: SizedBox(height: 80)),
         ],
@@ -1419,68 +1428,192 @@ class _ExploreMoreSliverState extends State<_ExploreMoreSliver> {
   }
 }
 
-// v2.2.115 — tappable Anker September-Sale banner → premium campaign WebView.
-class _AnkerCampaignBanner extends StatelessWidget {
+// v2.2.120 — premium animated Anker banner: real Anker logo, gradient,
+// shimmer sweep, pulsing CTA. Tap → premium /c/anker campaign.
+class _AnkerCampaignBanner extends StatefulWidget {
   const _AnkerCampaignBanner();
   @override
+  State<_AnkerCampaignBanner> createState() => _AnkerCampaignBannerState();
+}
+
+class _AnkerCampaignBannerState extends State<_AnkerCampaignBanner>
+    with TickerProviderStateMixin {
+  late final AnimationController _shimmer = AnimationController(
+      vsync: this, duration: const Duration(milliseconds: 2600))
+    ..repeat();
+  late final AnimationController _pulse = AnimationController(
+      vsync: this, duration: const Duration(milliseconds: 1150))
+    ..repeat(reverse: true);
+
+  @override
+  void dispose() {
+    _shimmer.dispose();
+    _pulse.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final ar = UellowApi.instance.lang == 'ar';
+    final logo =
+        '${UellowApi.instance.baseUrl}/uellow_theme/static/src/m/anker_logo.png';
     return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 2),
+      padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
       child: GestureDetector(
         onTap: () => UellowRouter.goCampaign(context, slug: 'anker'),
-        child: Container(
-          height: 92,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(20),
-            gradient: const LinearGradient(
-              colors: [Color(0xFF063D45), Color(0xFF00B2CA)],
-              begin: Alignment.centerLeft,
-              end: Alignment.centerRight,
-            ),
-            boxShadow: [
-              BoxShadow(
-                  color: Colors.black.withOpacity(0.12),
-                  blurRadius: 14,
-                  offset: const Offset(0, 6)),
-            ],
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: 18),
-          child: Row(children: [
-            Expanded(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: const [
-                  Text('anker',
-                      style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 26,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 0.5)),
-                  SizedBox(height: 2),
-                  Text('عروض سبتمبر — حتى 55% خصم',
-                      style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700)),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(22),
+          child: Container(
+            height: 112,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(22),
+              gradient: const LinearGradient(
+                colors: [
+                  Color(0xFF00263F),
+                  Color(0xFF0072A8),
+                  Color(0xFF00B4E6)
                 ],
+                begin: Alignment.centerRight,
+                end: Alignment.centerLeft,
               ),
+              boxShadow: [
+                BoxShadow(
+                    color: const Color(0xFF00A0E9).withValues(alpha: 0.35),
+                    blurRadius: 18,
+                    offset: const Offset(0, 8)),
+              ],
             ),
-            Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
-                  color: const Color(0xFFF5C320),
-                  borderRadius: BorderRadius.circular(12)),
-              child: const Text('تسوّق',
-                  style: TextStyle(
-                      color: Color(0xFF1A1400),
-                      fontWeight: FontWeight.w900,
-                      fontSize: 13)),
-            ),
-          ]),
+            child: Stack(children: [
+              // soft decorative glow
+              Positioned(
+                top: -34,
+                right: -18,
+                child: Container(
+                  width: 130,
+                  height: 130,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Colors.white.withValues(alpha: 0.08),
+                  ),
+                ),
+              ),
+              // shimmer sweep
+              AnimatedBuilder(
+                animation: _shimmer,
+                builder: (_, __) {
+                  final w = MediaQuery.of(context).size.width;
+                  final dx = -w + _shimmer.value * (w * 2);
+                  return Positioned(
+                    top: 0,
+                    bottom: 0,
+                    left: dx,
+                    child: Transform.rotate(
+                      angle: 0.35,
+                      child: Container(
+                        width: 90,
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.centerLeft,
+                            end: Alignment.centerRight,
+                            colors: [
+                              Colors.white.withValues(alpha: 0.0),
+                              Colors.white.withValues(alpha: 0.18),
+                              Colors.white.withValues(alpha: 0.0),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+              // content
+              Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                child: Row(children: [
+                  Expanded(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // white logo chip
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 5),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: CachedNetworkImage(
+                            imageUrl: logo,
+                            height: 16,
+                            fit: BoxFit.contain,
+                            errorWidget: (_, __, ___) => const Text('anker',
+                                style: TextStyle(
+                                    color: Color(0xFF00A0E9),
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w900)),
+                          ),
+                        ),
+                        const SizedBox(height: 7),
+                        Text(ar ? 'عروض سبتمبر' : 'September Sale',
+                            style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 17,
+                                fontWeight: FontWeight.w900,
+                                height: 1.05)),
+                        const SizedBox(height: 2),
+                        Text(ar ? 'خصومات تصل إلى 55%' : 'Up to 55% off',
+                            style: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.9),
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700)),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  // pulsing CTA
+                  ScaleTransition(
+                    scale: Tween(begin: 1.0, end: 1.06).animate(
+                        CurvedAnimation(
+                            parent: _pulse, curve: Curves.easeInOut)),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF5C320),
+                        borderRadius: BorderRadius.circular(14),
+                        boxShadow: [
+                          BoxShadow(
+                              color: const Color(0xFFF5C320)
+                                  .withValues(alpha: 0.5),
+                              blurRadius: 12,
+                              offset: const Offset(0, 4)),
+                        ],
+                      ),
+                      child: Row(mainAxisSize: MainAxisSize.min, children: [
+                        Text(ar ? 'تسوّق الآن' : 'Shop now',
+                            style: const TextStyle(
+                                color: Color(0xFF1A1400),
+                                fontWeight: FontWeight.w900,
+                                fontSize: 13)),
+                        const SizedBox(width: 3),
+                        Transform.flip(
+                          flipX: ar,
+                          child: const Icon(Icons.chevron_right,
+                              size: 18, color: Color(0xFF1A1400)),
+                        ),
+                      ]),
+                    ),
+                  ),
+                ]),
+              ),
+            ]),
+          ),
         ),
       ),
     );
   }
 }
+
