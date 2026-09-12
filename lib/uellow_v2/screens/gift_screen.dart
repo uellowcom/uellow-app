@@ -63,9 +63,11 @@ class _GiftScreenState extends State<GiftScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text(ar
-              ? '✓ أُضيفت هديّتك — أضف منتجًا لإتمام الطلب'
+              ? '✓ أُضيفت هديّتك 🎁 — تابِع التسوّق وأضف منتجًا لإتمام الطلب'
               : '✓ Gift added — add a product to complete')));
-      Navigator.of(context).pushReplacementNamed(Routes.cart);
+      // v2.2.121 — after adding the gift, return HOME to keep shopping.
+      Navigator.of(context)
+          .pushNamedAndRemoveUntil(Routes.home, (r) => false);
     } catch (e) {
       _adding = false;
       if (mounted) {

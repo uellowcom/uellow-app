@@ -11,6 +11,7 @@
 import 'dart:async';
 import 'dart:io' show Platform;
 import 'dart:convert';
+import 'dart:math' as math;
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
@@ -194,61 +195,16 @@ class _HomeScreenState extends State<HomeScreen> {
     final title = (o['title'] as String?) ??
         (ar ? 'لديك هديّة مجّانيّة!' : 'You have a free gift!');
     final sub = (o['subtitle'] as String?) ?? '';
-    final cta = (o['cta'] as String?) ?? (ar ? '🎉 اختر هديّتك' : '🎉 Choose your gift');
+    final cta =
+        (o['cta'] as String?) ?? (ar ? '🎉 اختر هديّتك' : '🎉 Choose your gift');
     showDialog(
       context: context,
-      barrierColor: Colors.black.withOpacity(0.62),
-      builder: (dctx) => Dialog(
-        backgroundColor: Colors.transparent,
-        insetPadding: const EdgeInsets.symmetric(horizontal: 26),
-        child: Container(
-          padding: const EdgeInsets.fromLTRB(22, 24, 22, 22),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(24),
-            gradient: const LinearGradient(
-                begin: Alignment.topCenter, end: Alignment.bottomCenter,
-                colors: [Color(0xFFFFE68A), Color(0xFFF5C320), Color(0xFFE09800)]),
-            boxShadow: [BoxShadow(color: Colors.black.withOpacity(.3),
-                blurRadius: 30, offset: const Offset(0, 12))],
-          ),
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            Align(
-              alignment: ar ? Alignment.topLeft : Alignment.topRight,
-              child: GestureDetector(
-                onTap: () => Navigator.of(dctx).pop(),
-                child: const Icon(Icons.close, color: Color(0xFF5A3F00), size: 22)),
-            ),
-            const Text('🎁', style: TextStyle(fontSize: 72)),
-            const SizedBox(height: 8),
-            Text(title, textAlign: TextAlign.center,
-                style: const TextStyle(color: Color(0xFF241A00),
-                    fontSize: 22, fontWeight: FontWeight.w900)),
-            if (sub.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              Text(sub, textAlign: TextAlign.center,
-                  style: const TextStyle(color: Color(0xFF5A3F00),
-                      fontSize: 13, fontWeight: FontWeight.w600)),
-            ],
-            const SizedBox(height: 18),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: () {
-                  Navigator.of(dctx).pop();
-                  UellowRouter.goGift(context);
-                },
-                style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF241804),
-                    foregroundColor: const Color(0xFFF5C320),
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14))),
-                child: Text(cta, style: const TextStyle(
-                    fontSize: 15, fontWeight: FontWeight.w900)),
-              ),
-            ),
-          ]),
-        ),
+      barrierColor: Colors.black.withValues(alpha: 0.66),
+      builder: (dctx) => _GiftDialogContent(
+        title: title,
+        sub: sub,
+        cta: cta,
+        onOpen: () => UellowRouter.goGift(context),
       ),
     );
   }
@@ -1617,3 +1573,261 @@ class _AnkerCampaignBannerState extends State<_AnkerCampaignBanner>
   }
 }
 
+// v2.2.121 — premium, colorful, animated free-gift launch popup.
+class _GiftDialogContent extends StatefulWidget {
+  const _GiftDialogContent(
+      {required this.title,
+      required this.sub,
+      required this.cta,
+      required this.onOpen});
+  final String title;
+  final String sub;
+  final String cta;
+  final VoidCallback onOpen;
+  @override
+  State<_GiftDialogContent> createState() => _GiftDialogContentState();
+}
+
+class _GiftDialogContentState extends State<_GiftDialogContent>
+    with TickerProviderStateMixin {
+  late final AnimationController _loop =
+      AnimationController(vsync: this, duration: const Duration(seconds: 3))
+        ..repeat();
+  late final AnimationController _in = AnimationController(
+      vsync: this, duration: const Duration(milliseconds: 640))
+    ..forward();
+
+  // [leftFraction, colorPhase, colorHex, size]
+  static const List<List<num>> _confetti = [
+    [0.06, 0.10, 0xFFFFD166, 7],
+    [0.20, 0.55, 0xFF06D6A0, 6],
+    [0.33, 0.25, 0xFFEF476F, 8],
+    [0.48, 0.72, 0xFFFFFFFF, 6],
+    [0.61, 0.15, 0xFF4CC9F0, 7],
+    [0.74, 0.48, 0xFFFFD166, 6],
+    [0.87, 0.30, 0xFFB5179E, 8],
+    [0.14, 0.82, 0xFF4CC9F0, 6],
+    [0.92, 0.66, 0xFF06D6A0, 7],
+    [0.41, 0.03, 0xFFFFFFFF, 5],
+  ];
+
+  @override
+  void dispose() {
+    _loop.dispose();
+    _in.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ar = UellowApi.instance.lang == 'ar';
+    final heroW = MediaQuery.of(context).size.width - 64;
+    return FadeTransition(
+      opacity: _in,
+      child: ScaleTransition(
+        scale: CurvedAnimation(parent: _in, curve: Curves.elasticOut)
+            .drive(Tween(begin: 0.78, end: 1.0)),
+        child: Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: const EdgeInsets.symmetric(horizontal: 24),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(28),
+            child: Container(
+              color: Colors.white,
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                // ── colorful hero ──
+                SizedBox(
+                  height: 190,
+                  child: Stack(children: [
+                    const Positioned.fill(
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                            colors: [
+                              Color(0xFF7C3AED),
+                              Color(0xFFEC4899),
+                              Color(0xFFFB923C),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                    // falling confetti
+                    AnimatedBuilder(
+                      animation: _loop,
+                      builder: (_, __) => Stack(
+                        children: _confetti.map((c) {
+                          final t = (_loop.value + c[1].toDouble()) % 1.0;
+                          return Positioned(
+                            left: c[0].toDouble() * heroW,
+                            top: 6 + t * 156,
+                            child: Transform.rotate(
+                              angle: t * 6.28,
+                              child: Container(
+                                width: c[3].toDouble(),
+                                height: c[3].toDouble() * 1.7,
+                                decoration: BoxDecoration(
+                                  color: Color(c[2].toInt())
+                                      .withValues(alpha: 0.92),
+                                  borderRadius: BorderRadius.circular(2),
+                                ),
+                              ),
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    ),
+                    // gift + glowing halo (gentle bob)
+                    Center(
+                      child: AnimatedBuilder(
+                        animation: _loop,
+                        builder: (_, child) {
+                          final dy = math.sin(_loop.value * 2 * math.pi) * 6;
+                          return Transform.translate(
+                              offset: Offset(0, dy), child: child);
+                        },
+                        child: Container(
+                          width: 120,
+                          height: 120,
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            gradient: RadialGradient(colors: [
+                              Colors.white.withValues(alpha: 0.55),
+                              Colors.white.withValues(alpha: 0.0),
+                            ]),
+                          ),
+                          child: const Text('🎁',
+                              style: TextStyle(fontSize: 78)),
+                        ),
+                      ),
+                    ),
+                    // free-gift badge
+                    Positioned(
+                      top: 14,
+                      left: 14,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 11, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(999),
+                          boxShadow: [
+                            BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.12),
+                                blurRadius: 6,
+                                offset: const Offset(0, 2)),
+                          ],
+                        ),
+                        child: Text(ar ? '🎁 هدية مجانية' : '🎁 Free gift',
+                            style: const TextStyle(
+                                color: Color(0xFFEC4899),
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w900)),
+                      ),
+                    ),
+                    // close
+                    Positioned(
+                      top: 10,
+                      right: 10,
+                      child: GestureDetector(
+                        onTap: () => Navigator.of(context).pop(),
+                        child: Container(
+                          width: 30,
+                          height: 30,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: Colors.black.withValues(alpha: 0.22),
+                          ),
+                          child: const Icon(Icons.close,
+                              color: Colors.white, size: 18),
+                        ),
+                      ),
+                    ),
+                  ]),
+                ),
+                // ── body ──
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(22, 18, 22, 16),
+                  child: Column(mainAxisSize: MainAxisSize.min, children: [
+                    Text(widget.title,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                            color: Color(0xFF1A1330),
+                            fontSize: 21,
+                            fontWeight: FontWeight.w900,
+                            height: 1.2)),
+                    if (widget.sub.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      Text(widget.sub,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                              color: Color(0xFF6B6480),
+                              fontSize: 13.5,
+                              fontWeight: FontWeight.w600,
+                              height: 1.4)),
+                    ],
+                    const SizedBox(height: 18),
+                    // pulsing gradient CTA
+                    AnimatedBuilder(
+                      animation: _loop,
+                      builder: (_, child) {
+                        final s = 1 + (math.sin(_loop.value * 2 * math.pi) * 0.02);
+                        return Transform.scale(scale: s, child: child);
+                      },
+                      child: SizedBox(
+                        width: double.infinity,
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(16),
+                            gradient: const LinearGradient(colors: [
+                              Color(0xFFF5C320),
+                              Color(0xFFFF8A00),
+                            ]),
+                            boxShadow: [
+                              BoxShadow(
+                                  color: const Color(0xFFFF8A00)
+                                      .withValues(alpha: 0.42),
+                                  blurRadius: 16,
+                                  offset: const Offset(0, 6)),
+                            ],
+                          ),
+                          child: TextButton(
+                            onPressed: () {
+                              Navigator.of(context).pop();
+                              widget.onOpen();
+                            },
+                            style: TextButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 15),
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(16)),
+                            ),
+                            child: Text(widget.cta,
+                                style: const TextStyle(
+                                    color: Color(0xFF3A1D00),
+                                    fontSize: 15.5,
+                                    fontWeight: FontWeight.w900)),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    TextButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      child: Text(ar ? 'لاحقًا' : 'Maybe later',
+                          style: const TextStyle(
+                              color: Color(0xFF9A93AD),
+                              fontWeight: FontWeight.w700)),
+                    ),
+                  ]),
+                ),
+              ]),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
