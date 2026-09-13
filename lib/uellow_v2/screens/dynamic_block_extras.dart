@@ -3359,6 +3359,7 @@ class _SliderBlockState extends State<SliderBlock> {
   void didUpdateWidget(SliderBlock old) {
     super.didUpdateWidget(old);
     _filterSlides();
+    _maybeStartAuto(); // restart rotation when slides change
   }
 
   void _filterSlides() {

@@ -1498,17 +1498,17 @@ class _AnkerCampaignBannerState extends State<_AnkerCampaignBanner>
                           padding: const EdgeInsets.symmetric(
                               horizontal: 10, vertical: 5),
                           decoration: BoxDecoration(
-                            color: Colors.white,
+                            color: Colors.black.withValues(alpha: 0.22),
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: CachedNetworkImage(
                             imageUrl: logo,
-                            height: 16,
+                            height: 20,
                             fit: BoxFit.contain,
                             errorWidget: (_, __, ___) => const Text('anker',
                                 style: TextStyle(
-                                    color: Color(0xFF00A0E9),
-                                    fontSize: 16,
+                                    color: Colors.white,
+                                    fontSize: 18,
                                     fontWeight: FontWeight.w900)),
                           ),
                         ),
