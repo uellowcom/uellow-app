@@ -555,6 +555,11 @@ class _CartScreenState extends State<CartScreen> {
               onCheckout: _selected.isEmpty ? null : _checkoutSelected,
             );
           }
+          // v2.2.123 — SAFETY: block checkout when the cart holds ONLY a free
+          // gift (no paid item) — switch the button to "continue shopping".
+          final hasGift = c.lines.any((l) => l.isGift);
+          final hasPaid = c.lines.any((l) => !l.isGift);
+          if (hasGift && !hasPaid) return const _GiftOnlyBar();
           return _CheckoutCta(total: c.totals.total);
         },
       ),
@@ -665,12 +670,19 @@ class _LineCard extends StatelessWidget {
           onTap: selectMode
               ? onSelectToggle
               : () => UellowRouter.goProduct(context, line.productId),
-          child: ClipRRect(
-            borderRadius: const BorderRadius.all(Radius.circular(10)),
-            child: CachedNetworkImage(
-              imageUrl: line.image, width: 84, height: 84, fit: BoxFit.cover,
-              placeholder: (_, __) => Container(color: UellowColors.border, width: 84, height: 84),
-            ),
+          child: SizedBox(
+            width: 84, height: 84,
+            child: Stack(clipBehavior: Clip.none, children: [
+              ClipRRect(
+                borderRadius: const BorderRadius.all(Radius.circular(10)),
+                child: CachedNetworkImage(
+                  imageUrl: line.image, width: 84, height: 84, fit: BoxFit.cover,
+                  placeholder: (_, __) => Container(color: UellowColors.border, width: 84, height: 84),
+                ),
+              ),
+              if (line.isGift)
+                const PositionedDirectional(top: 5, start: 5, child: _GiftTag()),
+            ]),
           ),
         ),
         const SizedBox(width: 12),
@@ -1510,4 +1522,136 @@ class _ErrorPane extends StatelessWidget {
   final VoidCallback onRetry;
   @override
   Widget build(BuildContext context) => UpdatingPane(onRetry: onRetry);
+}
+
+// v2.2.123 — animated green "Gift" tag overlaid on the free-gift thumbnail.
+class _GiftTag extends StatefulWidget {
+  const _GiftTag();
+  @override
+  State<_GiftTag> createState() => _GiftTagState();
+}
+
+class _GiftTagState extends State<_GiftTag>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _c = AnimationController(
+      vsync: this, duration: const Duration(milliseconds: 1200))
+    ..repeat(reverse: true);
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ar = UellowApi.instance.lang == 'ar';
+    return AnimatedBuilder(
+      animation: _c,
+      builder: (_, __) {
+        final g = 0.5 + _c.value * 0.5;
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+                colors: [Color(0xFF12B76A), Color(0xFF0E8A6A)]),
+            borderRadius: BorderRadius.circular(8),
+            boxShadow: [
+              BoxShadow(
+                  color: const Color(0xFF12B76A).withValues(alpha: 0.55 * g),
+                  blurRadius: 8 * g,
+                  spreadRadius: 0.5),
+            ],
+          ),
+          child: Text(ar ? '🎁 هدية' : '🎁 Gift',
+              style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 9.5,
+                  fontWeight: FontWeight.w900,
+                  height: 1.0)),
+        );
+      },
+    );
+  }
+}
+
+// v2.2.123 — replaces the checkout button when the cart holds ONLY a gift.
+class _GiftOnlyBar extends StatelessWidget {
+  const _GiftOnlyBar();
+  @override
+  Widget build(BuildContext context) {
+    final ar = UellowApi.instance.lang == 'ar';
+    return Container(
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        border: Border(top: BorderSide(color: UellowColors.border)),
+        boxShadow: [
+          BoxShadow(
+              color: Color(0x14000000), blurRadius: 10, offset: Offset(0, -2))
+        ],
+      ),
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            Row(children: [
+              const Text('🎁', style: TextStyle(fontSize: 20)),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                    ar
+                        ? 'أضِف منتجًا واحدًا لإتمام طلبك — الهديّة مجّانيّة معه'
+                        : 'Add one product to complete your order — the gift is free with it',
+                    style: const TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w700,
+                        color: UellowColors.ink,
+                        height: 1.35)),
+              ),
+            ]),
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                      colors: [Color(0xFF12B76A), Color(0xFF0E8A6A)]),
+                  borderRadius: BorderRadius.circular(14),
+                  boxShadow: [
+                    BoxShadow(
+                        color: const Color(0xFF12B76A).withValues(alpha: 0.4),
+                        blurRadius: 14,
+                        offset: const Offset(0, 5)),
+                  ],
+                ),
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(14),
+                    onTap: () => Navigator.of(context)
+                        .pushNamedAndRemoveUntil(Routes.home, (r) => false),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 15),
+                      child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(Icons.storefront,
+                                color: Colors.white, size: 19),
+                            const SizedBox(width: 8),
+                            Text(ar ? '🛍️ متابعة التسوّق' : '🛍️ Continue shopping',
+                                style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w900)),
+                          ]),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ]),
+        ),
+      ),
+    );
+  }
 }
