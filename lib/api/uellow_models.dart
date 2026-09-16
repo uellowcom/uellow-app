@@ -1163,12 +1163,20 @@ class UellowSearchResult {
   final List<Map<String, dynamic>> brands;
   final List<Map<String, dynamic>> vendors;
   final List<String> suggestions;
+  final int page;
+  final int perPage;
+  final int total;
+  final int pages;
+  final bool hasNext;
   const UellowSearchResult({
     required this.products, required this.categories, required this.suggestions,
     this.brands = const [], this.vendors = const [],
+    this.page = 1, this.perPage = 20, this.total = 0, this.pages = 1,
+    this.hasNext = false,
   });
   factory UellowSearchResult.fromJson(Map<String, dynamic> env) {
     final d = env['data'] as Map<String, dynamic>;
+    final meta = (env['meta'] as Map<String, dynamic>?) ?? const {};
     return UellowSearchResult(
       products: ((d['products'] as List?) ?? const [])
           .map((e) => UellowProductCard.fromJson(e))
@@ -1181,6 +1189,11 @@ class UellowSearchResult {
       vendors: List<Map<String, dynamic>>.from(
           (d['vendors'] as List?) ?? const []),
       suggestions: List<String>.from((d['suggestions'] as List?) ?? const []),
+      page: (meta['page'] ?? 1) as int,
+      perPage: (meta['per_page'] ?? 20) as int,
+      total: (meta['total'] ?? 0) as int,
+      pages: (meta['pages'] ?? 1) as int,
+      hasNext: (meta['has_next'] ?? false) as bool,
     );
   }
 }

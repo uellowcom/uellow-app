@@ -1094,8 +1094,8 @@ class _FilterSheetState extends State<_FilterSheet> {
 
 extension on UellowSearchResult {
   UellowPage<UellowProductCard> asProductsPage() => UellowPage<UellowProductCard>(
-        items: products, page: 1, perPage: products.length,
-        total: products.length, pages: 1, hasNext: false,
+        items: products, page: page, perPage: perPage,
+        total: total, pages: pages, hasNext: hasNext,
       );
 }
 

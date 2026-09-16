@@ -1498,7 +1498,7 @@ class _AnkerCampaignBannerState extends State<_AnkerCampaignBanner>
                           padding: const EdgeInsets.symmetric(
                               horizontal: 10, vertical: 5),
                           decoration: BoxDecoration(
-                            color: Colors.black.withValues(alpha: 0.22),
+                            color: const Color(0xFF001E3C),
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: CachedNetworkImage(
