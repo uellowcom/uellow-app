@@ -23,6 +23,7 @@ import '../../api/uellow_api.dart';
 import '../router/uellow_router.dart';
 import 'announcement_strip.dart';
 import 'beena_nudge_strip.dart';
+import '../services/cs_mode.dart';
 import 'review_requests_strip.dart';
 import '../screens/dynamic_page_screen.dart';
 import '../theme/uellow_l10n.dart';
@@ -210,6 +211,7 @@ class _UellowBottomNavState extends State<UellowBottomNav> {
     // Beena proactive nudges → count badge on the Beena tab.
     BeenaNudgeCache.instance.unread.addListener(_syncCount);
     BeenaNudgeCache.instance.load();
+    CsMode.instance.refresh();
   }
   @override
   void dispose() {
@@ -381,6 +383,9 @@ class _UellowBottomNavState extends State<UellowBottomNav> {
   }
 
   Widget _buildDynamic(BuildContext context, List<DynNavItem> items) {
+    return ValueListenableBuilder<bool>(
+      valueListenable: CsMode.instance.active,
+      builder: (context, csActive, _vlb) {
     final cartBadge = widget.cartBadge ?? _count;
     final active = _activeValue();
     return Container(
@@ -416,11 +421,14 @@ class _UellowBottomNavState extends State<UellowBottomNav> {
                             borderRadius: BorderRadius.circular(14),
                           )
                         : null,
-                    child: _renderNavIcon(
-                      it.icon,
-                      color: on ? UellowColors.darkBrown : const Color(0xFF3F3F3F),
-                      size: 22,
-                    ),
+                    child: (csActive && (it.targetValue ?? '').toLowerCase().contains('beena'))
+                      ? Icon(Icons.support_agent_rounded,
+                          color: on ? UellowColors.darkBrown : const Color(0xFF3F3F3F), size: 23)
+                      : _renderNavIcon(
+                          it.icon,
+                          color: on ? UellowColors.darkBrown : const Color(0xFF3F3F3F),
+                          size: 22,
+                        ),
                   ),
                   const SizedBox(height: 2),
                   Text(it.label, maxLines: 1, overflow: TextOverflow.ellipsis,
@@ -447,6 +455,8 @@ class _UellowBottomNavState extends State<UellowBottomNav> {
           }).toList()),
         ),
       ),
+    );
+      },
     );
   }
 

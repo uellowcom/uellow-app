@@ -9,6 +9,7 @@ import 'dart:math' as math;
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/material.dart';
+import '../services/cs_mode.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:share_plus/share_plus.dart';
@@ -4918,28 +4919,31 @@ class _BeenaHelpButton extends StatelessWidget {
   final String label;
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
+    return ValueListenableBuilder<bool>(
+      valueListenable: CsMode.instance.active,
+      builder: (context, cs, _) => GestureDetector(
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
       child: SizedBox(
         width: 48, height: 56,
         child: Stack(clipBehavior: Clip.none, alignment: Alignment.center, children: [
-          // Bee icon
+          // Bee / support icon
           Container(
             width: 44, height: 44,
             margin: const EdgeInsets.only(top: 10),
-            decoration: const BoxDecoration(
+            decoration: BoxDecoration(
               shape: BoxShape.circle,
-              gradient: RadialGradient(
-                center: Alignment(-0.4, -0.5),
-                colors: [Color(0xFFFFE066), UellowColors.yellow, Color(0xFFC99000)],
-              ),
+              gradient: cs
+                ? const LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [Color(0xFF17B497), Color(0xFF0E8C78)])
+                : const RadialGradient(center: Alignment(-0.4, -0.5), colors: [Color(0xFFFFE066), UellowColors.yellow, Color(0xFFC99000)]),
               boxShadow: [BoxShadow(
-                color: Color(0x4DF5C320), blurRadius: 10, offset: Offset(0, 4)),
+                color: cs ? const Color(0x4D0E8C78) : const Color(0x4DF5C320), blurRadius: 10, offset: const Offset(0, 4)),
               ],
             ),
             alignment: Alignment.center,
-            child: const Text('✨', style: TextStyle(fontSize: 22)),
+            child: cs
+              ? const Icon(Icons.support_agent_rounded, color: Colors.white, size: 24)
+              : const Text('✨', style: TextStyle(fontSize: 22)),
           ),
           // "Any help?" floating red pill — points down with a tiny tail
           Positioned(
@@ -4959,7 +4963,7 @@ class _BeenaHelpButton extends StatelessWidget {
           ),
         ]),
       ),
-    );
+    ));
   }
 }
 

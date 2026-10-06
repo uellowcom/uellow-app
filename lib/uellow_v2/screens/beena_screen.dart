@@ -31,6 +31,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../api/uellow_api.dart';
 import '../router/uellow_router.dart';
 import '../theme/uellow_theme.dart';
+import '../services/cs_mode.dart';
 import '../widgets/beena_cards.dart';
 import '../widgets/beena_nudge_strip.dart';
 import '../widgets/uellow_bottom_nav.dart';
@@ -179,6 +180,7 @@ class _BeenaScreenState extends State<BeenaScreen> {
     try {
       final res = await UellowApi.instance.getRaw('/api/mobile/v2/cs/status');
       final d = (res['data'] as Map?)?.cast<String, dynamic>() ?? {};
+      CsMode.instance.set(d['cs_mode'] == true);
       if (d['cs_mode'] != true) return;
       final ag = (d['agent'] as Map?)?.cast<String, dynamic>() ?? {};
       if (!mounted) return;
