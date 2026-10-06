@@ -60,6 +60,8 @@ class _BeenaScreenState extends State<BeenaScreen> {
   int _csLastId = 0;
   Timer? _csTimer;
   bool _ratingPrompt = false;
+  bool _csLoading = false;
+  final Set<int> _csSeen = <int>{};
   bool _recording = false;
   bool _restored = false;
   int? _activeProductId;       // the product the conversation is locked onto
@@ -197,6 +199,8 @@ class _BeenaScreenState extends State<BeenaScreen> {
   }
 
   Future<void> _csLoad() async {
+    if (_csLoading) return;
+    _csLoading = true;
     try {
       final res = await UellowApi.instance.getRaw('/api/mobile/v2/cs/thread',
           query: {'after': '$_csLastId'}, auth: true);
@@ -205,7 +209,9 @@ class _BeenaScreenState extends State<BeenaScreen> {
       final toAdd = <_Msg>[];
       for (final raw in list) {
         final m = (raw as Map).cast<String, dynamic>();
-        _csLastId = (m['id'] ?? _csLastId) as int;
+        final id = (m['id'] ?? _csLastId) as int;
+        if (id > _csLastId) _csLastId = id;
+        if (!_csSeen.add(id)) continue;
         if (m['author'] == 'customer') continue;
         final kind = (m['kind'] ?? 'text').toString();
         if (kind == 'product' && m['product'] != null) {
@@ -226,7 +232,9 @@ class _BeenaScreenState extends State<BeenaScreen> {
         _persist();
         _scrollToEnd();
       }
-    } catch (_) {}
+    } catch (_) {} finally {
+      _csLoading = false;
+    }
   }
 
   Future<void> _rateCs(int stars) async {
@@ -290,10 +298,10 @@ class _BeenaScreenState extends State<BeenaScreen> {
 
   // ── send a message ───────────────────────────────────────────────────────
   Future<void> _send(String? override, {bool speakReply = false,
-      bool silentUser = false}) async {
+      bool silentUser = false, bool forceAi = false}) async {
     final text = (override ?? _ctrl.text).trim();
     if (text.isEmpty || _typing) return;
-    if (_csMode) {
+    if (_csMode && !forceAi) {
       _ctrl.clear();
       setState(() => _msgs.add(_Msg(isUser: true, text: text)));
       _persist();
@@ -542,7 +550,7 @@ class _BeenaScreenState extends State<BeenaScreen> {
   void _onChip(String label) {
     if (label.contains('📸')) { _pickPhoto(); return; }
     final clean = label.replaceFirst(RegExp(r'^[^\w؀-ۿ]+\s*'), '').trim();
-    _send(clean.isEmpty ? label : clean);
+    _send(clean.isEmpty ? label : clean, forceAi: true);
   }
 
   void _scrollToEnd() {
@@ -565,7 +573,7 @@ class _BeenaScreenState extends State<BeenaScreen> {
     return Directionality(
       textDirection: ar ? TextDirection.rtl : TextDirection.ltr,
       child: Scaffold(
-        backgroundColor: const Color(0xFFFAFAFA),
+        backgroundColor: _csMode ? const Color(0xFFE7F0EC) : const Color(0xFFFAFAFA),
         bottomNavigationBar: const UellowBottomNav(active: UNavTab.beena),
         // v2.2.06 — page content shows THROUGH the floating strips area
         // (Beena bubble / reviewers banner): true transparency.
@@ -651,39 +659,46 @@ class _Header extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.fromLTRB(8, 14, 12, 16),
-      decoration: BoxDecoration(gradient: live ? const LinearGradient(colors: [Color(0xFF1F5A52), Color(0xFF2F7D72)]) : UellowColors.heroWallet),
+      decoration: BoxDecoration(gradient: live ? const LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [Color(0xFF17B497), Color(0xFF0E8C78)]) : UellowColors.heroWallet),
       child: Row(children: [
         IconButton(
           onPressed: () => Navigator.canPop(context)
               ? Navigator.pop(context)
               : Navigator.pushReplacementNamed(context, '/home'),
-          icon: const Icon(Icons.arrow_back, color: UellowColors.yellowLight),
+          icon: Icon(Icons.arrow_back, color: live ? Colors.white : UellowColors.yellowLight),
           padding: EdgeInsets.zero, constraints: const BoxConstraints(),
         ),
         const SizedBox(width: 4),
         Container(
           width: 44, height: 44,
           decoration: BoxDecoration(shape: BoxShape.circle,
-            gradient: live
-              ? const LinearGradient(colors: [Color(0xFF3B8F82), Color(0xFF1F5A52)])
+            color: live ? Colors.white : null,
+            gradient: live ? null
               : const RadialGradient(center: Alignment(-0.4, -0.5),
                   colors: [Color(0xFFFFE45E), UellowColors.yellow, Color(0xFFC99000)]),
-            boxShadow: [BoxShadow(color: live ? const Color(0x802F7D72) : const Color(0x80F5C320), blurRadius: 12, offset: const Offset(0, 4))]),
+            boxShadow: [BoxShadow(color: live ? const Color(0x33000000) : const Color(0x80F5C320), blurRadius: 10, offset: const Offset(0, 3))]),
           alignment: Alignment.center,
-          child: Text(live ? '🎧' : '✨', style: const TextStyle(fontSize: 20)),
+          child: live
+            ? const Icon(Icons.support_agent_rounded, color: Color(0xFF0E8C78), size: 26)
+            : const Text('✨', style: TextStyle(fontSize: 20)),
         ),
         const SizedBox(width: 10),
         Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(live ? (agentName.isEmpty ? (ar ? 'خدمة العملاء' : 'Customer Service') : agentName) : (ar ? 'بينا الذكية' : 'Beena AI'),
-              style: const TextStyle(color: UellowColors.yellowLight, fontSize: 16, fontWeight: FontWeight.w800)),
-          Text(live ? ('🟢 ' + (agentStatus.isEmpty ? (ar ? 'متصل الآن' : 'Online') : agentStatus)) : (ar ? '🟢 متصلة الآن · مدعومة من يلو' : '🟢 online · powered by Uellow'),
-              style: const TextStyle(color: Color(0x99FFD340), fontSize: 11)),
+              style: TextStyle(color: live ? Colors.white : UellowColors.yellowLight, fontSize: 16.5, fontWeight: FontWeight.w800)),
+          Row(children: [
+            if (live) Container(width: 7, height: 7, margin: const EdgeInsets.only(left: 5),
+                decoration: const BoxDecoration(color: Color(0xFF7CF6C8), shape: BoxShape.circle)),
+            Flexible(child: Text(live ? (agentStatus.isEmpty ? (ar ? 'متصل الآن' : 'Online') : agentStatus) : (ar ? '🟢 متصلة الآن · مدعومة من يلو' : '🟢 online · powered by Uellow'),
+              maxLines: 1, overflow: TextOverflow.ellipsis,
+              style: TextStyle(color: live ? const Color(0xE6FFFFFF) : const Color(0x99FFD340), fontSize: 11.5))),
+          ]),
         ])),
         IconButton(
           onPressed: onArchive,
           tooltip: ar ? 'أرشيف المحادثة' : 'Conversation archive',
-          icon: const Icon(Icons.inventory_2_outlined,
-              color: UellowColors.yellowLight, size: 22),
+          icon: Icon(Icons.inventory_2_outlined,
+              color: live ? Colors.white : UellowColors.yellowLight, size: 22),
         ),
       ]),
     );
@@ -727,6 +742,26 @@ class _ChipsBar extends StatelessWidget {
   }
 }
 
+void _openFull(BuildContext context, {String? net, String? file}) {
+  showDialog(
+    context: context,
+    barrierColor: Colors.black87,
+    builder: (_) => GestureDetector(
+      onTap: () => Navigator.pop(context),
+      child: Stack(children: [
+        InteractiveViewer(minScale: 0.8, maxScale: 4, child: Center(
+          child: net != null
+            ? CachedNetworkImage(imageUrl: net, errorWidget: (_, __, ___) => const Icon(Icons.broken_image_outlined, color: Colors.white54, size: 60))
+            : Image.file(File(file!)),
+        )),
+        Positioned(top: 40, right: 16, child: IconButton(
+            icon: const Icon(Icons.close_rounded, color: Colors.white, size: 30),
+            onPressed: () => Navigator.pop(context))),
+      ]),
+    ),
+  );
+}
+
 class _MsgBubble extends StatelessWidget {
   const _MsgBubble({required this.msg, required this.ar, this.onRetry,
       this.onSend, this.onProduct, this.onSpeak, this.playing = false});
@@ -767,17 +802,23 @@ class _MsgBubble extends StatelessWidget {
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                     if (msg.remoteImage != null) Padding(
                       padding: const EdgeInsets.only(bottom: 6),
-                      child: ClipRRect(borderRadius: BorderRadius.circular(10),
-                        child: CachedNetworkImage(imageUrl: msg.remoteImage!,
-                            width: 170, fit: BoxFit.cover,
-                            errorWidget: (_, __, ___) => const SizedBox.shrink())),
+                      child: GestureDetector(
+                        onTap: () => _openFull(context, net: msg.remoteImage),
+                        child: ClipRRect(borderRadius: BorderRadius.circular(10),
+                          child: CachedNetworkImage(imageUrl: msg.remoteImage!,
+                              width: 170, fit: BoxFit.cover,
+                              errorWidget: (_, __, ___) => Container(width: 170, height: 120, color: Colors.black12, child: const Icon(Icons.broken_image_outlined)))),
+                      ),
                     ),
                     if (msg.localImagePath != null &&
                         File(msg.localImagePath!).existsSync()) Padding(
                       padding: const EdgeInsets.only(bottom: 6),
-                      child: ClipRRect(borderRadius: BorderRadius.circular(10),
-                        child: Image.file(File(msg.localImagePath!),
-                            width: 140, height: 140, fit: BoxFit.cover)),
+                      child: GestureDetector(
+                        onTap: () => _openFull(context, file: msg.localImagePath),
+                        child: ClipRRect(borderRadius: BorderRadius.circular(10),
+                          child: Image.file(File(msg.localImagePath!),
+                              width: 140, height: 140, fit: BoxFit.cover)),
+                      ),
                     ),
                     if (msg.isUser || msg.isError)
                       Text(msg.text, style: TextStyle(

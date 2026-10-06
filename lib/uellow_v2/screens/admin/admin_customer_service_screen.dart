@@ -350,6 +350,7 @@ class _ChatDetailState extends State<_ChatDetail> {
   List<Map<String, dynamic>> _qr = [];
   int _lastId = 0;
   bool _sending = false;
+  bool _fetching = false;
   Timer? _poll;
   int get _chatId => (widget.chat['chat_id'] ?? 0) as int;
   bool get _ar => widget.ar;
@@ -379,20 +380,28 @@ class _ChatDetailState extends State<_ChatDetail> {
   }
 
   Future<void> _fetch({bool initial = false}) async {
+    if (_fetching) return;
+    _fetching = true;
     try {
       final res = await UellowApi.instance.getRaw('/api/mobile/v2/admin/cs/thread',
           query: {'chat_id': '$_chatId', 'after': '$_lastId'}, auth: true);
       final cust = res['data']?['customer'];
       if (cust != null && mounted) setState(() => _customer = Map<String, dynamic>.from(cust));
       final list = List<Map<String, dynamic>>.from(res['data']?['messages'] ?? []);
-      if (list.isEmpty) return;
-      if (!mounted) return;
+      final existing = _msgs.map((m) => m['id']).toSet();
+      final add = list.where((m) => !existing.contains(m['id'])).toList();
+      if (add.isEmpty || !mounted) return;
       setState(() {
-        _msgs.addAll(list);
-        _lastId = _msgs.last['id'] as int;
+        _msgs.addAll(add);
+        _lastId = _msgs.fold<int>(_lastId, (a, m) {
+          final id = (m['id'] ?? 0) as int;
+          return id > a ? id : a;
+        });
       });
       WidgetsBinding.instance.addPostFrameCallback((_) => _toBottom());
-    } catch (_) {}
+    } catch (_) {} finally {
+      _fetching = false;
+    }
   }
 
   void _toBottom() {
@@ -417,8 +426,15 @@ class _ChatDetailState extends State<_ChatDetail> {
           }, auth: true);
       final m = res['data']?['message'];
       if (m != null && mounted) {
-        setState(() { _msgs.add(Map<String, dynamic>.from(m)); _lastId = _msgs.last['id'] as int; });
-        WidgetsBinding.instance.addPostFrameCallback((_) => _toBottom());
+        final mm = Map<String, dynamic>.from(m);
+        if (!_msgs.any((x) => x['id'] == mm['id'])) {
+          setState(() {
+            _msgs.add(mm);
+            final id = (mm['id'] ?? 0) as int;
+            if (id > _lastId) _lastId = id;
+          });
+          WidgetsBinding.instance.addPostFrameCallback((_) => _toBottom());
+        }
       }
     } catch (_) {} finally {
       if (mounted) setState(() => _sending = false);
@@ -601,10 +617,33 @@ class _ChatDetailState extends State<_ChatDetail> {
 
   Widget _imageBubble(String url) {
     final full = url.startsWith('http') ? url : '${UellowApi.instance.baseUrl.replaceAll('/api/mobile/v2', '')}$url';
-    return ClipRRect(borderRadius: BorderRadius.circular(12),
-        child: Image.network(full, width: 200, fit: BoxFit.cover,
-            errorBuilder: (_, __, ___) => Container(width: 200, height: 140, color: UellowColors.yellowSoft,
-                child: const Icon(Icons.image_outlined, color: UellowColors.muted))));
+    return GestureDetector(
+      onTap: () => _openFullImage(full),
+      child: ClipRRect(borderRadius: BorderRadius.circular(12),
+          child: Image.network(full, width: 200, fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => Container(width: 200, height: 140, color: UellowColors.yellowSoft,
+                  child: const Icon(Icons.broken_image_outlined, color: UellowColors.muted)))),
+    );
+  }
+
+  void _openFullImage(String full) {
+    showDialog(
+      context: context,
+      barrierColor: Colors.black87,
+      builder: (_) => GestureDetector(
+        onTap: () => Navigator.pop(context),
+        child: Stack(children: [
+          InteractiveViewer(
+            minScale: 0.8, maxScale: 4,
+            child: Center(child: Image.network(full,
+                errorBuilder: (_, __, ___) => const Icon(Icons.broken_image_outlined, color: Colors.white54, size: 60))),
+          ),
+          Positioned(top: 40, right: 16,
+              child: IconButton(icon: const Icon(Icons.close_rounded, color: Colors.white, size: 30),
+                  onPressed: () => Navigator.pop(context))),
+        ]),
+      ),
+    );
   }
 
   Widget _fileBubble(Map<String, dynamic> m) => Row(mainAxisSize: MainAxisSize.min, children: [
