@@ -59,6 +59,7 @@ class _BeenaScreenState extends State<BeenaScreen> {
   String _csStatus = '';
   int _csLastId = 0;
   Timer? _csTimer;
+  bool _ratingPrompt = false;
   bool _recording = false;
   bool _restored = false;
   int? _activeProductId;       // the product the conversation is locked onto
@@ -183,6 +184,7 @@ class _BeenaScreenState extends State<BeenaScreen> {
         _csMode = true;
         _csAgent = ((_ar ? ag['name_ar'] : ag['name_en']) ?? (_ar ? 'خدمة العملاء' : 'Customer Service')).toString();
         _csStatus = ((_ar ? ag['status_ar'] : ag['status_en']) ?? (_ar ? 'متصل الآن' : 'Online')).toString();
+        _ratingPrompt = d['rating_requested'] == true;
         _msgs.add(_Msg(isUser: false, text: _ar
             ? '🎧 أنت الآن مع فريق خدمة عملاء يلو — اكتب رسالتك وسيرد عليك أحد موظفينا مباشرة.'
             : '🎧 You are now with the Uellow support team — send a message and an agent will reply shortly.'));
@@ -226,6 +228,42 @@ class _BeenaScreenState extends State<BeenaScreen> {
       }
     } catch (_) {}
   }
+
+  Future<void> _rateCs(int stars) async {
+    setState(() => _ratingPrompt = false);
+    try {
+      await UellowApi.instance.postRaw('/api/mobile/v2/cs/rate',
+          body: {'rating': stars}, auth: true);
+    } catch (_) {}
+    if (mounted) {
+      setState(() => _msgs.add(_Msg(isUser: false,
+          text: _ar ? 'شكراً لتقييمك 💛' : 'Thanks for your rating 💛')));
+      _persist();
+      _scrollToEnd();
+    }
+  }
+
+  Widget _buildRatingBar(bool ar) => Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        color: UellowColors.yellowSoft,
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Text(ar ? 'كيف كانت خدمتنا؟ قيّمنا ⭐' : 'How was our service? Rate us ⭐',
+              style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800,
+                  color: UellowColors.darkBrown)),
+          const SizedBox(height: 4),
+          Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+            for (int i = 1; i <= 5; i++)
+              IconButton(
+                onPressed: () => _rateCs(i),
+                iconSize: 30,
+                padding: const EdgeInsets.symmetric(horizontal: 2),
+                constraints: const BoxConstraints(),
+                icon: const Icon(Icons.star_rounded, color: Color(0xFFF5A800)),
+              ),
+          ]),
+        ]),
+      );
 
   Future<void> _sendLive(String text) async {
     try {
@@ -562,6 +600,7 @@ class _BeenaScreenState extends State<BeenaScreen> {
                         playing: _playingKey != null && _playingKey == _msgs[i].text);
                   },
                 )),
+          if (_ratingPrompt) _buildRatingBar(ar),
           _InputBar(ctrl: _ctrl, ar: ar, recording: _recording,
               onSend: () => _send(null), onPhoto: _pickPhoto, onMic: _toggleRecord),
         ])),

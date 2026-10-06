@@ -432,6 +432,27 @@ class _ChatDetailState extends State<_ChatDetail> {
     await _reply(text: t);
   }
 
+  Future<void> _suggest() async {
+    if (_sending) return;
+    setState(() => _sending = true);
+    try {
+      final r = await UellowApi.instance.postRaw('/api/mobile/v2/admin/cs/suggest',
+          body: {'chat_id': _chatId}, auth: true);
+      final sug = r['success'] == true ? (r['data']?['suggestion'] ?? '').toString() : '';
+      if (!mounted) return;
+      if (sug.isNotEmpty) {
+        _ctrl.text = sug;
+        _ctrl.selection = TextSelection.fromPosition(TextPosition(offset: sug.length));
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(_ar ? 'تعذّر توليد اقتراح، حاول مجددًا' : 'Could not generate a suggestion, try again'),
+            behavior: SnackBarBehavior.floating));
+      }
+    } catch (_) {} finally {
+      if (mounted) setState(() => _sending = false);
+    }
+  }
+
   Future<void> _setState(String st) async {
     try {
       await UellowApi.instance.postRaw('/api/mobile/v2/admin/cs/set_state',
@@ -635,6 +656,8 @@ class _ChatDetailState extends State<_ChatDetail> {
     add(Icons.shopping_bag_rounded, _ar ? '$oc طلب' : '$oc orders');
     if (lo is Map) add(Icons.receipt_long_rounded, '${lo['name']} · ${lo['amount']} ${_ar ? 'د.ك' : 'KWD'}');
     if (phone.isNotEmpty) add(Icons.phone_rounded, phone);
+    final rating = (_customer['rating'] ?? 0);
+    if (rating is int && rating > 0) add(Icons.star_rounded, '$rating/5');
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
@@ -681,6 +704,7 @@ class _ChatDetailState extends State<_ChatDetail> {
           decoration: const BoxDecoration(color: Colors.white,
               border: Border(top: BorderSide(color: UellowColors.border))),
           child: Row(children: [
+            _cBtn(Icons.auto_awesome_rounded, _suggest),
             _cBtn(Icons.image_outlined, _pickImage),
             _cBtn(Icons.attach_file_outlined, _pickFile),
             _cBtn(Icons.shopping_bag_outlined, _pickProduct),
