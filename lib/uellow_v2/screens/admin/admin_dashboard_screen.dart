@@ -12,6 +12,7 @@ import '../../../api/uellow_api.dart';
 import '../../services/admin_mode.dart';
 import '../../theme/uellow_theme.dart';
 import 'admin_helpdesk_screen.dart';
+import 'admin_customer_service_screen.dart';
 import 'admin_activity_screen.dart';
 import 'admin_orders_screen.dart';
 import 'admin_pos_screen.dart';
@@ -365,6 +366,11 @@ class _ManagementGrid extends StatelessWidget {
           const Color(0xFFE11D48),
           () => Navigator.push(context, MaterialPageRoute(
               builder: (_) => const AdminHelpdeskScreen()))),
+      (Icons.headset_mic_rounded, ar ? 'خدمة العملاء' : 'Customer Service',
+          ar ? 'ردود مباشرة + بينا' : 'Live replies + Beena',
+          const Color(0xFF2F7D72),
+          () => Navigator.push(context, MaterialPageRoute(
+              builder: (_) => const AdminCustomerServiceScreen()))),
       (Icons.directions_walk_rounded, ar ? 'نشاط العملاء' : 'Activity',
           ar ? 'ماذا يفعل العميل لحظيًا' : 'What customers do',
           const Color(0xFF0EA5E9),

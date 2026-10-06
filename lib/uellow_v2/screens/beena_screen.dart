@@ -14,6 +14,7 @@
 //     spoken back via /ai/tts (like the website). Tap 🔊 to replay any reply.
 //   • IMAGE: send a photo → visual product search (/ai/visual_search).
 // =============================================================================
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -52,6 +53,11 @@ class _BeenaScreenState extends State<BeenaScreen> {
   final _rec = AudioRecorder();
   final _player = AudioPlayer();
   bool _typing = false;
+  bool _csMode = false;
+  String _csAgent = '';
+  String _csStatus = '';
+  int _csLastId = 0;
+  Timer? _csTimer;
   bool _recording = false;
   bool _restored = false;
   int? _activeProductId;       // the product the conversation is locked onto
@@ -66,6 +72,7 @@ class _BeenaScreenState extends State<BeenaScreen> {
   void initState() {
     super.initState();
     _activeProductId = widget.productId;
+    _csInit();
     _msgs = [];
     _player.onPlayerComplete.listen((_) {
       if (mounted) setState(() => _playingKey = null);
@@ -79,6 +86,7 @@ class _BeenaScreenState extends State<BeenaScreen> {
 
   @override
   void dispose() {
+    _csTimer?.cancel();
     _rec.dispose();
     _player.dispose();
     _ctrl.dispose();
@@ -162,11 +170,80 @@ class _BeenaScreenState extends State<BeenaScreen> {
     ];
   }
 
+  // ── live customer-service mode (human agents reply via Admin Console) ──────
+  Future<void> _csInit() async {
+    try {
+      final res = await UellowApi.instance.getRaw('/api/mobile/v2/cs/status');
+      final d = (res['data'] as Map?)?.cast<String, dynamic>() ?? {};
+      if (d['cs_mode'] != true) return;
+      final ag = (d['agent'] as Map?)?.cast<String, dynamic>() ?? {};
+      if (!mounted) return;
+      setState(() {
+        _csMode = true;
+        _csAgent = ((_ar ? ag['name_ar'] : ag['name_en']) ?? (_ar ? 'خدمة العملاء' : 'Customer Service')).toString();
+        _csStatus = ((_ar ? ag['status_ar'] : ag['status_en']) ?? (_ar ? 'متصل الآن' : 'Online')).toString();
+        _msgs.add(_Msg(isUser: false, text: _ar
+            ? '🎧 أنت الآن مع فريق خدمة عملاء يلو — اكتب رسالتك وسيرد عليك أحد موظفينا مباشرة.'
+            : '🎧 You are now with the Uellow support team — send a message and an agent will reply shortly.'));
+      });
+      await _csLoad();
+      _csTimer = Timer.periodic(const Duration(seconds: 3), (_) {
+        if (mounted) _csLoad();
+      });
+    } catch (_) {}
+  }
+
+  Future<void> _csLoad() async {
+    try {
+      final res = await UellowApi.instance.getRaw('/api/mobile/v2/cs/thread',
+          query: {'after': '$_csLastId'}, auth: true);
+      final list = ((res['data'] as Map?)?['messages'] as List?) ?? const [];
+      if (list.isEmpty) return;
+      final toAdd = <_Msg>[];
+      for (final raw in list) {
+        final m = (raw as Map).cast<String, dynamic>();
+        _csLastId = (m['id'] ?? _csLastId) as int;
+        if (m['author'] == 'customer') continue;
+        final kind = (m['kind'] ?? 'text').toString();
+        if (kind == 'product' && m['product'] != null) {
+          final p = (m['product'] as Map).cast<String, dynamic>();
+          toAdd.add(_Msg(isUser: false, text: (m['body'] ?? '').toString(), products: [p]));
+        } else if (kind == 'image') {
+          toAdd.add(_Msg(isUser: false, text: _ar ? '📷 صورة من خدمة العملاء' : '📷 Photo from support'));
+        } else if (kind == 'file') {
+          toAdd.add(_Msg(isUser: false, text: '📎 ${m['file_name'] ?? (_ar ? 'ملف' : 'file')}'));
+        } else {
+          toAdd.add(_Msg(isUser: false, text: (m['body'] ?? '').toString()));
+        }
+      }
+      if (toAdd.isNotEmpty && mounted) {
+        setState(() => _msgs.addAll(toAdd));
+        _persist();
+        _scrollToEnd();
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _sendLive(String text) async {
+    try {
+      await UellowApi.instance.postRaw('/api/mobile/v2/cs/send',
+          body: {'text': text}, auth: true);
+    } catch (_) {}
+  }
+
   // ── send a message ───────────────────────────────────────────────────────
   Future<void> _send(String? override, {bool speakReply = false,
       bool silentUser = false}) async {
     final text = (override ?? _ctrl.text).trim();
     if (text.isEmpty || _typing) return;
+    if (_csMode) {
+      _ctrl.clear();
+      setState(() => _msgs.add(_Msg(isUser: true, text: text)));
+      _persist();
+      _scrollToEnd();
+      await _sendLive(text);
+      return;
+    }
     setState(() {
       if (!silentUser) _msgs.add(_Msg(isUser: true, text: text));
       _ctrl.clear();
@@ -424,7 +501,7 @@ class _BeenaScreenState extends State<BeenaScreen> {
         // (Beena bubble / reviewers banner): true transparency.
         extendBody: true,
         body: SafeArea(child: Column(children: [
-          _Header(ar: ar, onArchive: _openArchive),
+          _Header(ar: ar, onArchive: _openArchive, live: _csMode, agentName: _csAgent, agentStatus: _csStatus),
           _ChipsBar(ar: ar, onTap: _onChip),
           AnimatedSwitcher(
             duration: const Duration(milliseconds: 300),
@@ -490,14 +567,17 @@ class _Msg {
 }
 
 class _Header extends StatelessWidget {
-  const _Header({required this.ar, required this.onArchive});
+  const _Header({required this.ar, required this.onArchive, this.live = false, this.agentName = '', this.agentStatus = ''});
   final bool ar;
   final VoidCallback onArchive;
+  final bool live;
+  final String agentName;
+  final String agentStatus;
   @override
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.fromLTRB(8, 14, 12, 16),
-      decoration: const BoxDecoration(gradient: UellowColors.heroWallet),
+      decoration: BoxDecoration(gradient: live ? const LinearGradient(colors: [Color(0xFF1F5A52), Color(0xFF2F7D72)]) : UellowColors.heroWallet),
       child: Row(children: [
         IconButton(
           onPressed: () => Navigator.canPop(context)
@@ -509,18 +589,20 @@ class _Header extends StatelessWidget {
         const SizedBox(width: 4),
         Container(
           width: 44, height: 44,
-          decoration: const BoxDecoration(shape: BoxShape.circle,
-            gradient: RadialGradient(center: Alignment(-0.4, -0.5),
-              colors: [Color(0xFFFFE45E), UellowColors.yellow, Color(0xFFC99000)]),
-            boxShadow: [BoxShadow(color: Color(0x80F5C320), blurRadius: 12, offset: Offset(0, 4))]),
+          decoration: BoxDecoration(shape: BoxShape.circle,
+            gradient: live
+              ? const LinearGradient(colors: [Color(0xFF3B8F82), Color(0xFF1F5A52)])
+              : const RadialGradient(center: Alignment(-0.4, -0.5),
+                  colors: [Color(0xFFFFE45E), UellowColors.yellow, Color(0xFFC99000)]),
+            boxShadow: [BoxShadow(color: live ? const Color(0x802F7D72) : const Color(0x80F5C320), blurRadius: 12, offset: const Offset(0, 4))]),
           alignment: Alignment.center,
-          child: const Text('✨', style: TextStyle(fontSize: 20)),
+          child: Text(live ? '🎧' : '✨', style: const TextStyle(fontSize: 20)),
         ),
         const SizedBox(width: 10),
         Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(ar ? 'بينا الذكية' : 'Beena AI', style: const TextStyle(
-              color: UellowColors.yellowLight, fontSize: 16, fontWeight: FontWeight.w800)),
-          Text(ar ? '🟢 متصلة الآن · مدعومة من يلو' : '🟢 online · powered by Uellow',
+          Text(live ? (agentName.isEmpty ? (ar ? 'خدمة العملاء' : 'Customer Service') : agentName) : (ar ? 'بينا الذكية' : 'Beena AI'),
+              style: const TextStyle(color: UellowColors.yellowLight, fontSize: 16, fontWeight: FontWeight.w800)),
+          Text(live ? ('🟢 ' + (agentStatus.isEmpty ? (ar ? 'متصل الآن' : 'Online') : agentStatus)) : (ar ? '🟢 متصلة الآن · مدعومة من يلو' : '🟢 online · powered by Uellow'),
               style: const TextStyle(color: Color(0x99FFD340), fontSize: 11)),
         ])),
         IconButton(
