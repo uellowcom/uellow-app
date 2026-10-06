@@ -228,6 +228,12 @@ class _CSState extends State<AdminCustomerServiceScreen> {
           _chip('open', _ar ? 'مفتوحة' : 'Open'),
           const SizedBox(width: 7),
           _chip('unread', _ar ? 'غير مقروءة' : 'Unread'),
+          const SizedBox(width: 7),
+          _chip('pending', _ar ? 'معلّقة' : 'Pending'),
+          const SizedBox(width: 7),
+          _chip('resolved', _ar ? 'تم حلها' : 'Resolved'),
+          const SizedBox(width: 7),
+          _chip('closed', _ar ? 'منتهية' : 'Closed'),
         ]),
       );
 
@@ -426,6 +432,23 @@ class _ChatDetailState extends State<_ChatDetail> {
     await _reply(text: t);
   }
 
+  Future<void> _setState(String st) async {
+    try {
+      await UellowApi.instance.postRaw('/api/mobile/v2/admin/cs/set_state',
+          body: {'chat_id': _chatId, 'state': st}, auth: true);
+      if (!mounted) return;
+      final labels = {
+        'resolved': _ar ? 'تم وضع المحادثة: تم الحل ✔' : 'Marked as Resolved ✔',
+        'pending': _ar ? 'المحادثة الآن: معلّقة ⏳' : 'Marked as Pending ⏳',
+        'closed': _ar ? 'تم إغلاق المحادثة 🗂️' : 'Conversation closed 🗂️',
+        'open': _ar ? 'تم إعادة فتح المحادثة ↩️' : 'Conversation reopened ↩️',
+      };
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(labels[st] ?? ''), behavior: SnackBarBehavior.floating));
+      if (st == 'resolved' || st == 'closed') Navigator.pop(context);
+    } catch (_) {}
+  }
+
   Future<void> _pickImage() async {
     final x = await ImagePicker().pickImage(source: ImageSource.gallery, imageQuality: 72, maxWidth: 1400);
     if (x == null) return;
@@ -471,6 +494,18 @@ class _ChatDetailState extends State<_ChatDetail> {
             ]),
           ])),
         ]),
+        actions: [
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert_rounded),
+            onSelected: _setState,
+            itemBuilder: (_) => [
+              PopupMenuItem(value: 'resolved', child: Text(_ar ? '✔ تم الحل' : '✔ Resolve')),
+              PopupMenuItem(value: 'pending', child: Text(_ar ? '⏳ معلّقة (بانتظار العميل)' : '⏳ Pending')),
+              PopupMenuItem(value: 'closed', child: Text(_ar ? '🗂️ إغلاق' : '🗂️ Close')),
+              PopupMenuItem(value: 'open', child: Text(_ar ? '↩️ إعادة فتح' : '↩️ Reopen')),
+            ],
+          ),
+        ],
       ),
       body: Column(children: [
         _contextStrip(),
