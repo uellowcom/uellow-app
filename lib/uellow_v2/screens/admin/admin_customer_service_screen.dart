@@ -340,6 +340,8 @@ class _ChatDetailState extends State<_ChatDetail> {
   final _ctrl = TextEditingController();
   final _scroll = ScrollController();
   List<Map<String, dynamic>> _msgs = [];
+  Map<String, dynamic> _customer = {};
+  List<Map<String, dynamic>> _qr = [];
   int _lastId = 0;
   bool _sending = false;
   Timer? _poll;
@@ -349,8 +351,17 @@ class _ChatDetailState extends State<_ChatDetail> {
   @override
   void initState() {
     super.initState();
+    _customer = Map<String, dynamic>.from(widget.chat);
     _fetch(initial: true);
+    _loadQuick();
     _poll = Timer.periodic(const Duration(milliseconds: 2500), (_) => _fetch());
+  }
+
+  Future<void> _loadQuick() async {
+    try {
+      final r = await UellowApi.instance.getRaw('/api/mobile/v2/admin/cs/mode', auth: true);
+      if (mounted) setState(() => _qr = List<Map<String, dynamic>>.from(r['data']?['quick_replies'] ?? []));
+    } catch (_) {}
   }
 
   @override
@@ -365,6 +376,8 @@ class _ChatDetailState extends State<_ChatDetail> {
     try {
       final res = await UellowApi.instance.getRaw('/api/mobile/v2/admin/cs/thread',
           query: {'chat_id': '$_chatId', 'after': '$_lastId'}, auth: true);
+      final cust = res['data']?['customer'];
+      if (cust != null && mounted) setState(() => _customer = Map<String, dynamic>.from(cust));
       final list = List<Map<String, dynamic>>.from(res['data']?['messages'] ?? []);
       if (list.isEmpty) return;
       if (!mounted) return;
@@ -460,6 +473,7 @@ class _ChatDetailState extends State<_ChatDetail> {
         ]),
       ),
       body: Column(children: [
+        _contextStrip(),
         Expanded(
           child: ListView.builder(
             controller: _scroll,
@@ -468,6 +482,7 @@ class _ChatDetailState extends State<_ChatDetail> {
             itemBuilder: (_, i) => _bubble(_msgs[i]),
           ),
         ),
+        _quickChips(),
         _composer(),
       ]),
     );
@@ -569,6 +584,58 @@ class _ChatDetailState extends State<_ChatDetail> {
               style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w900, color: _tealDark)),
         ])),
       ]),
+    );
+  }
+
+  Widget _contextStrip() {
+    final oc = (_customer['orders_count'] ?? 0);
+    final lo = _customer['last_order'];
+    final phone = (_customer['phone'] ?? '').toString();
+    if (oc == 0 && lo == null && phone.isEmpty) return const SizedBox.shrink();
+    final items = <Widget>[];
+    void add(IconData ic, String txt) => items.add(Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(ic, size: 13, color: _tealDark), const SizedBox(width: 4),
+          Text(txt, style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: UellowColors.darkBrown)),
+        ]));
+    add(Icons.shopping_bag_rounded, _ar ? '$oc طلب' : '$oc orders');
+    if (lo is Map) add(Icons.receipt_long_rounded, '${lo['name']} · ${lo['amount']} ${_ar ? 'د.ك' : 'KWD'}');
+    if (phone.isNotEmpty) add(Icons.phone_rounded, phone);
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+      decoration: const BoxDecoration(color: Color(0xFFEAF4F1),
+          border: Border(bottom: BorderSide(color: Color(0xFFCFE6E0)))),
+      child: SingleChildScrollView(scrollDirection: Axis.horizontal,
+          child: Row(children: [
+            for (int i = 0; i < items.length; i++) ...[
+              if (i > 0) const Padding(padding: EdgeInsets.symmetric(horizontal: 9),
+                  child: Text('·', style: TextStyle(color: UellowColors.muted))),
+              items[i],
+            ],
+          ])),
+    );
+  }
+
+  Widget _quickChips() {
+    if (_qr.isEmpty) return const SizedBox.shrink();
+    return Container(
+      color: const Color(0xFFFBF8F1),
+      padding: const EdgeInsets.fromLTRB(8, 7, 8, 0),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(children: _qr.map((q) {
+          final txt = (_ar ? (q['ar'] ?? q['en']) : (q['en'] ?? q['ar']) ?? '').toString();
+          return Padding(
+            padding: const EdgeInsets.only(right: 7),
+            child: ActionChip(
+              label: Text(txt, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: _tealDark)),
+              backgroundColor: Colors.white,
+              side: const BorderSide(color: Color(0xFFCFE6E0)),
+              onPressed: _sending ? null : () => _reply(text: txt),
+            ),
+          );
+        }).toList()),
+      ),
     );
   }
 
