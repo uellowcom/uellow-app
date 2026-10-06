@@ -9,6 +9,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
@@ -32,6 +33,7 @@ class _CSState extends State<AdminCustomerServiceScreen> {
   bool _csMode = false;
   int _totalUnread = 0;
   String _filter = 'all';
+  Map<String, dynamic> _agent = {};
   Timer? _poll;
 
   @override
@@ -61,6 +63,7 @@ class _CSState extends State<AdminCustomerServiceScreen> {
         _rows = List<Map<String, dynamic>>.from(d['conversations'] ?? []);
         _totalUnread = (d['total_unread'] ?? 0) as int;
         _csMode = (mode['data']?['cs_mode'] ?? false) as bool;
+        _agent = Map<String, dynamic>.from(mode['data']?['agent'] ?? {});
       });
     } catch (_) {} finally {
       if (mounted && !silent) setState(() => _loading = false);
@@ -75,6 +78,60 @@ class _CSState extends State<AdminCustomerServiceScreen> {
     } catch (_) {}
     _load(silent: true);
   }
+
+  Future<void> _openSettings() async {
+    final nameAr = TextEditingController(text: (_agent['name_ar'] ?? '').toString());
+    final nameEn = TextEditingController(text: (_agent['name_en'] ?? '').toString());
+    final statAr = TextEditingController(text: (_agent['status_ar'] ?? '').toString());
+    final statEn = TextEditingController(text: (_agent['status_en'] ?? '').toString());
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: Colors.white,
+        title: Text(_ar ? 'هوية الوكيل' : 'Agent identity',
+            style: const TextStyle(fontWeight: FontWeight.w900, color: UellowColors.darkBrown)),
+        content: SingleChildScrollView(
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            _f(nameAr, _ar ? 'الاسم (عربي)' : 'Name (Arabic)'),
+            _f(nameEn, _ar ? 'الاسم (إنجليزي)' : 'Name (English)'),
+            _f(statAr, _ar ? 'الحالة (عربي)' : 'Status (Arabic)'),
+            _f(statEn, _ar ? 'الحالة (إنجليزي)' : 'Status (English)'),
+          ]),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false),
+              child: Text(_ar ? 'إلغاء' : 'Cancel')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: _tealDark),
+            onPressed: () => Navigator.pop(context, true),
+            child: Text(_ar ? 'حفظ' : 'Save')),
+        ],
+      ),
+    );
+    if (saved == true) {
+      try {
+        await UellowApi.instance.postRaw('/api/mobile/v2/admin/cs/mode', body: {
+          'agent_name_ar': nameAr.text.trim(),
+          'agent_name_en': nameEn.text.trim(),
+          'agent_status_ar': statAr.text.trim(),
+          'agent_status_en': statEn.text.trim(),
+        }, auth: true);
+      } catch (_) {}
+      _load(silent: true);
+    }
+  }
+
+  Widget _f(TextEditingController c, String label) => Padding(
+        padding: const EdgeInsets.only(bottom: 10),
+        child: TextField(
+          controller: c,
+          decoration: InputDecoration(
+            labelText: label,
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+            isDense: true,
+          ),
+        ),
+      );
 
   @override
   Widget build(BuildContext context) {
@@ -94,6 +151,13 @@ class _CSState extends State<AdminCustomerServiceScreen> {
             _badge(_totalUnread),
           ],
         ]),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.tune_rounded),
+            tooltip: _ar ? 'هوية الوكيل' : 'Agent identity',
+            onPressed: _openSettings,
+          ),
+        ],
       ),
       body: Column(children: [
         _modeBar(),
@@ -319,7 +383,7 @@ class _ChatDetailState extends State<_ChatDetail> {
     }
   }
 
-  Future<void> _reply({String? text, String? image, int? productId}) async {
+  Future<void> _reply({String? text, String? image, int? productId, String? file, String? fileName}) async {
     if (_sending) return;
     setState(() => _sending = true);
     try {
@@ -329,6 +393,8 @@ class _ChatDetailState extends State<_ChatDetail> {
             if (text != null) 'text': text,
             if (image != null) 'image': image,
             if (productId != null) 'product_id': productId,
+            if (file != null) 'file': file,
+            if (fileName != null) 'file_name': fileName,
           }, auth: true);
       final m = res['data']?['message'];
       if (m != null && mounted) {
@@ -352,6 +418,15 @@ class _ChatDetailState extends State<_ChatDetail> {
     if (x == null) return;
     final b64 = base64Encode(await File(x.path).readAsBytes());
     await _reply(image: b64);
+  }
+
+  Future<void> _pickFile() async {
+    final r = await FilePicker.platform.pickFiles(withData: true);
+    if (r == null || r.files.isEmpty) return;
+    final f = r.files.first;
+    final bytes = f.bytes ?? (f.path != null ? await File(f.path!).readAsBytes() : null);
+    if (bytes == null) return;
+    await _reply(file: base64Encode(bytes), fileName: f.name);
   }
 
   Future<void> _pickProduct() async {
@@ -505,6 +580,7 @@ class _ChatDetailState extends State<_ChatDetail> {
               border: Border(top: BorderSide(color: UellowColors.border))),
           child: Row(children: [
             _cBtn(Icons.image_outlined, _pickImage),
+            _cBtn(Icons.attach_file_outlined, _pickFile),
             _cBtn(Icons.shopping_bag_outlined, _pickProduct),
             Expanded(child: Container(
               margin: const EdgeInsets.symmetric(horizontal: 6),

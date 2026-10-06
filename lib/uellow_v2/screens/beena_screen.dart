@@ -22,6 +22,7 @@ import 'package:audioplayers/audioplayers.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:file_picker/file_picker.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
@@ -209,7 +210,9 @@ class _BeenaScreenState extends State<BeenaScreen> {
           final p = (m['product'] as Map).cast<String, dynamic>();
           toAdd.add(_Msg(isUser: false, text: (m['body'] ?? '').toString(), products: [p]));
         } else if (kind == 'image') {
-          toAdd.add(_Msg(isUser: false, text: _ar ? '📷 صورة من خدمة العملاء' : '📷 Photo from support'));
+          final mu = (m['media_url'] ?? '').toString();
+          final abs = mu.startsWith('http') ? mu : '${UellowApi.instance.baseUrl.replaceAll('/api/mobile/v2', '')}$mu';
+          toAdd.add(_Msg(isUser: false, text: '', remoteImage: abs.isEmpty ? null : abs));
         } else if (kind == 'file') {
           toAdd.add(_Msg(isUser: false, text: '📎 ${m['file_name'] ?? (_ar ? 'ملف' : 'file')}'));
         } else {
@@ -228,6 +231,22 @@ class _BeenaScreenState extends State<BeenaScreen> {
     try {
       await UellowApi.instance.postRaw('/api/mobile/v2/cs/send',
           body: {'text': text}, auth: true);
+    } catch (_) {}
+  }
+
+  Future<void> _pickFileLive() async {
+    try {
+      final r = await FilePicker.platform.pickFiles(withData: true);
+      if (r == null || r.files.isEmpty) return;
+      final f = r.files.first;
+      final bytes = f.bytes ?? (f.path != null ? await File(f.path!).readAsBytes() : null);
+      if (bytes == null) return;
+      final b64 = base64Encode(bytes);
+      if (mounted) setState(() => _msgs.add(_Msg(isUser: true, text: '📎 ${f.name}')));
+      _persist();
+      _scrollToEnd();
+      await UellowApi.instance.postRaw('/api/mobile/v2/cs/send',
+          body: {'file': b64, 'file_name': f.name}, auth: true);
     } catch (_) {}
   }
 
@@ -416,12 +435,25 @@ class _BeenaScreenState extends State<BeenaScreen> {
         ListTile(leading: const Icon(Icons.photo_library_outlined),
           title: Text(ar ? 'من المعرض' : 'From gallery'),
           onTap: () => Navigator.pop(c, ImageSource.gallery)),
+        if (_csMode) ListTile(leading: const Icon(Icons.attach_file_outlined),
+          title: Text(ar ? 'ملف / مستند' : 'File / document'),
+          onTap: () { Navigator.pop(c); _pickFileLive(); }),
       ])),
     );
     if (src == null) return;
     final picked = await ImagePicker().pickImage(
         source: src, maxWidth: 1024, maxHeight: 1024, imageQuality: 75);
     if (picked == null || !mounted) return;
+    if (_csMode) {
+      setState(() => _msgs.add(_Msg(isUser: true, text: '', localImagePath: picked.path)));
+      _persist();
+      _scrollToEnd();
+      try {
+        final b64 = base64Encode(await File(picked.path).readAsBytes());
+        await UellowApi.instance.postRaw('/api/mobile/v2/cs/send', body: {'image': b64}, auth: true);
+      } catch (_) {}
+      return;
+    }
     setState(() {
       _msgs.add(_Msg(isUser: true,
           text: ar ? '📸 صورة للبحث المرئي' : '📸 Visual search photo',
@@ -541,7 +573,7 @@ class _BeenaScreenState extends State<BeenaScreen> {
 // ── message model (serializable) ─────────────────────────────────────────────
 class _Msg {
   _Msg({required this.isUser, required this.text, this.products, this.extra,
-      this.isError = false, this.retryText, this.localImagePath});
+      this.isError = false, this.retryText, this.localImagePath, this.remoteImage});
   final bool isUser;
   final String text;
   final List<Map<String, dynamic>>? products;
@@ -549,12 +581,14 @@ class _Msg {
   final bool isError;
   final String? retryText;
   final String? localImagePath;
+  final String? remoteImage;
 
   Map<String, dynamic> toJson() => {
         'u': isUser, 't': text,
         if (products != null) 'p': products,
         if (extra != null) 'e': extra,
         if (localImagePath != null) 'img': localImagePath,
+        if (remoteImage != null) 'rimg': remoteImage,
       };
   static _Msg fromJson(Map<String, dynamic> j) => _Msg(
         isUser: j['u'] == true,
@@ -563,6 +597,7 @@ class _Msg {
             .map((m) => m.cast<String, dynamic>()).toList(),
         extra: (j['e'] as Map?)?.cast<String, dynamic>(),
         localImagePath: j['img'] as String?,
+        remoteImage: j['rimg'] as String?,
       );
 }
 
@@ -691,6 +726,13 @@ class _MsgBubble extends StatelessWidget {
                         : [const BoxShadow(color: Color(0x0D000000), blurRadius: 4)],
                   ),
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    if (msg.remoteImage != null) Padding(
+                      padding: const EdgeInsets.only(bottom: 6),
+                      child: ClipRRect(borderRadius: BorderRadius.circular(10),
+                        child: CachedNetworkImage(imageUrl: msg.remoteImage!,
+                            width: 170, fit: BoxFit.cover,
+                            errorWidget: (_, __, ___) => const SizedBox.shrink())),
+                    ),
                     if (msg.localImagePath != null &&
                         File(msg.localImagePath!).existsSync()) Padding(
                       padding: const EdgeInsets.only(bottom: 6),
