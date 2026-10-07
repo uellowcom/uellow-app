@@ -109,6 +109,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     Icons.location_on_outlined, () => Navigator.pushNamed(context, '/addresses')),
                 _link(ar ? 'الإعدادات' : 'Settings',
                     Icons.settings_outlined, () => Navigator.pushNamed(context, '/settings')),
+                const Divider(height: 18),
+                InkWell(onTap: _confirmDeleteAccount, child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Row(children: [
+                    const Icon(Icons.delete_outline, size: 18, color: Color(0xFFD6453C)),
+                    const SizedBox(width: 10),
+                    Expanded(child: Text(ar ? 'حذف حسابي' : 'Delete my account',
+                        style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: Color(0xFFD6453C)))),
+                    const Icon(Icons.chevron_right, color: Color(0x66D6453C)),
+                  ]),
+                )),
               ]),
             )),
           ])),
@@ -146,6 +157,46 @@ class _ProfileScreenState extends State<ProfileScreen> {
         const Icon(Icons.chevron_right, color: UellowColors.muted),
       ]),
     ));
+  }
+
+  Future<void> _confirmDeleteAccount() async {
+    final ar = UellowApi.instance.lang == 'ar';
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (d) => AlertDialog(
+        backgroundColor: Colors.white,
+        title: Text(ar ? 'حذف الحساب' : 'Delete account',
+            style: const TextStyle(fontWeight: FontWeight.w900, color: Color(0xFFD6453C))),
+        content: Text(ar
+            ? 'سيتم حذف حسابك وبياناتك الشخصية نهائيًا ولا يمكن التراجع عن هذا الإجراء. هل تريد المتابعة؟'
+            : 'Your account and personal data will be permanently deleted. This cannot be undone. Continue?',
+            style: const TextStyle(height: 1.5)),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(d, false),
+              child: Text(ar ? 'إلغاء' : 'Cancel')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: const Color(0xFFD6453C)),
+            onPressed: () => Navigator.pop(d, true),
+            child: Text(ar ? 'حذف نهائيًا' : 'Delete permanently')),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    showDialog(context: context, barrierDismissible: false,
+        builder: (_) => const Center(child: CircularProgressIndicator(color: UellowColors.darkBrown)));
+    try {
+      await UellowApi.instance.profile.deleteAccount();
+      if (!mounted) return;
+      Navigator.of(context).pop();
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(ar ? 'تم حذف حسابك' : 'Your account has been deleted')));
+      Navigator.of(context).pushNamedAndRemoveUntil('/home', (r) => false);
+    } catch (_) {
+      if (!mounted) return;
+      Navigator.of(context).pop();
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(ar ? 'تعذّر حذف الحساب، حاول مجددًا' : 'Could not delete account, try again')));
+    }
   }
 
   void _openChangePassword() {
