@@ -351,6 +351,7 @@ class _ChatDetailState extends State<_ChatDetail> {
   int _lastId = 0;
   bool _sending = false;
   bool _fetching = false;
+  bool _internalMode = false;
   Timer? _poll;
   int get _chatId => (widget.chat['chat_id'] ?? 0) as int;
   bool get _ar => widget.ar;
@@ -411,7 +412,7 @@ class _ChatDetailState extends State<_ChatDetail> {
     }
   }
 
-  Future<void> _reply({String? text, String? image, int? productId, String? file, String? fileName}) async {
+  Future<void> _reply({String? text, String? image, int? productId, String? file, String? fileName, bool internal = false}) async {
     if (_sending) return;
     setState(() => _sending = true);
     try {
@@ -423,6 +424,7 @@ class _ChatDetailState extends State<_ChatDetail> {
             if (productId != null) 'product_id': productId,
             if (file != null) 'file': file,
             if (fileName != null) 'file_name': fileName,
+            if (internal) 'internal': true,
           }, auth: true);
       final m = res['data']?['message'];
       if (m != null && mounted) {
@@ -445,7 +447,7 @@ class _ChatDetailState extends State<_ChatDetail> {
     final t = _ctrl.text.trim();
     if (t.isEmpty) return;
     _ctrl.clear();
-    await _reply(text: t);
+    await _reply(text: t, internal: _internalMode);
   }
 
   Future<void> _suggest() async {
@@ -555,12 +557,38 @@ class _ChatDetailState extends State<_ChatDetail> {
           ),
         ),
         _quickChips(),
+        _noteBar(),
         _composer(),
       ]),
     );
   }
 
+  Widget _noteBar() => InkWell(
+        onTap: () => setState(() => _internalMode = !_internalMode),
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+          color: _internalMode ? const Color(0xFFFFF3CD) : const Color(0xFFFBF8F1),
+          child: Row(children: [
+            Icon(Icons.sticky_note_2_outlined, size: 16,
+                color: _internalMode ? const Color(0xFF9A7A2E) : UellowColors.muted),
+            const SizedBox(width: 7),
+            Expanded(child: Text(
+                _internalMode
+                    ? (_ar ? 'ملاحظة داخلية — لن يراها العميل' : 'Internal note — hidden from customer')
+                    : (_ar ? 'إضافة ملاحظة داخلية (لفريقك)' : 'Add internal note (for your team)'),
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700,
+                    color: _internalMode ? const Color(0xFF9A7A2E) : UellowColors.muted))),
+            SizedBox(height: 26, child: Switch(
+                value: _internalMode,
+                onChanged: (v) => setState(() => _internalMode = v),
+                activeColor: const Color(0xFF9A7A2E))),
+          ]),
+        ),
+      );
+
   Widget _bubble(Map<String, dynamic> m) {
+    if (m['is_internal'] == true) return _noteBubble(m);
     final mine = m['author'] == 'agent';
     final system = m['author'] == 'system';
     if (system) {
@@ -610,6 +638,35 @@ class _ChatDetailState extends State<_ChatDetail> {
                   size: 13, color: m['is_read'] == true ? const Color(0xFF6FD3FF) : Colors.white60),
             ],
           ]),
+        ]),
+      ),
+    );
+  }
+
+  Widget _noteBubble(Map<String, dynamic> m) {
+    return Align(
+      alignment: Alignment.centerRight,
+      child: Container(
+        constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * .82),
+        margin: const EdgeInsets.symmetric(vertical: 5),
+        padding: const EdgeInsets.fromLTRB(12, 9, 12, 7),
+        decoration: BoxDecoration(
+          color: const Color(0xFFFFF3CD),
+          border: Border.all(color: const Color(0xFFF0D98C)),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(mainAxisSize: MainAxisSize.min, children: [
+            const Icon(Icons.sticky_note_2_outlined, size: 14, color: Color(0xFF9A7A2E)),
+            const SizedBox(width: 5),
+            Text(_ar ? 'ملاحظة داخلية · لا يراها العميل' : 'Internal note · hidden from customer',
+                style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800, color: Color(0xFF9A7A2E))),
+          ]),
+          const SizedBox(height: 4),
+          Text(m['body'] ?? '', style: const TextStyle(fontSize: 13.5, height: 1.5, color: Color(0xFF5A4A1E))),
+          const SizedBox(height: 3),
+          Text('${_CSState._fmtTime(m['at'])}${(m['agent_name'] ?? '').toString().isNotEmpty ? ' · ${m['agent_name']}' : ''}',
+              style: const TextStyle(fontSize: 9.5, color: Color(0xFFB09442))),
         ]),
       ),
     );
@@ -754,8 +811,11 @@ class _ChatDetailState extends State<_ChatDetail> {
                 textInputAction: TextInputAction.send,
                 onSubmitted: (_) => _send(),
                 decoration: InputDecoration(
-                  hintText: _ar ? 'اكتب ردك…' : 'Type your reply…',
-                  filled: true, fillColor: const Color(0xFFF2EFE8),
+                  hintText: _internalMode
+                      ? (_ar ? 'اكتب ملاحظة داخلية…' : 'Write an internal note…')
+                      : (_ar ? 'اكتب ردك…' : 'Type your reply…'),
+                  filled: true,
+                  fillColor: _internalMode ? const Color(0xFFFFF8E1) : const Color(0xFFF2EFE8),
                   contentPadding: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(999), borderSide: BorderSide.none),
                 ),
@@ -764,7 +824,7 @@ class _ChatDetailState extends State<_ChatDetail> {
             GestureDetector(
               onTap: _sending ? null : _send,
               child: Container(width: 44, height: 44,
-                  decoration: const BoxDecoration(color: _tealDark, shape: BoxShape.circle),
+                  decoration: BoxDecoration(color: _internalMode ? const Color(0xFF9A7A2E) : _tealDark, shape: BoxShape.circle),
                   child: _sending
                       ? const Padding(padding: EdgeInsets.all(12), child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                       : const Icon(Icons.send_rounded, color: Colors.white, size: 20)),
