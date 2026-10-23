@@ -63,9 +63,16 @@ class AdminApi {
   AdminApi._();
   static final AdminApi instance = AdminApi._();
 
-  Future<Map<String, dynamic>> dashboard() async {
-    final r = await UellowApi.instance
-        .getRaw('/api/mobile/v2/admin/dashboard', auth: true);
+  Future<Map<String, dynamic>> dashboard(
+      {String period = '30d', String? from, String? to}) async {
+    final r = await UellowApi.instance.getRaw(
+        '/api/mobile/v2/admin/dashboard',
+        query: {
+          'period': period,
+          if (from != null) 'from': from,
+          if (to != null) 'to': to,
+        },
+        auth: true);
     return (r['data'] as Map).cast<String, dynamic>();
   }
 
