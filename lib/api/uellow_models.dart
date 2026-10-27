@@ -775,11 +775,12 @@ class UellowCart {
   final UellowCartTotals totals;
   final List<String> coupons;
   final UellowFreeShipping? freeShipping;
+  final UellowFreeShipGuard? freeShipGuard;
   final List<UellowDeliveryOption> shippingMethods;
   const UellowCart({
     this.orderId, required this.cartToken, required this.currency,
     required this.lines, required this.lineCount, required this.totals,
-    required this.coupons, this.freeShipping,
+    required this.coupons, this.freeShipping, this.freeShipGuard,
     this.shippingMethods = const [],
   });
   factory UellowCart.fromJson(Map<String, dynamic> j) => UellowCart(
@@ -794,6 +795,8 @@ class UellowCart {
         coupons: List<String>.from((j['coupons'] as List?) ?? const []),
         freeShipping: j['free_shipping'] == null ? null
             : UellowFreeShipping.fromJson(j['free_shipping'] as Map<String, dynamic>),
+        freeShipGuard: j['free_shipping_guard'] == null ? null
+            : UellowFreeShipGuard.fromJson(j['free_shipping_guard'] as Map<String, dynamic>),
         shippingMethods: ((j['shipping_methods'] as List?) ?? const [])
             .map((e) => UellowDeliveryOption.fromJson(e as Map<String, dynamic>))
             .toList(),
@@ -826,6 +829,48 @@ class UellowFreeShipping {
               }
             : null,
       );
+}
+
+// ─── جارد هامش الشحن ───────────────────────────────────────────────
+class UellowFreeShipGuard {
+  final bool engaged;            // الجارد خفّض الشحن فعليًا
+  final String kind;             // free | partial | normal
+  final UellowMoney? charge;     // قيمة التحصيل المخفّضة
+  final UellowMoney? normal;     // السعر العادي (قد يكون null)
+  final UellowMoney? saved;      // الموفّر عن السعر العادي
+  final Map<String, String> message;  // {en, ar}
+  final UellowMoney? nudgeAmount;     // قيمة المنتجات للوصول للمجاني
+  final Map<String, String>? nudge;   // {en, ar}
+  const UellowFreeShipGuard({
+    required this.engaged, required this.kind,
+    this.charge, this.normal, this.saved,
+    this.message = const {}, this.nudgeAmount, this.nudge,
+  });
+  factory UellowFreeShipGuard.fromJson(Map<String, dynamic> j) {
+    Map<String, String>? mm(dynamic v) => (v is Map)
+        ? {'en': (v['en'] ?? '').toString(), 'ar': (v['ar'] ?? '').toString()}
+        : null;
+    final nd = j['nudge'];
+    return UellowFreeShipGuard(
+      engaged: (j['engaged'] ?? false) as bool,
+      kind: (j['kind'] ?? '').toString(),
+      charge: j['charge'] is Map
+          ? UellowMoney.fromJson(j['charge'] as Map<String, dynamic>) : null,
+      normal: j['normal'] is Map
+          ? UellowMoney.fromJson(j['normal'] as Map<String, dynamic>) : null,
+      saved: j['saved'] is Map
+          ? UellowMoney.fromJson(j['saved'] as Map<String, dynamic>) : null,
+      message: mm(j['message']) ?? const {},
+      nudgeAmount: (nd is Map && nd['amount'] is Map)
+          ? UellowMoney.fromJson(nd['amount'] as Map<String, dynamic>) : null,
+      nudge: mm(nd),
+    );
+  }
+  // النص حسب لغة التطبيق
+  String msg(String lang) =>
+      (message[lang] ?? message['ar'] ?? message['en'] ?? '');
+  String? nudgeText(String lang) =>
+      nudge == null ? null : (nudge![lang] ?? nudge!['ar'] ?? nudge!['en']);
 }
 
 class UellowDeliveryOption {

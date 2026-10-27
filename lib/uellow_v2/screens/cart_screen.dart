@@ -582,6 +582,9 @@ class _CartScreenState extends State<CartScreen> {
       // Free-shipping progress stays — it's an incentive, not a method picker.
       if (cart.freeShipping != null)
         SliverToBoxAdapter(child: _DeliveryBar(info: cart.freeShipping!)),
+      // جارد هامش الشحن: توصيل مخفّض + رسالة «أضف منتج»
+      if (cart.freeShipGuard != null && cart.freeShipGuard!.engaged)
+        SliverToBoxAdapter(child: _FreeShipGuardCard(g: cart.freeShipGuard!)),
       // Delivery method picker is moved to the checkout screen per spec.
       const SliverToBoxAdapter(child: _CouponsBrowseLink()),
       SliverToBoxAdapter(child: _CouponRow(
@@ -1652,6 +1655,54 @@ class _GiftOnlyBar extends StatelessWidget {
           ]),
         ),
       ),
+    );
+  }
+}
+
+
+// كارت جارد هامش الشحن: يعرض التوصيل المخفّض + رسالة «أضف منتج لتوصيل مجاني»
+class _FreeShipGuardCard extends StatelessWidget {
+  const _FreeShipGuardCard({required this.g});
+  final UellowFreeShipGuard g;
+  @override
+  Widget build(BuildContext context) {
+    final lang = UellowApi.instance.lang;
+    final nudge = g.nudgeText(lang);
+    return Container(
+      margin: const EdgeInsets.fromLTRB(14, 10, 14, 0),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFBF0D8),
+        borderRadius: const BorderRadius.all(Radius.circular(12)),
+        border: Border.all(color: const Color(0xFFEFD79A)),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Text('🚚', style: TextStyle(fontSize: 15)),
+          const SizedBox(width: 7),
+          Expanded(
+            child: Text(g.msg(lang),
+                style: const TextStyle(
+                    fontSize: 12.5, height: 1.4,
+                    fontWeight: FontWeight.w700, color: Color(0xFF8A5A08))),
+          ),
+        ]),
+        if (nudge != null && nudge.isNotEmpty) ...[
+          const SizedBox(height: 7),
+          Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const Icon(Icons.add_shopping_cart,
+                size: 14, color: UellowColors.darkBrown),
+            const SizedBox(width: 7),
+            Expanded(
+              child: Text(nudge,
+                  style: const TextStyle(
+                      fontSize: 11.5, height: 1.35,
+                      fontWeight: FontWeight.w700,
+                      color: UellowColors.darkBrown)),
+            ),
+          ]),
+        ],
+      ]),
     );
   }
 }
