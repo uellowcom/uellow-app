@@ -103,8 +103,10 @@ class _LoyaltyScreenState extends State<LoyaltyScreen> {
         final code = (d['code'] ?? '').toString();
         final kd   = (d['kd_value']?['amount'] ?? 0).toString();
         final expires = (d['expires'] ?? '').toString();
+        final appliedToCart = d['applied_to_cart'] == true;
         showDialog(context: context, builder: (_) =>
-            _SuccessDialog(code: code, kdValue: kd, expires: expires, ar: ar));
+            _SuccessDialog(code: code, kdValue: kd, expires: expires, ar: ar,
+                appliedToCart: appliedToCart));
         _refresh();
       } else {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -475,7 +477,7 @@ class _RedeemGrid extends StatelessWidget {
     final lang = ar ? 'ar' : 'en';
     final items = loyalty.redeemOptions;
     return Container(
-      margin: const EdgeInsets.fromLTRB(14, 8, 14, 0),
+      margin: const EdgeInsets.fromLTRB(14, 8, 14, 16),
       padding: const EdgeInsets.all(16),
       decoration: const BoxDecoration(
         color: Colors.white,
@@ -697,9 +699,10 @@ class _RedeemSheet extends StatelessWidget {
 
 class _SuccessDialog extends StatelessWidget {
   const _SuccessDialog({required this.code, required this.kdValue,
-      required this.expires, required this.ar});
+      required this.expires, required this.ar, this.appliedToCart = false});
   final String code, kdValue, expires;
   final bool ar;
+  final bool appliedToCart;
   @override
   Widget build(BuildContext context) {
     return Dialog(
@@ -718,9 +721,11 @@ class _SuccessDialog extends StatelessWidget {
           Text(ar ? 'مبروك! 🎉' : 'Congrats! 🎉',
               style: UT.h2, textAlign: TextAlign.center),
           const SizedBox(height: 6),
-          Text(ar
-              ? 'تم إصدار قسيمة بقيمة $kdValue د.ك'
-              : 'A $kdValue KD voucher has been issued',
+          Text(appliedToCart
+              ? (ar ? 'تم تطبيق خصم $kdValue د.ك على سلتك مباشرة ✓'
+                    : 'A $kdValue KD discount was applied to your cart ✓')
+              : (ar ? 'تم إصدار قسيمة بقيمة $kdValue د.ك'
+                    : 'A $kdValue KD voucher has been issued'),
               textAlign: TextAlign.center, style: UT.subtitle),
           const SizedBox(height: 18),
           Container(
