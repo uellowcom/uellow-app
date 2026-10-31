@@ -341,14 +341,33 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         // v2.1.14 — payment opens as a DIALOG over the checkout (white-label
         // links land straight on the chosen gateway: KNET / Apple Pay / card)
         // instead of navigating away to a separate page.
-        final paid = await showPaymentSheet(context,
+        await showPaymentSheet(context,
             url: result.paymentUrl!,
             title: ar ? 'الدفع الآمن' : 'Secure payment');
         if (!mounted) return;
         // Cancelled / not completed / closed with back → cart is preserved
         // (online order stayed a draft until payment). Only an explicit `true`
         // (gateway redirected to the return/status URL) counts as paid.
-        if (paid != true) {
+        // v2.x — NEVER trust the webview result alone. Ask the server for
+        // the REAL payment status (it re-verifies the UPayments charge
+        // server-side), so a captured payment confirms even if the webview
+        // closed early, and a non-captured one is correctly rejected. Poll
+        // briefly to catch a slightly-delayed gateway capture.
+        bool serverPaid = false;
+        for (int i = 0; i < 5; i++) {
+          try {
+            final st = await UellowApi.instance.orders
+                .verifyPayment(result.orderId);
+            if (st['paid'] == true || st['confirmed'] == true) {
+              serverPaid = true;
+              break;
+            }
+          } catch (_) {}
+          if (!mounted) return;
+          await Future.delayed(const Duration(seconds: 2));
+        }
+        if (!mounted) return;
+        if (!serverPaid) {
           Navigator.pushReplacementNamed(context, Routes.orderConfirm,
             arguments: OrderConfirmationArgs(
               success: false,

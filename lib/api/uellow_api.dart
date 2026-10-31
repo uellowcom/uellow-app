@@ -1150,6 +1150,16 @@ class _OrdersApi {
     });
     return UellowCheckoutConfirm.fromJson(res['data'] as Map<String, dynamic>);
   }
+
+  /// Ask the server for the REAL payment status of an order after the
+  /// payment webview closes. The server re-verifies the UPayments charge
+  /// (idempotent), so a captured payment is reported paid even if the
+  /// gateway's instant webhook / browser-return never fired.
+  Future<Map<String, dynamic>> verifyPayment(int orderId) async {
+    final res = await _c._get(
+        '/api/mobile/v2/orders/\$orderId/verify-payment', auth: false);
+    return (res['data'] as Map?)?.cast<String, dynamic>() ?? const {};
+  }
 }
 
 class _AddressesApi {
