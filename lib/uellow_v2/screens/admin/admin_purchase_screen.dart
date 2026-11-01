@@ -525,6 +525,30 @@ class _PurchaseDetailSheetState extends State<_PurchaseDetailSheet> {
     }
   }
 
+  /// يجلب رابط PDF (طباعة/كشف) ويفتحه خارجيًا.
+  Future<void> _openDocUrl(Future<Map<String, dynamic>> fut, bool ar) async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      final d = await fut;
+      final url = (d['url'] ?? '').toString();
+      if (url.isNotEmpty) {
+        await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+      } else if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(ar ? 'تعذّر إنشاء المستند' : 'Could not build document')));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(e.toString().replaceAll('Exception: ', '')),
+            backgroundColor: UellowColors.danger));
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final ar = widget.ar;
@@ -719,6 +743,13 @@ class _PurchaseDetailSheetState extends State<_PurchaseDetailSheet> {
       btns.add(_actBtn(ar ? '✏️ تعديل البنود' : '✏️ Edit lines',
           const Color(0xFF2563EB), () => _openEdit(d, ar)));
     }
+    // v2.2.144 — طباعة PDF + كشف حساب المورّد (روابط عامة من الباك-اند)
+    btns.add(_actBtn(ar ? '🖨️ طباعة PDF' : '🖨️ Print PDF',
+        const Color(0xFF475569),
+        () => _openDocUrl(AdminApi.instance.purchasePdfUrl(id), ar)));
+    btns.add(_actBtn(ar ? '📊 كشف حساب المورّد' : '📊 Vendor statement',
+        const Color(0xFF0E7490),
+        () => _openDocUrl(AdminApi.instance.purchaseStatementUrl(id), ar)));
     if (flag('cancel')) {
       btns.add(_actBtn(ar ? '✖ إلغاء الطلب' : '✖ Cancel order',
           UellowColors.danger, () => _confirmCancel(ar)));

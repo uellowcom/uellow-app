@@ -396,6 +396,20 @@ class AdminApi {
   Future<Map<String, dynamic>> purchaseSend(int id, String channel) =>
       _post('/api/mobile/v2/admin/purchase/$id/send', {'channel': channel});
 
+  /// رابط PDF عام لطلب الشراء (للطباعة/المشاركة).
+  Future<Map<String, dynamic>> purchasePdfUrl(int id) async {
+    final r = await UellowApi.instance
+        .getRaw('/api/mobile/v2/admin/purchase/$id/pdf', auth: true);
+    return ((r['data'] as Map?) ?? const {}).cast<String, dynamic>();
+  }
+
+  /// رابط PDF لكشف حساب مورّد طلب الشراء.
+  Future<Map<String, dynamic>> purchaseStatementUrl(int id) async {
+    final r = await UellowApi.instance
+        .getRaw('/api/mobile/v2/admin/purchase/$id/statement', auth: true);
+    return ((r['data'] as Map?) ?? const {}).cast<String, dynamic>();
+  }
+
   /// Purchases summary (month spend, RFQ/to-receive/to-bill counts, top
   /// vendors).
   Future<Map<String, dynamic>> purchaseStats() async {
