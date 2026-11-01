@@ -828,6 +828,7 @@ class _ReportTabState extends State<_ReportTab>
     final byPay = (d['by_payment'] as List?) ?? const [];
     final byCash = (d['by_cashier'] as List?) ?? const [];
     final top = (d['top_products'] as List?) ?? const [];
+    final byDay = (d['by_day'] as List?) ?? const [];
     final cur = d['currency']?.toString() ?? 'KD';
     num amt(dynamic m) => (m is Map ? (m['amount'] as num? ?? 0) : 0);
     return RefreshIndicator(
@@ -887,6 +888,9 @@ class _ReportTabState extends State<_ReportTab>
               '(${k['refunds_count']})', const Color(0xFFEF4444)),
         ],
         const SizedBox(height: 16),
+        if (byDay.length > 1)
+          _section(ar ? '📈 المبيعات اليومية' : '📈 Daily sales',
+              [_dayChart(byDay)]),
         if (byPay.isNotEmpty)
           _section(ar ? '💳 حسب طريقة الدفع' : '💳 By payment method', [
             for (final p in byPay) _line((p as Map)['method']?.toString() ?? '',
@@ -926,6 +930,37 @@ class _ReportTabState extends State<_ReportTab>
               fontWeight: FontWeight.w800, color: color)),
         ]),
       ));
+
+  Widget _dayChart(List byDay) {
+    final days = byDay.whereType<Map>().toList();
+    double mx = 1;
+    for (final d in days) {
+      final v = (d['sales'] as num?)?.toDouble() ?? 0;
+      if (v > mx) mx = v;
+    }
+    final show = days.length > 31 ? days.sublist(days.length - 31) : days;
+    return SizedBox(height: 90, child: Row(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        for (final d in show)
+          Expanded(child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 1),
+            child: Column(mainAxisAlignment: MainAxisAlignment.end, children: [
+              Container(
+                height: (((d['sales'] as num?)?.toDouble() ?? 0) / mx * 72)
+                    .clamp(1, 72),
+                decoration: BoxDecoration(
+                    color: ((d['sales'] as num?)?.toDouble() ?? 0) < 0
+                        ? const Color(0xFFEF4444)
+                        : UellowColors.yellow,
+                    borderRadius: const BorderRadius.vertical(
+                        top: Radius.circular(2))),
+              ),
+            ]),
+          )),
+      ],
+    ));
+  }
 
   Widget _section(String title, List<Widget> children) => Container(
     margin: const EdgeInsets.only(bottom: 12),
