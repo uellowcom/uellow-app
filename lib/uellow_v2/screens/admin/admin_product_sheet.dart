@@ -777,6 +777,17 @@ class _AdminProductSheetState extends State<_AdminProductSheet> {
     ]);
   }
 
+  Color _parseColor(String hex) {
+    try {
+      var h = hex.replaceAll('#', '').trim();
+      if (h.length == 6) h = 'FF$h';
+      if (h.length != 8) return const Color(0xFFCCCCCC);
+      return Color(int.parse(h, radix: 16));
+    } catch (_) {
+      return const Color(0xFFCCCCCC);
+    }
+  }
+
   Widget _variantCard(bool ar, Map v, String sym) {
     final id = (v['id'] as num).toInt();
     return Container(
@@ -795,6 +806,13 @@ class _AdminProductSheetState extends State<_AdminProductSheet> {
                   errorBuilder: (_, __, ___) => Container(
                       width: 30, height: 30,
                       color: UellowColors.border))),
+          if ((v['html_color'] ?? '').toString().isNotEmpty) ...[
+            const SizedBox(width: 6),
+            Container(width: 16, height: 16,
+                decoration: BoxDecoration(shape: BoxShape.circle,
+                    color: _parseColor(v['html_color'].toString()),
+                    border: Border.all(color: const Color(0xFFE9E1D1)))),
+          ],
           const SizedBox(width: 8),
           Expanded(child: Text(
               (v['attrs'] ?? '').toString().isNotEmpty
