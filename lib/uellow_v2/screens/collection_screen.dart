@@ -115,8 +115,21 @@ class _CollectionScreenState extends State<CollectionScreen> {
       if (widget.searchQuery != null && widget.searchQuery!.isNotEmpty) {
         // v2.1.56 — analytics: log the term once (page 1 = the submitted
         // search), not again on every pagination fetch.
+        // v2.2.135 — نمرّر الترتيب + الفلاتر المختارة لنتائج البحث.
+        final searchFilters = <String, String>{};
+        if (_selectedValueIds.isNotEmpty) {
+          searchFilters['value_ids'] = _selectedValueIds.join(',');
+        }
+        if (_minPrice != null) {
+          searchFilters['min_price'] = _minPrice!.toStringAsFixed(2);
+        }
+        if (_maxPrice != null) {
+          searchFilters['max_price'] = _maxPrice!.toStringAsFixed(2);
+        }
+        if (_minRating > 0) searchFilters['min_rating'] = '$_minRating';
         page = (await UellowApi.instance.search.search(widget.searchQuery!,
-                page: _page, perPage: 20, log: _page == 1)).asProductsPage();
+                page: _page, perPage: 20, log: _page == 1,
+                sort: _sort, filters: searchFilters)).asProductsPage();
       } else if (widget.brandValueId != null) {
         page = await UellowApi.instance.products.list(
               brandId: widget.brandValueId,
@@ -182,9 +195,8 @@ class _CollectionScreenState extends State<CollectionScreen> {
 
   Future<void> _loadFilterSpec() async {
     if (_filterSpec != null) return;
-    // v2.2.24 — search results have no filter facet; everything else
-    // (category OR any product feed/filtered-set page) gets a filter bar.
-    if (widget.searchQuery != null && widget.searchQuery!.isNotEmpty) return;
+    // v2.2.135 — نتائج البحث أيضاً تحصل على فلاتر: المواصفات العامة من
+    // /products/filters (لا تحتاج قسماً محدّداً).
     try {
       final base = UellowApi.instance.baseUrl;
       // Category page → that category's facets; any other feed → the
@@ -219,10 +231,12 @@ class _CollectionScreenState extends State<CollectionScreen> {
   }
 
   Future<void> _openFilterSheet() async {
-    if (widget.categoryId == null) return;
-    final url = Uri.parse(
-      '${UellowApi.instance.baseUrl}/api/mobile/v2/categories/${widget.categoryId}/filters'
-    );
+    // v2.2.135 — قسم محدّد → فلاتر القسم؛ بحث أو خلاصة → الفلاتر العامة.
+    final Uri url = widget.categoryId != null
+        ? Uri.parse('${UellowApi.instance.baseUrl}'
+            '/api/mobile/v2/categories/${widget.categoryId}/filters')
+        : Uri.parse('${UellowApi.instance.baseUrl}'
+            '/api/mobile/v2/products/filters');
     Map<String, dynamic>? data;
     try {
       final r = await http.get(url);
@@ -346,8 +360,12 @@ class _CollectionScreenState extends State<CollectionScreen> {
           if (subs.isNotEmpty) SliverToBoxAdapter(child: _SubcatStrip(subs: subs)),
           SliverToBoxAdapter(child: _SortBar(
             count: _items.length, sort: _sort, onSort: _changeSort,
-            hideSort: widget.searchQuery != null,
-            onFilter: widget.categoryId != null ? _openFilterSheet : null,
+            hideSort: false,
+            onFilter: (widget.categoryId != null ||
+                    (widget.searchQuery != null &&
+                        widget.searchQuery!.isNotEmpty))
+                ? _openFilterSheet
+                : null,
             activeFilterCount: _selectedValueIds.length,
           )),
           // v2.1.57 — horizontal quick-filters chips (top attributes +

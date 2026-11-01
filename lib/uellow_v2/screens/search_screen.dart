@@ -14,7 +14,9 @@ import 'package:image_picker/image_picker.dart';
 import '../../api/uellow_api.dart';
 import '../../api/uellow_models.dart';
 import '../router/uellow_router.dart';
+import '../services/admin_mode.dart';
 import '../theme/uellow_theme.dart';
+import 'admin/admin_product_sheet.dart';
 
 class SearchScreen extends StatefulWidget {
   const SearchScreen({super.key});
@@ -593,6 +595,27 @@ class _SearchScreenState extends State<SearchScreen> {
                         fontWeight: FontWeight.w800, color: UellowColors.darkBrown,
                         fontSize: 12)),
                   ])),
+                  // v2.2.135 — 🛡️ أيقونة الكونسول لتعديل المنتج في نتائج البحث
+                  ValueListenableBuilder<bool>(
+                    valueListenable: AdminMode.isAdmin,
+                    builder: (ctx, isAdmin, _) => !isAdmin
+                        ? const SizedBox.shrink()
+                        : GestureDetector(
+                            behavior: HitTestBehavior.opaque,
+                            onTap: () => showAdminProductSheet(ctx, p.id),
+                            child: Container(
+                              margin: const EdgeInsets.only(right: 4),
+                              width: 30, height: 30,
+                              decoration: BoxDecoration(
+                                color: const Color(0xE6241302),
+                                shape: BoxShape.circle,
+                                border: Border.all(color: const Color(0x66F5C320)),
+                              ),
+                              child: const Icon(Icons.shield_outlined,
+                                  size: 15, color: Color(0xFFF5C320)),
+                            ),
+                          ),
+                  ),
                   const Icon(Icons.chevron_right, color: UellowColors.muted),
                 ]),
               ),

@@ -1265,12 +1265,17 @@ class _SearchApi {
   final UellowApi _c;
 
   Future<UellowSearchResult> search(String query,
-      {int page = 1, int perPage = 20, bool log = true}) async {
+      {int page = 1, int perPage = 20, bool log = true,
+      String? sort, Map<String, String>? filters}) async {
     // v2.1.56 — log:false for as-you-type suggestion calls so half-typed
     // words never reach recent/trending analytics.
+    // v2.2.135 — sort + filters (price/rating/on_sale/value_ids…) so the
+    // search results page behaves like a category listing.
     final res = await _c._get(EP.search, query: {
       'q': query, 'page': page, 'per_page': perPage,
       if (!log) 'log': '0',
+      if (sort != null && sort.isNotEmpty) 'sort': sort,
+      ...?filters,
     });
     return UellowSearchResult.fromJson(res);
   }
