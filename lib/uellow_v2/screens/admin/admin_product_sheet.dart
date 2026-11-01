@@ -620,11 +620,30 @@ class _AdminProductSheetState extends State<_AdminProductSheet> {
           style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w900,
               color: UellowColors.darkBrown)),
       const SizedBox(height: 8),
-      SizedBox(height: 66, child: ListView(
-        scrollDirection: Axis.horizontal,
-        children: [
-          for (final c in _catalog)
-            Padding(
+      // v2.2.154 — سحب لإعادة ترتيب الصور (مع زر الإضافة بآخر الصف).
+      if (_catalog.length > 1)
+        Padding(padding: const EdgeInsets.only(bottom: 4),
+          child: Text(ar ? '↔ اسحب لإعادة الترتيب' : '↔ Drag to reorder',
+              style: const TextStyle(fontSize: 10,
+                  color: UellowColors.muted, fontWeight: FontWeight.w700))),
+      SizedBox(height: 66, child: Row(children: [
+        Expanded(child: ReorderableListView.builder(
+          scrollDirection: Axis.horizontal,
+          buildDefaultDragHandles: true,
+          itemCount: _catalog.length,
+          onReorder: (oldI, newI) {
+            setState(() {
+              if (newI > oldI) newI -= 1;
+              final it = _catalog.removeAt(oldI);
+              _catalog.insert(newI, it);
+            });
+            AdminApi.instance.reorderProductImages(widget.tmplId,
+                [for (final c in _catalog) (c['id'] as num).toInt()]);
+          },
+          itemBuilder: (ctx, i) {
+            final c = _catalog[i];
+            return Padding(
+              key: ValueKey(c['id']),
               padding: const EdgeInsetsDirectional.only(end: 8),
               child: Stack(clipBehavior: Clip.none, children: [
                 Container(
@@ -660,21 +679,22 @@ class _AdminProductSheetState extends State<_AdminProductSheet> {
                   ),
                 ),
               ]),
+            );
+          },
+        )),
+        GestureDetector(
+          onTap: _imgBusy ? null : () => _pickImage('catalog', ar),
+          child: Container(
+            width: 62, height: 62,
+            decoration: BoxDecoration(
+              color: const Color(0xFFFDF3D6),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFFE8A800)),
             ),
-          GestureDetector(
-            onTap: _imgBusy ? null : () => _pickImage('catalog', ar),
-            child: Container(
-              width: 62, height: 62,
-              decoration: BoxDecoration(
-                color: const Color(0xFFFDF3D6),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: const Color(0xFFE8A800)),
-              ),
-              child: const Icon(Icons.add, size: 26, color: Color(0xFFB58A00)),
-            ),
+            child: const Icon(Icons.add, size: 26, color: Color(0xFFB58A00)),
           ),
-        ],
-      )),
+        ),
+      ])),
       if (_imgBusy) const Padding(
         padding: EdgeInsets.only(top: 8),
         child: LinearProgressIndicator(minHeight: 2),

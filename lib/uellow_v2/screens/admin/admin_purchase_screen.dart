@@ -7,6 +7,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../widgets/admin_console_nav.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -674,7 +675,28 @@ class _PurchaseDetailSheetState extends State<_PurchaseDetailSheet> {
       _amtRow(ar ? 'الإجمالي قبل الضريبة' : 'Untaxed', m('untaxed')),
       _amtRow(ar ? 'الضريبة' : 'Tax', m('tax')),
       _amtRow(ar ? 'الإجمالي' : 'Total', m('total'), bold: true),
+      if (((m('billed')?['amount'] as num?) ?? 0) != 0) ...[
+        const SizedBox(height: 4),
+        _amtRow(ar ? 'المفوتر' : 'Billed', m('billed')),
+        _amtRow(ar ? 'المدفوع' : 'Paid', m('paid')),
+        _amtRow(ar ? 'المتبقّي' : 'Remaining', m('remaining'), bold: true),
+      ],
     ]);
+  }
+
+  Future<void> _copyPdfLink(int id, bool ar) async {
+    try {
+      final r = await AdminApi.instance.purchasePdfUrl(id);
+      final url = (r['url'] ?? '').toString();
+      if (url.isEmpty) throw Exception('no url');
+      await Clipboard.setData(ClipboardData(text: url));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(ar ? 'تم نسخ الرابط' : 'Link copied')));
+    } catch (_) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(ar ? 'تعذّر إنشاء الرابط' : 'Could not create link'),
+          backgroundColor: UellowColors.danger));
+    }
   }
 
   Widget _fulfilCard(Map<String, dynamic> d, bool ar) {
@@ -715,6 +737,8 @@ class _PurchaseDetailSheetState extends State<_PurchaseDetailSheet> {
       btns.add(_actBtn(ar ? '🟢 إرسال عبر واتساب' : '🟢 Send via WhatsApp',
           const Color(0xFF25D366), () => _send('whatsapp', ar)));
     }
+    btns.add(_actBtn(ar ? '🔗 نسخ رابط الـPDF' : '🔗 Copy PDF link',
+        const Color(0xFF64748B), () => _copyPdfLink(id, ar)));
     if (flag('confirm')) {
       btns.add(_actBtn(ar ? '✅ تأكيد الطلب' : '✅ Confirm order',
           const Color(0xFF059669),

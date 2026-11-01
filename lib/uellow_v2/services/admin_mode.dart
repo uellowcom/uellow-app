@@ -114,6 +114,9 @@ class AdminApi {
       _post('/api/mobile/v2/admin/campaign/$id/toggle', {'active': active});
 
   /// v2.2.148 — ضبط صورة المنتج: kind = 'main' | 'catalog' (image = base64).
+  Future<Map<String, dynamic>> reorderProductImages(int tmplId, List<int> order) =>
+      _post('/api/mobile/v2/admin/product/$tmplId/images/reorder', {'order': order});
+
   Future<Map<String, dynamic>> productSetImage(
           int id, String imageB64, String kind) =>
       _post('/api/mobile/v2/admin/product/$id/image',

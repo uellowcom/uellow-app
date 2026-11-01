@@ -458,6 +458,7 @@ class _PosOrdersTabState extends State<_PosOrdersTab>
                 subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                   Text(
+                      '${(o['cashier'] ?? '').toString().isNotEmpty ? '${o['cashier']} · ' : ''}'
                       '${o['date'] ?? ''} · ${o['items'] ?? 0} ${ar ? 'منتج' : 'items'}'
                       '${pays.isNotEmpty ? ' · ${pays.map((p) => (p as Map)['method']).join('+')}' : ''}',
                       style: const TextStyle(fontSize: 10,

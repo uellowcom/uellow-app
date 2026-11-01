@@ -141,7 +141,9 @@ class _AccountScreenState extends State<AccountScreen> {
       child: ListView(padding: EdgeInsets.only(
           bottom: 24 + kBottomNavigationBarHeight +
               MediaQuery.of(context).padding.bottom), children: [
-        _ProfileHeader(user: user, isGuest: isGuest),
+        _ProfileHeader(user: user, isGuest: isGuest,
+            tier: (data?['tier'] ?? '').toString(),
+            memberSince: (data?['member_since'] ?? '').toString()),
         const LammaAccountBlock(),
         // v2.1.57 — targeted announcement strip (admin-controlled).
         if (isGuest) _GuestSigninBanner(),
@@ -300,9 +302,12 @@ class _Channel extends StatelessWidget {
 }
 
 class _ProfileHeader extends StatefulWidget {
-  const _ProfileHeader({required this.user, this.isGuest = false});
+  const _ProfileHeader({required this.user, this.isGuest = false,
+      this.tier = '', this.memberSince = ''});
   final Map user;
   final bool isGuest;
+  final String tier;        // v2.2.154 — شارة العضوية
+  final String memberSince; // سنة الانضمام
   @override
   State<_ProfileHeader> createState() => _ProfileHeaderState();
 }
@@ -469,8 +474,18 @@ class _ProfileHeaderState extends State<_ProfileHeader> {
           Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(name, style: UT.h2),
             const SizedBox(height: 2),
-            Text(ar ? 'مرحباً بك في Uellow' : 'Welcome to Uellow',
-                style: UT.subtitle),
+            if (!widget.isGuest &&
+                (widget.user['phone'] ?? '').toString().isNotEmpty)
+              Text(widget.user['phone'].toString(),
+                  textDirection: TextDirection.ltr, style: UT.subtitle),
+            if (!widget.isGuest && widget.tier.isNotEmpty) ...[
+              const SizedBox(height: 4),
+              _tierBadge(widget.tier,
+                  '${_tierLabel(ar, widget.tier)}'
+                  '${widget.memberSince.isNotEmpty ? ' · ${ar ? 'منذ' : 'since'} ${widget.memberSince}' : ''}'),
+            ] else if (widget.isGuest)
+              Text(ar ? 'مرحباً بك في Uellow' : 'Welcome to Uellow',
+                  style: UT.subtitle),
           ])),
           // Tiny "Edit profile" / "Sign in" pill
           GestureDetector(
@@ -745,6 +760,14 @@ class _BannerCard extends StatelessWidget {
       ),
     );
   }
+}
+
+String _tierLabel(bool ar, String tier) {
+  if (!ar) return '⭐ ${tier[0].toUpperCase()}${tier.substring(1)} member';
+  return '⭐ عضو ' + (const {
+    'platinum': 'بلاتيني', 'gold': 'ذهبي',
+    'silver': 'فضي', 'bronze': 'برونزي',
+  }[tier] ?? tier);
 }
 
 Widget _tierBadge(String tier, String label) {
