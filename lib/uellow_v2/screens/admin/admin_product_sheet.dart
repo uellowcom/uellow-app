@@ -42,8 +42,12 @@ class _AdminProductSheetState extends State<_AdminProductSheet> {
   late final TextEditingController _cost = TextEditingController();
   late final TextEditingController _barcode = TextEditingController();
   bool _continueSelling = false;
+  // v2.2.141 — توجل «منشور» + «إظهار في البوس» + سعر لكل لون
+  bool _published = true;
+  bool _availableInPos = true;
   final Map<int, TextEditingController> _vCost = {};
   final Map<int, TextEditingController> _vBarcode = {};
+  final Map<int, TextEditingController> _vPrice = {};
   // v2.2.41 — eCommerce category (section) editing
   List<Map<String, dynamic>> _cats = [];
   final Set<int> _selCats = {};
@@ -62,6 +66,7 @@ class _AdminProductSheetState extends State<_AdminProductSheet> {
     _barcode.dispose();
     for (final c in _vCost.values) c.dispose();
     for (final c in _vBarcode.values) c.dispose();
+    for (final c in _vPrice.values) c.dispose();
     super.dispose();
   }
 
@@ -73,10 +78,13 @@ class _AdminProductSheetState extends State<_AdminProductSheet> {
       _cost.text = '${d['cost'] ?? ''}';
       _barcode.text = '${d['barcode'] ?? ''}';
       _continueSelling = d['continue_selling'] == true;
+      _published = d['published'] != false;
+      _availableInPos = d['available_in_pos'] != false;
       for (final v in (d['variants'] as List? ?? const [])) {
         final id = ((v as Map)['id'] as num).toInt();
         _vCost[id] = TextEditingController(text: '${v['cost'] ?? ''}');
         _vBarcode[id] = TextEditingController(text: '${v['barcode'] ?? ''}');
+        _vPrice[id] = TextEditingController(text: '${v['price'] ?? ''}');
       }
       for (final c in (d['eco_categories'] as List? ?? const [])) {
         final id = ((c as Map)['id'] as num).toInt();
@@ -105,6 +113,9 @@ class _AdminProductSheetState extends State<_AdminProductSheet> {
         'id': widget.tmplId,
         'price': double.tryParse(_price.text.trim()),
         'continue_selling': _continueSelling,
+        // v2.2.141 — توجل منشور + إظهار في البوس
+        'is_published': _published,
+        'available_in_pos': _availableInPos,
         if (!hasVariants) 'cost': double.tryParse(_cost.text.trim()),
         if (!hasVariants) 'barcode': _barcode.text.trim(),
         'public_categ_ids': _selCats.toList(),
@@ -114,6 +125,9 @@ class _AdminProductSheetState extends State<_AdminProductSheet> {
               'id': ((v as Map)['id'] as num).toInt(),
               'cost': double.tryParse(
                   _vCost[(v['id'] as num).toInt()]?.text.trim() ?? ''),
+              // v2.2.141 — سعر لكل لون (يُكتب عبر price_extra بالباك-اند)
+              'price': double.tryParse(
+                  _vPrice[(v['id'] as num).toInt()]?.text.trim() ?? ''),
               'barcode':
                   _vBarcode[(v['id'] as num).toInt()]?.text.trim() ?? '',
             }
@@ -268,6 +282,16 @@ class _AdminProductSheetState extends State<_AdminProductSheet> {
                       setState(() => _continueSelling = v)),
             ]),
           ),
+          const SizedBox(height: 10),
+          // v2.2.141 — توجل منشور على الموقع/التطبيق
+          _toggleRow(Icons.public_rounded,
+              ar ? 'منشور على الموقع/التطبيق' : 'Published on web/app',
+              _published, (v) => setState(() => _published = v)),
+          const SizedBox(height: 10),
+          // v2.2.141 — توجل الإظهار في نقاط البيع (POS)
+          _toggleRow(Icons.point_of_sale_rounded,
+              ar ? 'إظهاره في نقاط البيع (POS)' : 'Available in POS',
+              _availableInPos, (v) => setState(() => _availableInPos = v)),
           const SizedBox(height: 12),
           _stockButton(ar),
           if (!hasVariants) ...[
@@ -464,6 +488,27 @@ class _AdminProductSheetState extends State<_AdminProductSheet> {
     );
   }
 
+  // v2.2.141 — صفّ توجل عام (أيقونة + عنوان + Switch) بنفس ستايل البطاقة.
+  Widget _toggleRow(IconData icon, String label, bool value,
+      ValueChanged<bool> onChanged) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      decoration: BoxDecoration(
+          color: const Color(0xFFF7F8FA),
+          borderRadius: BorderRadius.circular(12)),
+      child: Row(children: [
+        Icon(icon, size: 17, color: UellowColors.darkBrown),
+        const SizedBox(width: 8),
+        Expanded(child: Text(label,
+            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700))),
+        Switch(value: value,
+            activeColor: UellowColors.yellow,
+            activeTrackColor: const Color(0xFF412402),
+            onChanged: onChanged),
+      ]),
+    );
+  }
+
   Widget _numField(String label, TextEditingController ctl,
       {IconData? icon}) {
     return TextField(
@@ -562,9 +607,14 @@ class _AdminProductSheetState extends State<_AdminProductSheet> {
         ]),
         const SizedBox(height: 9),
         Row(children: [
-          SizedBox(width: 110, child: _numField(
+          // v2.2.141 — تكلفة وسعر لكل لون
+          SizedBox(width: 92, child: _numField(
               ar ? 'التكلفة ($sym)' : 'Cost ($sym)',
               _vCost[id] ?? TextEditingController())),
+          const SizedBox(width: 8),
+          SizedBox(width: 92, child: _numField(
+              ar ? 'البيع ($sym)' : 'Sell ($sym)',
+              _vPrice[id] ?? TextEditingController())),
           const SizedBox(width: 8),
           Expanded(child: TextField(
             controller: _vBarcode[id],
