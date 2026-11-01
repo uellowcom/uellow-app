@@ -110,6 +110,15 @@ class AdminApi {
   }
 
   /// v2.2.147 — تشغيل/إيقاف حملة فوريًا.
+  Future<Map<String, dynamic>> campaignSchedule(int id, Map<String, dynamic> body) =>
+      _post('/api/mobile/v2/admin/campaign/$id/schedule', body);
+
+  Future<Map<String, dynamic>> campaignProducts(int id) async {
+    final r = await UellowApi.instance.getRaw(
+        '/api/mobile/v2/admin/campaign/$id/products', auth: true);
+    return ((r['data'] as Map?) ?? const {}).cast<String, dynamic>();
+  }
+
   Future<Map<String, dynamic>> campaignToggle(int id, bool active) =>
       _post('/api/mobile/v2/admin/campaign/$id/toggle', {'active': active});
 
