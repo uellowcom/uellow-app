@@ -29,6 +29,7 @@ import '../../api/uellow_models.dart';
 import '../theme/uellow_theme.dart';
 import 'map_icons.dart';
 import 'helpdesk_screen.dart';
+import 'helpdesk_conversation_screen.dart';
 
 class OrderScreen extends StatefulWidget {
   const OrderScreen({super.key, required this.orderId});
@@ -110,6 +111,9 @@ class _OrderScreenState extends State<OrderScreen> {
               ),
               _Items(order: order, ar: ar),
               _Summary(order: order, ar: ar),
+              // v2.2.142 — ثريد الدعم المرتبط بهذا الطلب (عرض الحالة والرد)
+              _OrderSupportCard(orderId: widget.orderId,
+                  orderName: order.name, ar: ar),
               _Actions(order: order, ar: ar,
                   onChanged: () => setState(() {
                     _future = UellowApi.instance.orders.detail(widget.orderId);
@@ -1542,4 +1546,194 @@ class _FlightDash extends StatelessWidget {
       Expanded(child: Container(height: 1.5, color: const Color(0xFFF5C320))),
     ]),
   );
+}
+
+
+// ─── v2.2.142 — كارت الدعم المرتبط بالطلب (جانب العميل) ──────────────────
+class _OrderSupportCard extends StatefulWidget {
+  const _OrderSupportCard(
+      {required this.orderId, required this.orderName, required this.ar});
+  final int orderId;
+  final String orderName;
+  final bool ar;
+  @override
+  State<_OrderSupportCard> createState() => _OrderSupportCardState();
+}
+
+class _OrderSupportCardState extends State<_OrderSupportCard> {
+  List<Map<String, dynamic>> _tickets = const [];
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final res = await UellowApi.instance
+          .getRaw('/api/mobile/v2/helpdesk/tickets', auth: true);
+      final all = (res['data']?['tickets'] as List?) ?? const [];
+      final mine = <Map<String, dynamic>>[];
+      for (final t in all) {
+        if (t is Map) {
+          final ord = t['order'];
+          if (ord is Map && (ord['id'] as num?)?.toInt() == widget.orderId) {
+            mine.add(t.cast<String, dynamic>());
+          }
+        }
+      }
+      if (mounted) setState(() { _tickets = mine; _loading = false; });
+    } catch (_) {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  void _openTicket(Map<String, dynamic> t) {
+    Navigator.push(context, MaterialPageRoute(
+      builder: (_) => HelpdeskConversationScreen(
+        ticketId: (t['id'] as num).toInt(),
+        ref: (t['ref'] ?? '').toString(),
+        subject: (t['subject'] ?? '').toString(),
+      ),
+    )).then((_) { if (mounted) _load(); });
+  }
+
+  void _newTicket() {
+    Navigator.pushNamed(context, '/helpdesk', arguments: {
+      'order_ref': widget.orderName,
+      'category': 'order',
+    }).then((_) { if (mounted) _load(); });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ar = widget.ar;
+    if (_loading) return const SizedBox.shrink();
+    return Container(
+      margin: const EdgeInsets.fromLTRB(14, 8, 14, 0),
+      padding: const EdgeInsets.all(13),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFE9E1D1)),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          const Text('🎧', style: TextStyle(fontSize: 15)),
+          const SizedBox(width: 7),
+          Text(ar ? 'الدعم لهذا الطلب' : 'Support for this order',
+              style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w900,
+                  color: Color(0xFF1C1A14))),
+        ]),
+        const SizedBox(height: 9),
+        if (_tickets.isEmpty) ...[
+          Text(ar
+                  ? 'لا توجد تذاكر دعم لهذا الطلب بعد.'
+                  : 'No support tickets for this order yet.',
+              style: const TextStyle(fontSize: 12, color: Color(0xFF6A6454),
+                  fontWeight: FontWeight.w600)),
+          const SizedBox(height: 9),
+          SizedBox(width: double.infinity, child: OutlinedButton.icon(
+            onPressed: _newTicket,
+            icon: const Icon(Icons.support_agent, size: 18),
+            label: Text(ar ? 'فتح تذكرة دعم' : 'Open a support ticket'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: const Color(0xFF412402),
+              side: const BorderSide(color: Color(0xFFE8A800)),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(11)),
+            ),
+          )),
+        ] else ...[
+          for (final t in _tickets) _ticketRow(t, ar),
+          const SizedBox(height: 4),
+          Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: TextButton.icon(
+              onPressed: _newTicket,
+              icon: const Icon(Icons.add, size: 16),
+              label: Text(ar ? 'تذكرة جديدة' : 'New ticket',
+                  style: const TextStyle(fontWeight: FontWeight.w800)),
+              style: TextButton.styleFrom(
+                  foregroundColor: const Color(0xFFB58A00),
+                  padding: EdgeInsets.zero),
+            ),
+          ),
+        ],
+      ]),
+    );
+  }
+
+  Widget _ticketRow(Map<String, dynamic> t, bool ar) {
+    final unread = (t['unread'] as num?)?.toInt() ?? 0;
+    final closed = t['closed'] == true;
+    final stage = (t['stage_label'] ?? '').toString();
+    final subject = (t['subject'] ?? '').toString();
+    final last = (t['last_message'] ?? '').toString();
+    return InkWell(
+      onTap: () => _openTicket(t),
+      borderRadius: BorderRadius.circular(11),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 7),
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF7F5F0),
+          borderRadius: BorderRadius.circular(11),
+          border: Border.all(color: const Color(0xFFEDE6D6)),
+        ),
+        child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Padding(
+            padding: EdgeInsets.only(top: 1),
+            child: Text('🎫', style: TextStyle(fontSize: 16)),
+          ),
+          const SizedBox(width: 9),
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+            Row(children: [
+              Flexible(child: Text(subject, maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 12.5,
+                      fontWeight: FontWeight.w800, color: Color(0xFF1C1A14)))),
+              const SizedBox(width: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: closed
+                      ? const Color(0xFFE3F3EA) : const Color(0xFFFBEFD6),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(stage.isNotEmpty
+                        ? stage : (closed ? (ar ? 'مغلقة' : 'Closed')
+                                          : (ar ? 'مفتوحة' : 'Open')),
+                    style: TextStyle(fontSize: 8.5, fontWeight: FontWeight.w900,
+                        color: closed
+                            ? const Color(0xFF1A7A46) : const Color(0xFFA9680A))),
+              ),
+            ]),
+            if (last.isNotEmpty) Padding(
+              padding: const EdgeInsets.only(top: 3),
+              child: Text(last, maxLines: 1, overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 11, color: Color(0xFF938B78),
+                      fontWeight: FontWeight.w600)),
+            ),
+          ])),
+          const SizedBox(width: 6),
+          if (unread > 0) Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            constraints: const BoxConstraints(minWidth: 18),
+            decoration: BoxDecoration(
+              color: const Color(0xFFC23B2B),
+              borderRadius: BorderRadius.circular(9),
+            ),
+            alignment: Alignment.center,
+            child: Text('$unread', style: const TextStyle(color: Colors.white,
+                fontSize: 9.5, fontWeight: FontWeight.w900)),
+          )
+          else const Icon(Icons.chevron_left, size: 18, color: Color(0xFFB7AF9B)),
+        ]),
+      ),
+    );
+  }
 }
