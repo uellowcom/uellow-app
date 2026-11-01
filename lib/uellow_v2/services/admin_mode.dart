@@ -94,6 +94,14 @@ class AdminApi {
     return (r['data'] as Map).cast<String, dynamic>();
   }
 
+  /// v2.2.146 — تحليلات التطبيق الشاملة. period = today|7d|30d|all.
+  Future<Map<String, dynamic>> appAnalytics({String period = '30d'}) async {
+    final r = await UellowApi.instance.getRaw(
+        '/api/mobile/v2/admin/app-analytics',
+        query: {'period': period}, auth: true);
+    return ((r['data'] as Map?) ?? const {}).cast<String, dynamic>();
+  }
+
   Future<Map<String, dynamic>> posSessions(
       {int page = 1, String state = '', String? dateFrom,
       String? dateTo}) async {

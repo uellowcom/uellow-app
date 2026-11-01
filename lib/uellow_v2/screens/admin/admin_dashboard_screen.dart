@@ -14,6 +14,7 @@ import '../../services/admin_mode.dart';
 import '../../theme/uellow_theme.dart';
 import 'admin_helpdesk_screen.dart';
 import 'admin_customer_service_screen.dart';
+import 'admin_app_analytics_screen.dart';
 import 'admin_activity_screen.dart';
 import 'admin_orders_screen.dart';
 import 'admin_pos_screen.dart';
@@ -431,6 +432,11 @@ class _ManagementGrid extends StatelessWidget {
           const Color(0xFF0EA5E9),
           () => Navigator.push(context, MaterialPageRoute(
               builder: (_) => const AdminActivityScreen()))),
+      (Icons.insights_rounded, ar ? 'تحليلات التطبيق' : 'App analytics',
+          ar ? 'التثبيت والنشاط والقمع' : 'Installs · active · funnel',
+          const Color(0xFF0D9488),
+          () => Navigator.push(context, MaterialPageRoute(
+              builder: (_) => const AdminAppAnalyticsScreen()))),
       (Icons.campaign_rounded, ar ? 'الإشعارات' : 'Notifications',
           ar ? 'إرسال Push + إحصائيات' : 'Send push + stats',
           const Color(0xFFC2410C),
