@@ -4,6 +4,7 @@
 // الإشعارات + التوزيع الجغرافي. المصدر: /api/mobile/v2/admin/app-analytics.
 // =============================================================================
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../../api/uellow_api.dart';
 import '../../services/admin_mode.dart';
@@ -18,6 +19,7 @@ class AdminAppAnalyticsScreen extends StatefulWidget {
 
 class _AdminAppAnalyticsScreenState extends State<AdminAppAnalyticsScreen> {
   String _period = '30d';
+  String? _dateFrom; // v2.2.152 — نطاق مخصّص
   Map<String, dynamic>? _data;
   bool _loading = true;
   String? _error;
@@ -31,7 +33,8 @@ class _AdminAppAnalyticsScreenState extends State<AdminAppAnalyticsScreen> {
   Future<void> _load() async {
     setState(() { _loading = true; _error = null; });
     try {
-      _data = await AdminApi.instance.appAnalytics(period: _period);
+      _data = await AdminApi.instance
+          .appAnalytics(period: _period, dateFrom: _dateFrom);
     } catch (e) {
       _error = e.toString().replaceAll('Exception: ', '');
     }
@@ -50,6 +53,13 @@ class _AdminAppAnalyticsScreenState extends State<AdminAppAnalyticsScreen> {
         foregroundColor: Colors.white,
         title: Text(ar ? 'تحليلات التطبيق' : 'App analytics',
             style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w900)),
+        actions: [
+          IconButton(
+            tooltip: ar ? 'تصدير التقرير' : 'Export report',
+            onPressed: _export,
+            icon: const Icon(Icons.ios_share_rounded),
+          ),
+        ],
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator(
@@ -79,6 +89,10 @@ class _AdminAppAnalyticsScreenState extends State<AdminAppAnalyticsScreen> {
       const SizedBox(height: 10),
       _subhd(ar ? 'التثبيت والنشاط' : 'Installs & activity'),
       _kpiGrid([
+        _Kpi(ar ? '⬇️ أجهزة مثبّتة' : '⬇️ Installs',
+            '${gi(installs, 'downloads')}', const Color(0xFF2563EB)),
+        _Kpi(ar ? '🆕 تثبيتات اليوم' : '🆕 New today',
+            '${gi(installs, 'new_today')}', const Color(0xFF16A34A)),
         _Kpi(ar ? '📲 عندهم التطبيق' : '📲 Have the app',
             '${gi(installs, 'push_users')}', const Color(0xFF16A34A)),
         _Kpi(ar ? '🟢 متصل الآن' : '🟢 Online now',
@@ -103,6 +117,22 @@ class _AdminAppAnalyticsScreenState extends State<AdminAppAnalyticsScreen> {
             UellowColors.darkBrown),
       ]),
       const SizedBox(height: 6),
+      if (d['retention'] is Map || d['sessions'] is Map)
+        _card(ar ? '🔁 الاحتفاظ والجلسات' : '🔁 Retention & sessions',
+            Column(children: [
+              if (d['retention'] is Map) ...[
+                _kvRow(ar ? 'العائدون بعد ٧ أيام' : 'Returning after 7d',
+                    '${gi(d['retention'] as Map, 'd7')}%'),
+                _kvRow(ar ? 'العائدون بعد ٣٠ يوم' : 'Returning after 30d',
+                    '${gi(d['retention'] as Map, 'd30')}%'),
+              ],
+              if (d['sessions'] is Map) ...[
+                _kvRow(ar ? 'متوسط مدة الجلسة (دقيقة)' : 'Avg session (min)',
+                    '${((d['sessions'] as Map)['avg_minutes'] ?? 0)}'),
+                _kvRow(ar ? 'جلسات لكل مستخدم' : 'Sessions per user',
+                    '${((d['sessions'] as Map)['per_user'] ?? 0)}'),
+              ],
+            ])),
       _card(ar ? '📈 الجلسات آخر ١٤ يوم' : '📈 Sessions (14 days)',
           _barChart((d['dau_series'] as List?) ?? const [])),
       _card(ar ? '🧭 مسار التحويل' : '🧭 Funnel',
@@ -153,8 +183,63 @@ class _AdminAppAnalyticsScreenState extends State<AdminAppAnalyticsScreen> {
             ),
           ),
         ),
+        Padding(
+          padding: const EdgeInsetsDirectional.only(end: 7),
+          child: GestureDetector(
+            onTap: _pickCustomRange,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              decoration: BoxDecoration(
+                color: _period == 'custom'
+                    ? const Color(0xFFE8A800) : Colors.white,
+                borderRadius: BorderRadius.circular(999),
+                border: Border.all(color: _period == 'custom'
+                    ? const Color(0xFFE8A800) : const Color(0xFFE5E5E5)),
+              ),
+              child: Text(ar ? '📅 مخصّص' : '📅 Custom',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800,
+                      color: _period == 'custom'
+                          ? const Color(0xFF2A1D00) : UellowColors.muted)),
+            ),
+          ),
+        ),
       ]),
     );
+  }
+
+  Future<void> _pickCustomRange() async {
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context, firstDate: DateTime(now.year - 2),
+      lastDate: now, initialDate: now.subtract(const Duration(days: 30)));
+    if (picked != null) {
+      _dateFrom =
+          '${picked.year}-${picked.month.toString().padLeft(2, '0')}-'
+          '${picked.day.toString().padLeft(2, '0')}';
+      _period = 'custom';
+      _load();
+    }
+  }
+
+  Future<void> _export() async {
+    final d = _data ?? const {};
+    final installs = (d['installs'] as Map?) ?? const {};
+    final active = (d['active'] as Map?) ?? const {};
+    final ar = _ar;
+    final txt = StringBuffer()
+      ..writeln(ar ? 'تقرير تحليلات التطبيق' : 'App analytics report')
+      ..writeln('period: ${d['period'] ?? _period}')
+      ..writeln('installs: ${installs['downloads'] ?? 0}')
+      ..writeln('new_today: ${installs['new_today'] ?? 0}')
+      ..writeln('online: ${active['online'] ?? 0}')
+      ..writeln('dau: ${active['dau'] ?? 0}  wau: ${active['wau'] ?? 0}'
+          '  mau: ${active['mau'] ?? 0}');
+    await Clipboard.setData(ClipboardData(text: txt.toString()));
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(ar ? 'تم نسخ ملخّص التقرير'
+                            : 'Report summary copied')));
+    }
   }
 
   Widget _subhd(String t) => Padding(

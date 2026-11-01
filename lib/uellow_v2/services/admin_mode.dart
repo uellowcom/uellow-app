@@ -95,10 +95,10 @@ class AdminApi {
   }
 
   /// v2.2.146 — تحليلات التطبيق الشاملة. period = today|7d|30d|all.
-  Future<Map<String, dynamic>> appAnalytics({String period = '30d'}) async {
+  Future<Map<String, dynamic>> appAnalytics({String period = '30d', String? dateFrom}) async {
     final r = await UellowApi.instance.getRaw(
         '/api/mobile/v2/admin/app-analytics',
-        query: {'period': period}, auth: true);
+        query: {'period': period, if (dateFrom != null) 'date_from': dateFrom}, auth: true);
     return ((r['data'] as Map?) ?? const {}).cast<String, dynamic>();
   }
 

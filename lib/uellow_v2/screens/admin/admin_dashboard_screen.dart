@@ -123,6 +123,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 title: ar ? 'المبيعات حسب القناة' : 'Sales by channel',
                 icon: Icons.storefront_rounded,
                 items: (range['by_channel'] as List?) ?? const [], sym: sym)),
+            if (((d['by_payment'] as List?) ?? const []).isNotEmpty)
+              SliverToBoxAdapter(child: _Breakdown(
+                  title: ar ? 'طرق الدفع (هذا الشهر)' : 'Payment methods (month)',
+                  icon: Icons.credit_card_rounded,
+                  items: (d['by_payment'] as List?) ?? const [], sym: sym)),
             SliverToBoxAdapter(child: _Breakdown(
                 title: ar ? 'المبيعات حسب الفئة' : 'Sales by category',
                 icon: Icons.category_rounded,
