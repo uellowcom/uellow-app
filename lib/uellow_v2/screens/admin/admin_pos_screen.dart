@@ -320,8 +320,9 @@ class _SessionsTabState extends State<_SessionsTab>
 
 // ─── sales feed (all or one session) ─────────────────────────────────────
 class _PosOrdersTab extends StatefulWidget {
-  const _PosOrdersTab({this.sessionId});
+  const _PosOrdersTab({this.sessionId, this.header});
   final int? sessionId;
+  final Widget? header; // v2.2.150 — يُعرض كأول عنصر يتسكرول مع القائمة
   @override
   State<_PosOrdersTab> createState() => _PosOrdersTabState();
 }
@@ -407,8 +408,16 @@ class _PosOrdersTabState extends State<_PosOrdersTab>
       child: ListView.builder(
         controller: _scroll,
         padding: const EdgeInsets.fromLTRB(14, 12, 14, 24),
-        itemCount: _rows.length + (_loading ? 1 : 0),
-        itemBuilder: (_, i) {
+        itemCount: (widget.header != null ? 1 : 0)
+            + _rows.length + (_loading ? 1 : 0),
+        itemBuilder: (_, idx) {
+          // v2.2.150 — الهيدر كأول عنصر يتسكرول مع القائمة
+          if (widget.header != null && idx == 0) {
+            return Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: widget.header!);
+          }
+          final i = widget.header != null ? idx - 1 : idx;
           if (i >= _rows.length) {
             return const Padding(padding: EdgeInsets.all(14),
                 child: Center(child: SizedBox(width: 20, height: 20,
@@ -835,11 +844,12 @@ class _SessionOrdersScreenState extends State<_SessionOrdersScreen> {
             fontWeight: FontWeight.w900, color: UellowColors.yellow)),
       ),
       body: Column(children: [
-        if (_loading)
-          const LinearProgressIndicator(minHeight: 2)
-        else if (_d != null)
-          _SessionStatsHeader(d: _d!, fmt: _m),
-        Expanded(child: _PosOrdersTab(sessionId: widget.sessionId)),
+        if (_loading) const LinearProgressIndicator(minHeight: 2),
+        // v2.2.150 — الهيدر بقى جزء من القائمة المتحركة (مش مثبّت)
+        Expanded(child: _PosOrdersTab(
+            sessionId: widget.sessionId,
+            header: _d != null ? _SessionStatsHeader(d: _d!, fmt: _m)
+                               : null)),
       ]),
     );
   }

@@ -30,6 +30,8 @@ import '../widgets/review_requests_strip.dart';
 import '../widgets/review_prompt_dialog.dart';
 import '../widgets/update_gate.dart';
 import '../widgets/uellow_bottom_nav.dart';
+import '../services/admin_mode.dart';
+import 'admin/admin_customer_service_screen.dart';
 import '../widgets/updating_pane.dart';
 import 'dynamic_page_screen.dart';
 
@@ -247,9 +249,6 @@ class _HomeScreenState extends State<HomeScreen> {
         physics: const AlwaysScrollableScrollPhysics(),
         slivers: [
           SliverToBoxAdapter(child: _TopBar()),
-          // v2.2.137 — شريط «تواصل» الأخضر النابض (متصل الآن · يرد خلال دقائق)
-          // يفتح محادثة خدمة العملاء — مطابقةً للموكاب.
-          const SliverToBoxAdapter(child: _ContactPill()),
           // v2.2.143 — بلوك الأقسام الذكية (دوائر تتغيّر يوميًا + New/Hot).
           const SliverToBoxAdapter(child: _SmartCategories()),
           // Uellow World entry banner removed — the globe icon in the top bar
@@ -594,6 +593,20 @@ class _TopBar extends StatelessWidget {
         )),
         const SizedBox(width: 6),
         // Uellow World globe entry removed from the top bar (per request).
+        ValueListenableBuilder<bool>(
+          valueListenable: AdminMode.isAdmin,
+          builder: (_, isAdmin, __) => !isAdmin
+              ? const SizedBox.shrink()
+              : Padding(
+                  padding: const EdgeInsetsDirectional.only(end: 6),
+                  child: _IconButton(
+                      icon: Icons.headset_mic_outlined,
+                      onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (_) =>
+                              const AdminCustomerServiceScreen()))),
+                ),
+        ),
         _IconButton(icon: Icons.qr_code_scanner_outlined,
             onTap: () => Navigator.pushNamed(context, Routes.search)),
         const SizedBox(width: 6),
@@ -604,87 +617,6 @@ class _TopBar extends StatelessWidget {
   }
 }
 
-// ─── v2.2.137 — شريط التواصل الأخضر النابض ─────────────────────────────
-// نقطة خضراء نابضة + «تواصل · متصل الآن» تفتح محادثة خدمة العملاء،
-// وعلى اليمين «يرد خلال دقائق». مطابق للموكاب الموحّد.
-class _ContactPill extends StatefulWidget {
-  const _ContactPill();
-  @override
-  State<_ContactPill> createState() => _ContactPillState();
-}
-
-class _ContactPillState extends State<_ContactPill>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _c = AnimationController(
-      vsync: this, duration: const Duration(milliseconds: 1600))
-    ..repeat();
-
-  @override
-  void dispose() {
-    _c.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final ar = UellowApi.instance.lang == 'ar';
-    const good = Color(0xFF1A7A46);
-    const goodBg = Color(0xFFE3F3EA);
-    const goodLine = Color(0xFFBFE3CD);
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-      child: Row(children: [
-        InkWell(
-          borderRadius: BorderRadius.circular(999),
-          onTap: () => Navigator.pushNamed(context, '/helpdesk-tickets'),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 7),
-            decoration: BoxDecoration(
-              color: goodBg,
-              borderRadius: BorderRadius.circular(999),
-              border: Border.all(color: goodLine),
-            ),
-            child: Row(mainAxisSize: MainAxisSize.min, children: [
-              // نقطة نابضة
-              AnimatedBuilder(
-                animation: _c,
-                builder: (_, __) {
-                  final t = _c.value; // 0→1
-                  return Container(
-                    width: 9, height: 9,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: good,
-                      boxShadow: [
-                        BoxShadow(
-                          color: good.withOpacity((1 - t) * 0.5),
-                          blurRadius: 0,
-                          spreadRadius: t * 7,
-                        ),
-                      ],
-                    ),
-                  );
-                },
-              ),
-              const SizedBox(width: 7),
-              Text(ar ? '💬 تواصل · متصل الآن' : '💬 Contact · online now',
-                  style: const TextStyle(color: good, fontSize: 12.5,
-                      fontWeight: FontWeight.w800)),
-            ]),
-          ),
-        ),
-        const Spacer(),
-        Text(ar ? 'يرد خلال دقائق' : 'Replies in minutes',
-            style: const TextStyle(color: UellowColors.muted, fontSize: 11,
-                fontWeight: FontWeight.w700)),
-      ]),
-    );
-  }
-}
-
-// ─── v2.2.143 — بلوك الأقسام الذكية (دوائر) ────────────────────────────
-// دوائر بصور حقيقية تتغيّر يوميًا، مع ليبلات «جديد» (أخضر) و«Hot» (أحمر نابض).
-// المصدر: GET /api/mobile/v2/categories/smart (دوران + معايير من الكونسول).
 class _SmartCategories extends StatefulWidget {
   const _SmartCategories();
   @override
@@ -734,34 +666,15 @@ class _SmartCategoriesState extends State<_SmartCategories> {
     final ar = UellowApi.instance.lang == 'ar';
     return Container(
       color: UellowColors.bg,
-      padding: const EdgeInsets.fromLTRB(12, 2, 12, 10),
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(2, 2, 2, 10),
-          child: Row(children: [
-            Text(ar ? 'تصفّح الأقسام' : 'Browse categories',
-                style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w900,
-                    color: UellowColors.ink)),
-            const SizedBox(width: 7),
-            Text(ar ? 'يتغيّر يوميًا' : 'updates daily',
-                style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700,
-                    color: UellowColors.muted)),
-            const Spacer(),
-            InkWell(
-              onTap: () => Navigator.pushNamed(context, Routes.category),
-              child: Text(ar ? 'الكل ›' : 'All ›',
-                  style: const TextStyle(fontSize: 11.5,
-                      fontWeight: FontWeight.w800, color: Color(0xFFC8920B))),
-            ),
-          ]),
-        ),
         GridView.builder(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
           padding: EdgeInsets.zero,
           gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: 5, mainAxisSpacing: 14, crossAxisSpacing: 2,
-            childAspectRatio: 0.72,
+            childAspectRatio: 0.64,
           ),
           itemCount: _items.length,
           itemBuilder: (_, i) => _circle(_items[i], ar),
@@ -835,10 +748,10 @@ class _SmartCategoriesState extends State<_SmartCategories> {
           ]),
         ),
         const SizedBox(height: 5),
-        Text(name, maxLines: 1, overflow: TextOverflow.ellipsis,
+        Text(name, maxLines: 2, overflow: TextOverflow.ellipsis,
             textAlign: TextAlign.center,
-            style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800,
-                color: UellowColors.muted)),
+            style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w500,
+                height: 1.12, color: UellowColors.muted)),
       ]),
     );
   }
