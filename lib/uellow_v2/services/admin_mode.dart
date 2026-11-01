@@ -247,8 +247,9 @@ class AdminApi {
   Future<Map<String, dynamic>> orderApprove(int id) =>
       _post('/api/mobile/v2/admin/order/$id/approve');
 
-  Future<Map<String, dynamic>> orderCancel(int id) =>
-      _post('/api/mobile/v2/admin/order/$id/cancel');
+  Future<Map<String, dynamic>> orderCancel(int id, {bool silent = false}) =>
+      _post('/api/mobile/v2/admin/order/$id/cancel',
+          silent ? {'silent': 1} : null);
 
   Future<Map<String, dynamic>> deliveryOptions() async {
     final r = await UellowApi.instance
@@ -287,6 +288,23 @@ class AdminApi {
   /// the order if the customer actually paid (heals a missed webhook).
   Future<Map<String, dynamic>> orderVerifyPayment(int id) =>
       _post('/api/mobile/v2/admin/order/$id/verify-payment');
+
+  // ── v2.2.151 — إشعار مخصّص / تعديل أصناف / مستندات طلب ──
+  Future<Map<String, dynamic>> orderNotify(
+          int id, Map<String, dynamic> body) =>
+      _post('/api/mobile/v2/admin/order/$id/notify', body);
+
+  Future<Map<String, dynamic>> orderEditLine(
+          int id, Map<String, dynamic> body) =>
+      _post('/api/mobile/v2/admin/order/$id/edit-line', body);
+
+  /// يرجّع رابط PDF عام (فاتورة/ضمان/إيصال) يُفتح في المتصفّح.
+  Future<String?> orderDocumentUrl(int id, String kind) async {
+    final r = await UellowApi.instance.getRaw(
+        '/api/mobile/v2/admin/order/$id/document',
+        query: {'kind': kind}, auth: true);
+    return ((r['data'] as Map?)?['url'])?.toString();
+  }
 
   // ── v2.2.56 — customer journey / activity ────────────────────────────
   Future<Map<String, dynamic>> activityRecent(

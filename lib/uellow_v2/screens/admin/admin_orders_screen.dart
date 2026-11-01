@@ -340,6 +340,8 @@ class _AdminOrderDetailScreenState extends State<AdminOrderDetailScreen> {
           final cust = (d['customer'] as Map?) ?? const {};
           final lines = (d['lines'] as List?) ?? const [];
           final txs = (d['transactions'] as List?) ?? const [];
+          final src = (d['source'] as Map?) ?? const {};
+          final srcLabel = (src['label'] ?? '').toString();
           return ListView(padding: const EdgeInsets.all(14), children: [
             _card(children: [
               Row(children: [
@@ -347,14 +349,15 @@ class _AdminOrderDetailScreenState extends State<AdminOrderDetailScreen> {
                     fontSize: 16, fontWeight: FontWeight.w900,
                     color: UellowColors.darkBrown)),
                 const Spacer(),
-                Text(d['date']?.toString() ?? '', style: const TextStyle(
-                    fontSize: 11, color: UellowColors.muted)),
+                if (srcLabel.isNotEmpty) _sourceChip(srcLabel),
               ]),
               const SizedBox(height: 4),
-              Text('${d['website'] ?? ''}'
-                  '${(d['delivery_status'] ?? '').toString().isNotEmpty ? ' · ${d['delivery_status']}' : ''}',
-                  style: const TextStyle(fontSize: 11,
-                      color: UellowColors.muted)),
+              Text(d['date']?.toString() ?? '', style: const TextStyle(
+                  fontSize: 11, color: UellowColors.muted)),
+              const SizedBox(height: 12),
+              _stepper(ar, (d['stage'] as num?)?.toInt() ?? 1),
+              const SizedBox(height: 12),
+              Wrap(spacing: 6, runSpacing: 6, children: _statusBadges(ar, d)),
             ]),
             _card(title: ar ? '👤 العميل' : '👤 Customer', children: [
               _kv(ar ? 'الاسم' : 'Name', cust['name']?.toString() ?? ''),
@@ -381,6 +384,14 @@ class _AdminOrderDetailScreenState extends State<AdminOrderDetailScreen> {
                       Icons.chat_rounded, ar ? 'واتساب' : 'WhatsApp',
                       const Color(0xFF25D366),
                       () => _whatsapp(context, ar, cust['phone'].toString()))),
+                  if ((cust['map_url'] ?? '').toString().isNotEmpty) ...[
+                    const SizedBox(width: 8),
+                    SizedBox(width: 48, child: _contactBtn(
+                        Icons.map_rounded, '',
+                        const Color(0xFF412402),
+                        () => _launch(ar, Uri.parse(cust['map_url'].toString()),
+                            cust['map_url'].toString()))),
+                  ],
                 ]),
               ],
             ]),
@@ -438,14 +449,34 @@ class _AdminOrderDetailScreenState extends State<AdminOrderDetailScreen> {
                 _profitRow(ar, amounts['margin'] as Map?),
               ],
             ]),
-            if (txs.isNotEmpty)
-              _card(title: ar ? '💳 الدفع' : '💳 Payments', children: [
+            if (txs.isNotEmpty || (d['payment'] is Map))
+              _card(children: [
+                Row(children: [
+                  Text(ar ? '💳 الدفع' : '💳 Payment', style: UT.h3),
+                  const Spacer(),
+                  if (d['payment'] is Map)
+                    (d['payment'] as Map)['paid'] == true
+                        ? _statusBadge(ar ? 'مدفوع' : 'Paid',
+                            const Color(0xFFE3F3EA), const Color(0xFF1A7A46))
+                        : _statusBadge(ar ? 'غير مدفوع' : 'Unpaid',
+                            const Color(0xFFFBEFD6), const Color(0xFFA9680A)),
+                ]),
+                const SizedBox(height: 8),
+                if (d['payment'] is Map) ...[
+                  _kv(ar ? 'الطريقة' : 'Method',
+                      ((d['payment'] as Map)['method'] ?? '').toString()),
+                  if ((d['payment'] as Map)['collected'] is Map)
+                    _kv(ar ? 'المحصّل' : 'Collected',
+                        '${((d['payment'] as Map)['collected'] as Map)['amount'] ?? 0}'
+                        ' ${((d['payment'] as Map)['collected'] as Map)['symbol'] ?? ''}'),
+                ],
                 for (final t in txs) _kv(
                     '${(t as Map)['provider'] ?? ''} (${t['state'] ?? ''})',
                     '${t['amount'] ?? 0}'),
               ]),
             _supportCard(context, d, ar),
             _fulfilCard(d, ar),
+            _docsCard(d, ar),
             _actionCard(d, ar),
             const SizedBox(height: 24),
           ]);
@@ -601,6 +632,18 @@ class _AdminOrderDetailScreenState extends State<AdminOrderDetailScreen> {
                 fontSize: 14.5, fontWeight: FontWeight.w900,
                 color: UellowColors.darkBrown)),
             const SizedBox(height: 12),
+            if ((l['sku'] ?? '').toString().isNotEmpty)
+              _dlgRow(ar ? 'الكود (SKU)' : 'SKU', l['sku'].toString()),
+            if ((l['variant'] ?? '').toString().isNotEmpty)
+              _dlgRow(ar ? 'الخيار' : 'Variant', l['variant'].toString()),
+            if (l['qty_available'] != null)
+              _dlgRow(ar ? 'المخزون' : 'In stock',
+                  ((l['qty_available'] as num? ?? 0) > 0)
+                      ? '${(l['qty_available'] as num).toStringAsFixed(0)}'
+                          ' ${ar ? '✓ متوفر' : '✓ available'}'
+                      : (ar ? 'غير متوفر' : 'out of stock'),
+                  color: ((l['qty_available'] as num? ?? 0) > 0)
+                      ? UellowColors.successDk : UellowColors.danger),
             _dlgRow(ar ? 'الكمية' : 'Qty', qty.toStringAsFixed(0)),
             _dlgRow(ar ? 'سعر الوحدة' : 'Unit price', m(unit)),
             if (disc != 0) _dlgRow(ar ? 'الخصم' : 'Discount',
@@ -729,6 +772,17 @@ class _AdminOrderDetailScreenState extends State<AdminOrderDetailScreen> {
         _kv(ar ? 'السائق' : 'Driver', dv['driver'].toString()),
       if ((dv['status'] ?? '').toString().isNotEmpty)
         _kv(ar ? 'حالة التوصيل' : 'Delivery status', dv['status'].toString()),
+      if ((dv['trip'] ?? '').toString().isNotEmpty)
+        _kv(ar ? 'الرحلة' : 'Trip', dv['trip'].toString()),
+      if (dv['cost'] is Map)
+        _kv(ar ? 'تكلفة التوصيل' : 'Delivery cost',
+            '${(dv['cost'] as Map)['amount'] ?? 0} ${(dv['cost'] as Map)['symbol'] ?? ''}'),
+      if (dv['commission'] is Map)
+        _kv(ar ? 'عمولة التحصيل' : 'Collection fee',
+            '${(dv['commission'] as Map)['amount'] ?? 0} ${(dv['commission'] as Map)['symbol'] ?? ''}'),
+      if (dv['net_cost'] is Map)
+        _kv(ar ? 'صافي تكلفة الشركة' : 'Net company cost',
+            '${(dv['net_cost'] as Map)['amount'] ?? 0} ${(dv['net_cost'] as Map)['symbol'] ?? ''}'),
       if ((d['invoice_status'] ?? '').toString().isNotEmpty)
         _kv(ar ? 'حالة الفوترة' : 'Invoice status',
             d['invoice_status'].toString()),
@@ -795,9 +849,18 @@ class _AdminOrderDetailScreenState extends State<AdminOrderDetailScreen> {
           () => _run(() => AdminApi.instance.orderUnlock(id),
               ar ? 'تم فتح القفل' : 'Order unlocked')));
     }
+    if (!isCancelled) {
+      btns.add(_actBtn(ar ? '🔔 إشعار مخصّص للعميل' : '🔔 Custom notification',
+          UellowColors.yellow, () => _openNotifyDialog(id, ar),
+          fg: UellowColors.darkBrown));
+      btns.add(_actBtn(ar ? '✏️ تعديل الأصناف' : '✏️ Edit items',
+          const Color(0xFF475569), () => _openEditItems(d, id, ar)));
+    }
     if (flag('cancel', !isCancelled)) {
       btns.add(_actBtn(ar ? '✖ إلغاء الطلب' : '✖ Cancel order',
           UellowColors.danger, () => _confirmCancel(id, ar)));
+      btns.add(_actBtn(ar ? '🔕 إلغاء صامت (بدون إشعار)' : '🔕 Silent cancel',
+          const Color(0xFF9A3412), () => _confirmCancelSilent(id, ar)));
     }
     if (btns.isEmpty) return const SizedBox.shrink();
     return _card(title: ar ? '⚙️ إجراءات' : '⚙️ Actions', children: [
@@ -807,17 +870,19 @@ class _AdminOrderDetailScreenState extends State<AdminOrderDetailScreen> {
     ]);
   }
 
-  Widget _actBtn(String label, Color color, VoidCallback onTap) => Padding(
+  Widget _actBtn(String label, Color color, VoidCallback onTap,
+      {Color fg = Colors.white}) => Padding(
     padding: const EdgeInsets.only(bottom: 8),
     child: SizedBox(width: double.infinity, child: ElevatedButton(
       onPressed: _busy ? null : onTap,
       style: ElevatedButton.styleFrom(
-        backgroundColor: color, foregroundColor: Colors.white,
+        backgroundColor: color, foregroundColor: fg,
         elevation: 0, padding: const EdgeInsets.symmetric(vertical: 12),
         shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12)),
       ),
-      child: Text(label, style: const TextStyle(fontWeight: FontWeight.w900)),
+      child: Text(label, style: TextStyle(
+          fontWeight: FontWeight.w900, color: fg)),
     )),
   );
 
@@ -993,5 +1058,251 @@ class _AdminOrderDetailScreenState extends State<AdminOrderDetailScreen> {
             color: bold ? UellowColors.darkBrown : UellowColors.text)),
       ]),
     );
+  }
+
+  // ── v2.2.151 — مكوّنات شاشة الطلب الإدارية (مطابقة للموكاب) ───────────
+  Widget _sourceChip(String label) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
+    decoration: BoxDecoration(color: const Color(0xFF412402),
+        borderRadius: BorderRadius.circular(999)),
+    child: Text('📱 $label', style: const TextStyle(fontSize: 10.5,
+        fontWeight: FontWeight.w800, color: Color(0xFFFFE9A8))),
+  );
+
+  Widget _statusBadge(String t, Color bg, Color fg) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+    decoration: BoxDecoration(color: bg,
+        borderRadius: BorderRadius.circular(999)),
+    child: Text(t, style: TextStyle(fontSize: 10.5,
+        fontWeight: FontWeight.w800, color: fg)),
+  );
+
+  List<Widget> _statusBadges(bool ar, Map<String, dynamic> d) {
+    final state = (d['state'] ?? '').toString();
+    final paid = d['paid'] == true;
+    final dstat = (d['delivery_status'] ?? '').toString();
+    final isNew = ((d['customer'] as Map?)?['is_new']) == true;
+    final out = <Widget>[];
+    if (state == 'sale' || state == 'done') {
+      out.add(_statusBadge(ar ? '✅ مؤكّد' : '✅ Confirmed',
+          const Color(0xFFE3F3EA), const Color(0xFF1A7A46)));
+    } else if (state == 'cancel') {
+      out.add(_statusBadge(ar ? '✖ ملغي' : '✖ Cancelled',
+          const Color(0xFFF8E0DC), const Color(0xFFC23B2B)));
+    } else {
+      out.add(_statusBadge(ar ? '📝 مسودة' : '📝 Draft',
+          const Color(0xFFFBEFD6), const Color(0xFFA9680A)));
+    }
+    out.add(paid
+        ? _statusBadge(ar ? '💳 مدفوع' : '💳 Paid',
+            const Color(0xFFE3F3EA), const Color(0xFF1A7A46))
+        : _statusBadge(ar ? '⏳ غير مدفوع' : '⏳ Unpaid',
+            const Color(0xFFFBEFD6), const Color(0xFFA9680A)));
+    if (dstat.isNotEmpty) {
+      out.add(_statusBadge('🚚 $dstat',
+          const Color(0xFFE5EEFB), const Color(0xFF1D5FB4)));
+    }
+    if (isNew) {
+      out.add(_statusBadge(ar ? '⭐ عميل جديد' : '⭐ New customer',
+          const Color(0xFFFDF3D6), const Color(0xFF6B4E00)));
+    }
+    return out;
+  }
+
+  Widget _stepper(bool ar, int stage) {
+    final labels = ar
+        ? const ['عرض سعر', 'مؤكّد', 'مُسند', 'قيد التوصيل', 'تم التسليم']
+        : const ['Quote', 'Confirmed', 'Assigned', 'Delivering', 'Delivered'];
+    return Row(children: [
+      for (int i = 0; i < labels.length; i++)
+        Expanded(child: Column(children: [
+          Container(
+            width: 22, height: 22,
+            decoration: BoxDecoration(shape: BoxShape.circle,
+                color: i < stage
+                    ? const Color(0xFF1A7A46)
+                    : (i == stage ? UellowColors.yellow
+                        : const Color(0xFFF3EFE6)),
+                border: Border.all(
+                    color: i <= stage
+                        ? (i == stage ? UellowColors.yellow
+                            : const Color(0xFF1A7A46))
+                        : const Color(0xFFE9E1D1), width: 2)),
+            child: Icon(i < stage ? Icons.check : Icons.circle,
+                size: i < stage ? 12 : 7,
+                color: i < stage ? Colors.white
+                    : (i == stage ? const Color(0xFF412402)
+                        : UellowColors.muted)),
+          ),
+          const SizedBox(height: 3),
+          Text(labels[i], textAlign: TextAlign.center,
+              maxLines: 1, overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: 8,
+                  fontWeight: i == stage ? FontWeight.w900 : FontWeight.w600,
+                  color: i <= stage ? UellowColors.darkBrown
+                      : UellowColors.muted)),
+        ])),
+    ]);
+  }
+
+  Widget _docsCard(Map<String, dynamic> d, bool ar) {
+    final id = widget.orderId;
+    Future<void> open(String kind) async {
+      try {
+        final url = await AdminApi.instance.orderDocumentUrl(id, kind);
+        if (url == null || url.isEmpty) throw Exception('no url');
+        if (!mounted) return;
+        await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+      } catch (_) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(ar ? 'تعذّر فتح المستند' : 'Could not open document'),
+            backgroundColor: UellowColors.danger));
+      }
+    }
+    return _card(title: ar ? '🖨️ المستندات' : '🖨️ Documents', children: [
+      Row(children: [
+        Expanded(child: _docBtn(ar ? '🧾 فاتورة' : '🧾 Invoice',
+            () => open('invoice'))),
+        const SizedBox(width: 8),
+        Expanded(child: _docBtn(ar ? '📜 ضمان' : '📜 Warranty',
+            () => open('warranty'))),
+        const SizedBox(width: 8),
+        Expanded(child: _docBtn(ar ? '🧾 إيصال' : '🧾 Receipt',
+            () => open('receipt'))),
+      ]),
+    ]);
+  }
+
+  Widget _docBtn(String label, VoidCallback onTap) => OutlinedButton(
+    onPressed: onTap,
+    style: OutlinedButton.styleFrom(
+      foregroundColor: UellowColors.darkBrown,
+      side: const BorderSide(color: Color(0xFFE9E1D1)),
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(11)),
+    ),
+    child: Text(label, textAlign: TextAlign.center,
+        style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w800)),
+  );
+
+  Future<void> _openNotifyDialog(int id, bool ar) async {
+    final titleC = TextEditingController();
+    final bodyC = TextEditingController();
+    final go = await showDialog<bool>(context: context, builder: (c) =>
+        AlertDialog(
+          title: Text(ar ? '🔔 إشعار مخصّص للعميل' : '🔔 Custom notification'),
+          content: Column(mainAxisSize: MainAxisSize.min, children: [
+            TextField(controller: titleC, decoration: InputDecoration(
+                labelText: ar ? 'العنوان' : 'Title')),
+            const SizedBox(height: 8),
+            TextField(controller: bodyC, maxLines: 3,
+                decoration: InputDecoration(
+                    labelText: ar ? 'نص الرسالة' : 'Message')),
+          ]),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(c, false),
+                child: Text(ar ? 'إلغاء' : 'Cancel')),
+            TextButton(onPressed: () => Navigator.pop(c, true),
+                child: Text(ar ? 'إرسال' : 'Send')),
+          ],
+        ));
+    if (go == true) {
+      final t = titleC.text.trim();
+      final b = bodyC.text.trim();
+      if (t.isEmpty || b.isEmpty) return;
+      _run(() => AdminApi.instance.orderNotify(id, {
+            'title': t, 'title_ar': t, 'body': b, 'body_ar': b,
+          }), ar ? 'تم إرسال الإشعار' : 'Notification sent');
+    }
+  }
+
+  Future<void> _confirmCancelSilent(int id, bool ar) async {
+    final ok = await showDialog<bool>(context: context, builder: (c) =>
+        AlertDialog(
+          title: Text(ar ? 'إلغاء صامت؟' : 'Silent cancel?'),
+          content: Text(ar ? 'سيُلغى الطلب دون إشعار العميل.'
+              : 'Cancels without notifying the customer.'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(c, false),
+                child: Text(ar ? 'تراجع' : 'Back')),
+            TextButton(onPressed: () => Navigator.pop(c, true),
+                child: Text(ar ? 'إلغاء صامت' : 'Silent cancel',
+                    style: const TextStyle(color: UellowColors.danger))),
+          ],
+        ));
+    if (ok == true) {
+      _run(() => AdminApi.instance.orderCancel(id, silent: true),
+          ar ? 'تم الإلغاء بدون إشعار' : 'Cancelled silently');
+    }
+  }
+
+  Future<void> _openEditItems(Map<String, dynamic> d, int id, bool ar) async {
+    final lines = ((d['lines'] as List?) ?? const [])
+        .map((e) => (e as Map).cast<String, dynamic>()).toList();
+    if (lines.isEmpty) return;
+    await showModalBottomSheet(context: context, isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius:
+          BorderRadius.vertical(top: Radius.circular(18))),
+      builder: (c) => Padding(
+        padding: EdgeInsets.fromLTRB(16, 16, 16,
+            16 + MediaQuery.of(c).padding.bottom),
+        child: Column(mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(ar ? '✏️ تعديل الأصناف' : '✏️ Edit items', style: UT.h3),
+          const SizedBox(height: 10),
+          for (final l in lines) Padding(
+            padding: const EdgeInsets.symmetric(vertical: 5),
+            child: Row(children: [
+              Expanded(child: Text(l['name']?.toString() ?? '',
+                  maxLines: 2, overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 12,
+                      fontWeight: FontWeight.w700))),
+              const SizedBox(width: 8),
+              Text('×${(l['qty'] as num? ?? 0).toStringAsFixed(0)}',
+                  style: const TextStyle(fontSize: 12,
+                      fontWeight: FontWeight.w900)),
+              IconButton(icon: const Icon(Icons.edit_rounded, size: 18),
+                  onPressed: () async {
+                    Navigator.pop(c);
+                    await _editLineQty(id, l, ar);
+                  }),
+              IconButton(icon: const Icon(Icons.delete_outline_rounded,
+                  size: 18, color: UellowColors.danger),
+                  onPressed: () {
+                    Navigator.pop(c);
+                    _run(() => AdminApi.instance.orderEditLine(id, {
+                          'line_id': l['id'], 'remove': true,
+                        }), ar ? 'تم حذف الصنف' : 'Item removed');
+                  }),
+            ]),
+          ),
+        ]),
+      ),
+    );
+  }
+
+  Future<void> _editLineQty(int id, Map<String, dynamic> l, bool ar) async {
+    final c0 = TextEditingController(
+        text: (l['qty'] as num? ?? 1).toStringAsFixed(0));
+    final go = await showDialog<bool>(context: context, builder: (c) =>
+        AlertDialog(
+          title: Text(ar ? 'تعديل الكمية' : 'Edit quantity'),
+          content: TextField(controller: c0,
+              keyboardType: TextInputType.number,
+              decoration: InputDecoration(labelText: ar ? 'الكمية' : 'Qty')),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(c, false),
+                child: Text(ar ? 'إلغاء' : 'Cancel')),
+            TextButton(onPressed: () => Navigator.pop(c, true),
+                child: Text(ar ? 'حفظ' : 'Save')),
+          ],
+        ));
+    if (go == true) {
+      final q = double.tryParse(c0.text.trim()) ?? 0;
+      _run(() => AdminApi.instance.orderEditLine(id, {
+            'line_id': l['id'], 'qty': q,
+          }), ar ? 'تم تحديث الكمية' : 'Quantity updated');
+    }
   }
 }
