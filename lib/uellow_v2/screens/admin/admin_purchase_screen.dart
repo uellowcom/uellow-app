@@ -637,6 +637,25 @@ class _PurchaseDetailSheetState extends State<_PurchaseDetailSheet> {
         _kv(ar ? 'البريد' : 'Email', v['email'].toString()),
       if ((v['ref'] ?? '').toString().isNotEmpty)
         _kv(ar ? 'مرجع المورد' : 'Vendor ref', v['ref'].toString()),
+      InkWell(
+        onTap: () => _openDocUrl(
+            AdminApi.instance.purchaseStatementUrl(widget.poId), ar),
+        borderRadius: BorderRadius.circular(8),
+        child: Padding(
+          padding: const EdgeInsets.only(top: 6),
+          child: Row(children: [
+            const Icon(Icons.description_outlined, size: 16,
+                color: Color(0xFF412402)),
+            const SizedBox(width: 6),
+            Text(ar ? '📊 كشف حساب المورّد' : '📊 Vendor statement',
+                style: const TextStyle(fontSize: 12.5,
+                    fontWeight: FontWeight.w800, color: Color(0xFF1D5FB4))),
+            const Spacer(),
+            const Icon(Icons.chevron_left_rounded, size: 18,
+                color: UellowColors.muted),
+          ]),
+        ),
+      ),
     ]);
   }
 

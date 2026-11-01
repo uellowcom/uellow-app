@@ -184,6 +184,9 @@ class _AdminCampaignsScreenState extends State<AdminCampaignsScreen> {
           if (start != null || end != null)
             _badge('📅 ${start ?? '—'} → ${end ?? '—'}',
                 const Color(0xFFFDF3D6), const Color(0xFF6B4E00)),
+          if (live && c['end_date'] != null)
+            _badge('⏱️ ${_remaining(ar, c['end_date'])}',
+                const Color(0xFFFBEFD6), const Color(0xFFA9680A)),
         ]),
         const SizedBox(height: 10),
         Row(children: [
@@ -313,6 +316,20 @@ class _AdminCampaignsScreenState extends State<AdminCampaignsScreen> {
         child: Text(t, style: TextStyle(fontSize: 10.5,
             fontWeight: FontWeight.w800, color: fg)),
       );
+
+  String _remaining(bool ar, dynamic iso) {
+    final e = DateTime.tryParse(iso.toString());
+    if (e == null) return '';
+    final diff = e.difference(DateTime.now());
+    if (diff.isNegative) return ar ? 'انتهت' : 'ended';
+    if (diff.inDays >= 1) {
+      return ar ? 'ينتهي خلال ${diff.inDays} يوم' : '${diff.inDays}d left';
+    }
+    if (diff.inHours >= 1) {
+      return ar ? 'ينتهي خلال ${diff.inHours} ساعة' : '${diff.inHours}h left';
+    }
+    return ar ? 'ينتهي خلال ${diff.inMinutes} دقيقة' : '${diff.inMinutes}m left';
+  }
 
   String? _fmtDate(dynamic iso) {
     if (iso == null) return null;

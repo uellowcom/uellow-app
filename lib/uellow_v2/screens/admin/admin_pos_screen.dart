@@ -340,11 +340,13 @@ class _PosOrdersTabState extends State<_PosOrdersTab>
   // v2.2.161 — بحث + فلتر كاشير/دفع + ملخّص.
   String _q = '';
   String? _cashier, _payMethod;
+  String? _customFrom, _customTo;
   Map<String, dynamic>? _summary;
   final _searchCtl = TextEditingController();
 
   ({String? from, String? to}) _rangeDates() {
     if (_range == 'all') return (from: null, to: null);
+    if (_range == 'custom') return (from: _customFrom, to: _customTo);
     final now = DateTime.now();
     String fmt(DateTime d) =>
         '${d.year.toString().padLeft(4, '0')}-'
@@ -467,10 +469,16 @@ class _PosOrdersTabState extends State<_PosOrdersTab>
                     children: [
                   Text(
                       '${(o['cashier'] ?? '').toString().isNotEmpty ? '${o['cashier']} · ' : ''}'
-                      '${o['date'] ?? ''} · ${o['items'] ?? 0} ${ar ? 'منتج' : 'items'}'
-                      '${pays.isNotEmpty ? ' · ${pays.map((p) => (p as Map)['method']).join('+')}' : ''}',
+                      '${o['date'] ?? ''} · ${o['items'] ?? 0} ${ar ? 'منتج' : 'items'}',
                       style: const TextStyle(fontSize: 10,
                           color: UellowColors.muted)),
+                  if (pays.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Wrap(spacing: 5, runSpacing: 4, children: [
+                      for (final p in pays)
+                        _payPill((p as Map)['method']?.toString() ?? ''),
+                    ]),
+                  ],
                   if (o['profit'] != null) ...[
                     const SizedBox(height: 5),
                     _profitPill(ar, o['profit'] as Map?, o['margin_pct'],
@@ -635,6 +643,29 @@ class _PosOrdersTabState extends State<_PosOrdersTab>
     );
   }
 
+  Widget _payPill(String method) {
+    final m = method.toLowerCase();
+    Color bg, fg;
+    if (m.contains('knet') || m.contains('كي') || m.contains('card') ||
+        m.contains('بطاق') || m.contains('visa') || m.contains('master')) {
+      bg = const Color(0xFFE5EEFB); fg = const Color(0xFF1D5FB4);
+    } else if (m.contains('cash') || m.contains('كاش') || m.contains('نقد')) {
+      bg = const Color(0xFFE3F3EA); fg = const Color(0xFF1A7A46);
+    } else if (m.contains('refund') || m.contains('مرتجع') ||
+        m.contains('return')) {
+      bg = const Color(0xFFF8E0DC); fg = const Color(0xFFC23B2B);
+    } else {
+      bg = const Color(0xFFFDF3D6); fg = const Color(0xFF6B4E00);
+    }
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+      decoration: BoxDecoration(
+          color: bg, borderRadius: BorderRadius.circular(999)),
+      child: Text(method, style: TextStyle(fontSize: 9.5,
+          fontWeight: FontWeight.w800, color: fg)),
+    );
+  }
+
   Widget _activeFilterChip(String t, VoidCallback onClear) => InkWell(
     onTap: onClear,
     child: Container(
@@ -713,8 +744,42 @@ class _PosOrdersTabState extends State<_PosOrdersTab>
             ),
           ),
         ),
+        GestureDetector(
+          onTap: _pickPosRange,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+            decoration: BoxDecoration(
+              color: _range == 'custom'
+                  ? const Color(0xFFE8A800) : Colors.white,
+              borderRadius: BorderRadius.circular(999),
+              border: Border.all(color: _range == 'custom'
+                  ? const Color(0xFFE8A800) : const Color(0xFFE5E5E5)),
+            ),
+            child: Text(ar ? '📅 مخصّص' : '📅 Custom',
+                style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w800,
+                    color: _range == 'custom'
+                        ? const Color(0xFF2A1D00) : UellowColors.muted)),
+          ),
+        ),
       ]),
     );
+  }
+
+  Future<void> _pickPosRange() async {
+    final now = DateTime.now();
+    final r = await showDateRangePicker(context: context,
+        firstDate: DateTime(now.year - 2), lastDate: now,
+        initialDateRange: DateTimeRange(
+            start: now.subtract(const Duration(days: 7)), end: now));
+    if (r != null) {
+      String f(DateTime d) => '${d.year.toString().padLeft(4, '0')}-'
+          '${d.month.toString().padLeft(2, '0')}-'
+          '${d.day.toString().padLeft(2, '0')}';
+      _customFrom = f(r.start);
+      _customTo = f(r.end);
+      setState(() => _range = 'custom');
+      _load(reset: true);
+    }
   }
 }
 
