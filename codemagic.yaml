@@ -119,6 +119,9 @@ workflows:
         # الاختبار الداخلي (Internal Testing) لا يحتاج مراجعة Apple → يظهر فور المعالجة.
         # ملاحظة: الاختبار الخارجي (External groups) يحتاج Beta App Review + معلومات تواصل.
         submit_to_testflight: true
+        # v2.2.167 — يُنهي البناء العالق في المراجعة قبل تقديم الجديد
+        # (يحل 422: Another build is in review بنفس الـtrain).
+        expire_build_submitted_for_review: true
         submit_to_app_store: false          # خليه true عشان يروح لمراجعة App Store مباشرة
 
   # ───────────────────────── Android (Huawei AppGallery / مباشر) ─────────────────────────
