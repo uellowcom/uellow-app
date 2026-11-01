@@ -337,6 +337,11 @@ class _PosOrdersTabState extends State<_PosOrdersTab>
   bool _loading = false;
   // v2.2.145 — فلتر تاريخ شغّال (اليوم/٧ أيام/٣٠ يوم/الكل).
   String _range = 'today';
+  // v2.2.161 — بحث + فلتر كاشير/دفع + ملخّص.
+  String _q = '';
+  String? _cashier, _payMethod;
+  Map<String, dynamic>? _summary;
+  final _searchCtl = TextEditingController();
 
   ({String? from, String? to}) _rangeDates() {
     if (_range == 'all') return (from: null, to: null);
@@ -372,6 +377,7 @@ class _PosOrdersTabState extends State<_PosOrdersTab>
   @override
   void dispose() {
     _scroll.dispose();
+    _searchCtl.dispose();
     super.dispose();
   }
 
@@ -388,8 +394,10 @@ class _PosOrdersTabState extends State<_PosOrdersTab>
           : _rangeDates();
       final d = await AdminApi.instance.posOrders(
           page: _page, sessionId: widget.sessionId,
-          dateFrom: r.from, dateTo: r.to);
+          dateFrom: r.from, dateTo: r.to,
+          q: _q, cashier: _cashier, paymentMethod: _payMethod);
       _pages = (d['pages'] as num?)?.toInt() ?? 1;
+      _summary = (d['summary'] as Map?)?.cast<String, dynamic>();
       _rows.addAll(((d['orders'] as List?) ?? const [])
           .map((e) => (e as Map).cast<String, dynamic>()));
     } catch (_) {}
@@ -499,7 +507,8 @@ class _PosOrdersTabState extends State<_PosOrdersTab>
     );
     // v2.2.145 — شيبات فلتر التاريخ أعلى القائمة (تُخفى داخل جلسة محدّدة).
     if (widget.sessionId != null) return list;
-    return Column(children: [_filterChips(ar), Expanded(child: list)]);
+    return Column(children: [
+      _searchSummary(ar), _filterChips(ar), Expanded(child: list)]);
   }
 
   // v2.2.145 — صور منتجات مصغّرة متداخلة (حتى 3 + عدّاد «+N»).
@@ -555,6 +564,118 @@ class _PosOrdersTabState extends State<_PosOrdersTab>
             fontWeight: FontWeight.w900, color: Color(0xFF2A1D00))),
       ),
     ]);
+  }
+
+  Widget _searchSummary(bool ar) {
+    final sm = _summary;
+    final tot = (sm?['total'] as Map?);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(14, 10, 14, 0),
+      child: Column(children: [
+        Row(children: [
+          Expanded(child: SizedBox(height: 38, child: TextField(
+            controller: _searchCtl,
+            textInputAction: TextInputAction.search,
+            onSubmitted: (v) { _q = v.trim(); _load(reset: true); },
+            style: const TextStyle(fontSize: 13),
+            decoration: InputDecoration(
+              isDense: true,
+              hintText: ar ? 'بحث: رقم العملية / العميل'
+                           : 'Search: ref / customer',
+              prefixIcon: const Icon(Icons.search, size: 18),
+              suffixIcon: _q.isNotEmpty
+                  ? IconButton(icon: const Icon(Icons.clear, size: 16),
+                      onPressed: () {
+                        _searchCtl.clear(); _q = ''; _load(reset: true);
+                      })
+                  : null,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+              border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(11)),
+            ),
+          ))),
+          const SizedBox(width: 8),
+          InkWell(
+            onTap: () => _openPosFilter(ar),
+            borderRadius: BorderRadius.circular(11),
+            child: Container(
+              width: 40, height: 38,
+              decoration: BoxDecoration(
+                  color: (_cashier != null || _payMethod != null)
+                      ? UellowColors.yellow : Colors.white,
+                  borderRadius: BorderRadius.circular(11),
+                  border: Border.all(color: const Color(0xFFE5E5E5))),
+              child: const Icon(Icons.tune_rounded, size: 18,
+                  color: UellowColors.darkBrown)),
+          ),
+        ]),
+        if (sm != null) Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: Row(children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
+              decoration: BoxDecoration(color: const Color(0xFFF3EFE6),
+                  borderRadius: BorderRadius.circular(999)),
+              child: Text(
+                  '${sm['count'] ?? 0} ${ar ? 'عملية' : 'ops'} · '
+                  '${tot?['amount'] ?? 0} ${tot?['symbol'] ?? ''}',
+                  style: const TextStyle(fontSize: 12,
+                      fontWeight: FontWeight.w900,
+                      color: UellowColors.darkBrown)),
+            ),
+            if (_cashier != null) ...[const SizedBox(width: 6),
+              _activeFilterChip('👤 $_cashier',
+                  () { _cashier = null; _load(reset: true); })],
+            if (_payMethod != null) ...[const SizedBox(width: 6),
+              _activeFilterChip('💳 $_payMethod',
+                  () { _payMethod = null; _load(reset: true); })],
+          ]),
+        ),
+      ]),
+    );
+  }
+
+  Widget _activeFilterChip(String t, VoidCallback onClear) => InkWell(
+    onTap: onClear,
+    child: Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+      decoration: BoxDecoration(color: const Color(0xFFFDF3D6),
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: const Color(0xFFEFD79A))),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Text(t, style: const TextStyle(fontSize: 11,
+            fontWeight: FontWeight.w800, color: Color(0xFF6B4E00))),
+        const SizedBox(width: 3),
+        const Icon(Icons.close, size: 12, color: Color(0xFF6B4E00)),
+      ]),
+    ),
+  );
+
+  Future<void> _openPosFilter(bool ar) async {
+    final cCtl = TextEditingController(text: _cashier ?? '');
+    final pCtl = TextEditingController(text: _payMethod ?? '');
+    final go = await showDialog<bool>(context: context, builder: (c) =>
+        AlertDialog(
+          title: Text(ar ? 'فلترة العمليات' : 'Filter operations'),
+          content: Column(mainAxisSize: MainAxisSize.min, children: [
+            TextField(controller: cCtl, decoration: InputDecoration(
+                labelText: ar ? '👤 الكاشير' : '👤 Cashier')),
+            const SizedBox(height: 8),
+            TextField(controller: pCtl, decoration: InputDecoration(
+                labelText: ar ? '💳 طريقة الدفع' : '💳 Payment method')),
+          ]),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(c, false),
+                child: Text(ar ? 'إلغاء' : 'Cancel')),
+            TextButton(onPressed: () => Navigator.pop(c, true),
+                child: Text(ar ? 'تطبيق' : 'Apply')),
+          ],
+        ));
+    if (go == true) {
+      _cashier = cCtl.text.trim().isEmpty ? null : cCtl.text.trim();
+      _payMethod = pCtl.text.trim().isEmpty ? null : pCtl.text.trim();
+      _load(reset: true);
+    }
   }
 
   Widget _filterChips(bool ar) {

@@ -167,7 +167,8 @@ class AdminApi {
   }
 
   Future<Map<String, dynamic>> posOrders({int page = 1, int? sessionId,
-      String? dateFrom, String? dateTo}) async {
+      String? dateFrom, String? dateTo, String? q, String? cashier,
+      String? paymentMethod}) async {
     final r = await UellowApi.instance.getRaw(
         '/api/mobile/v2/admin/pos/orders',
         query: {
@@ -175,6 +176,10 @@ class AdminApi {
           if (sessionId != null) 'session_id': '$sessionId',
           if (dateFrom != null) 'date_from': dateFrom,
           if (dateTo != null) 'date_to': dateTo,
+          if (q != null && q.isNotEmpty) 'q': q,
+          if (cashier != null && cashier.isNotEmpty) 'cashier': cashier,
+          if (paymentMethod != null && paymentMethod.isNotEmpty)
+            'payment_method': paymentMethod,
         },
         auth: true);
     return (r['data'] as Map).cast<String, dynamic>();
