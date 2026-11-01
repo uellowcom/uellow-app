@@ -247,6 +247,9 @@ class _HomeScreenState extends State<HomeScreen> {
         physics: const AlwaysScrollableScrollPhysics(),
         slivers: [
           SliverToBoxAdapter(child: _TopBar()),
+          // v2.2.137 — شريط «تواصل» الأخضر النابض (متصل الآن · يرد خلال دقائق)
+          // يفتح محادثة خدمة العملاء — مطابقةً للموكاب.
+          const SliverToBoxAdapter(child: _ContactPill()),
           // Uellow World entry banner removed — the globe icon in the top bar
           // (Icons.public) remains the entry point into the World store.
           // v2.1.57 — targeted announcement strip (admin-controlled).
@@ -594,6 +597,84 @@ class _TopBar extends StatelessWidget {
         const SizedBox(width: 6),
         _IconButton(icon: Icons.camera_alt_outlined,
             onTap: () => Navigator.pushNamed(context, Routes.search)),
+      ]),
+    );
+  }
+}
+
+// ─── v2.2.137 — شريط التواصل الأخضر النابض ─────────────────────────────
+// نقطة خضراء نابضة + «تواصل · متصل الآن» تفتح محادثة خدمة العملاء،
+// وعلى اليمين «يرد خلال دقائق». مطابق للموكاب الموحّد.
+class _ContactPill extends StatefulWidget {
+  const _ContactPill();
+  @override
+  State<_ContactPill> createState() => _ContactPillState();
+}
+
+class _ContactPillState extends State<_ContactPill>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _c = AnimationController(
+      vsync: this, duration: const Duration(milliseconds: 1600))
+    ..repeat();
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ar = UellowApi.instance.lang == 'ar';
+    const good = Color(0xFF1A7A46);
+    const goodBg = Color(0xFFE3F3EA);
+    const goodLine = Color(0xFFBFE3CD);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+      child: Row(children: [
+        InkWell(
+          borderRadius: BorderRadius.circular(999),
+          onTap: () => Navigator.pushNamed(context, '/helpdesk-tickets'),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 7),
+            decoration: BoxDecoration(
+              color: goodBg,
+              borderRadius: BorderRadius.circular(999),
+              border: Border.all(color: goodLine),
+            ),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              // نقطة نابضة
+              AnimatedBuilder(
+                animation: _c,
+                builder: (_, __) {
+                  final t = _c.value; // 0→1
+                  return Container(
+                    width: 9, height: 9,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: good,
+                      boxShadow: [
+                        BoxShadow(
+                          color: good.withOpacity((1 - t) * 0.5),
+                          blurRadius: 0,
+                          spreadRadius: t * 7,
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+              const SizedBox(width: 7),
+              Text(ar ? '💬 تواصل · متصل الآن' : '💬 Contact · online now',
+                  style: const TextStyle(color: good, fontSize: 12.5,
+                      fontWeight: FontWeight.w800)),
+            ]),
+          ),
+        ),
+        const Spacer(),
+        Text(ar ? 'يرد خلال دقائق' : 'Replies in minutes',
+            style: const TextStyle(color: UellowColors.muted, fontSize: 11,
+                fontWeight: FontWeight.w700)),
       ]),
     );
   }

@@ -1,0 +1,1 @@
+/root/uellow_app/build/app/intermediates/cxx/RelWithDebInfo/6z5o2m13/obj/x86

@@ -1072,11 +1072,17 @@ class _ActionTilesState extends State<_ActionTiles> {
   // v2.1.63 — unread badge on the Alerts tile (personal event
   // notifications: orders, wallet, loyalty, review replies…).
   int _unread = 0;
+  // v2.2.137 — بادج رسائل الدعم غير المقروءة على أيقونة «الدعم الفني» الجديدة
+  // (جنب «ضمّ للمّة») — مطابقةً للموكاب.
+  int _hdUnread = 0;
 
   @override
   void initState() {
     super.initState();
-    if (!isGuest) _loadUnread();
+    if (!isGuest) {
+      _loadUnread();
+      _loadHdUnread();
+    }
   }
 
   Future<void> _loadUnread() async {
@@ -1088,11 +1094,21 @@ class _ActionTilesState extends State<_ActionTiles> {
     } catch (_) {}
   }
 
+  // v2.2.137 — عدد رسائل الدعم غير المقروءة (helpdesk/unread).
+  Future<void> _loadHdUnread() async {
+    try {
+      final res = await UellowApi.instance.getRaw(
+          '/api/mobile/v2/helpdesk/unread', auth: true);
+      final n = (res['data']?['unread'] as num?)?.toInt() ?? 0;
+      if (mounted && n != _hdUnread) setState(() => _hdUnread = n);
+    } catch (_) {}
+  }
+
   // v2.1.66 — Settings tile removed (the gear stays in the header only).
   static const _en = ['Wishlist','Alerts','Coupons','Loyalty',
-                      'Wallet','Smart Fit','Tracking','My Reviews','Warranties','My Purchases','Join Lamma'];
+                      'Wallet','Smart Fit','Tracking','My Reviews','Warranties','My Purchases','Join Lamma','Support'];
   static const _ar = ['المفضلة','التنبيهات','الكوبونات','الولاء',
-                      'المحفظة','مقاسي','التتبع','آراء المختصين','ضماناتي','مشترياتي','انضم للمّة'];
+                      'المحفظة','مقاسي','التتبع','آراء المختصين','ضماناتي','مشترياتي','انضم للمّة','الدعم الفني'];
   // Public tiles work for guests too — the rest need a session, so guests
   // get bounced to /auth.
   static const _public = {Routes.tryOn};
@@ -1111,6 +1127,8 @@ class _ActionTilesState extends State<_ActionTiles> {
     (Icons.verified_user_outlined, Routes.warranties),
     (Icons.receipt_long_outlined, 'my_purchases'),
     (Icons.group_add_outlined, 'lamma_join'),
+    // v2.2.137 — أيقونة الدعم الفني (ببادج غير مقروء) جنب «ضمّ للمّة».
+    (Icons.headset_mic_outlined, 'helpdesk_support'),
   ];
   @override
   Widget build(BuildContext context) {
@@ -1134,6 +1152,16 @@ class _ActionTilesState extends State<_ActionTiles> {
           onTap: () {
             if (route == 'lamma_join') {
               showJoinLammaDialog(context);
+              return;
+            }
+            // v2.2.137 — الدعم الفني → قائمة تذاكر الدعم (تتطلب حسابًا).
+            if (route == 'helpdesk_support') {
+              if (isGuest) {
+                Navigator.pushNamed(context, '/auth');
+                return;
+              }
+              Navigator.pushNamed(context, '/helpdesk-tickets')
+                  .then((_) { if (mounted) _loadHdUnread(); });
               return;
             }
             if (route == 'my_purchases') {
@@ -1171,7 +1199,8 @@ class _ActionTilesState extends State<_ActionTiles> {
                 ),
                 child: Icon(icon, size: 26, color: UellowColors.darkBrown),
               ),
-              if (route == Routes.notifications && _unread > 0)
+              if ((route == Routes.notifications && _unread > 0)
+                  || (route == 'helpdesk_support' && _hdUnread > 0))
                 PositionedDirectional(
                   top: -5, end: -5,
                   child: Container(
@@ -1184,7 +1213,12 @@ class _ActionTilesState extends State<_ActionTiles> {
                       border: Border.all(color: Colors.white, width: 1.5),
                     ),
                     alignment: Alignment.center,
-                    child: Text(_unread > 99 ? '99+' : '$_unread',
+                    child: Text(
+                        () {
+                          final n = route == 'helpdesk_support'
+                              ? _hdUnread : _unread;
+                          return n > 99 ? '99+' : '$n';
+                        }(),
                         style: const TextStyle(color: Colors.white,
                             fontSize: 9.5, fontWeight: FontWeight.w900,
                             height: 1.0)),
