@@ -15,6 +15,7 @@ import '../../theme/uellow_theme.dart';
 import 'admin_helpdesk_screen.dart';
 import 'admin_customer_service_screen.dart';
 import 'admin_app_analytics_screen.dart';
+import 'admin_campaigns_screen.dart';
 import 'admin_activity_screen.dart';
 import 'admin_orders_screen.dart';
 import 'admin_pos_screen.dart';
@@ -437,6 +438,11 @@ class _ManagementGrid extends StatelessWidget {
           const Color(0xFF0D9488),
           () => Navigator.push(context, MaterialPageRoute(
               builder: (_) => const AdminAppAnalyticsScreen()))),
+      (Icons.local_offer_rounded, ar ? 'العروض والحملات' : 'Offers',
+          ar ? 'تشغيل/إيقاف وجدولة الحملات' : 'Toggle & schedule campaigns',
+          const Color(0xFFE8820A),
+          () => Navigator.push(context, MaterialPageRoute(
+              builder: (_) => const AdminCampaignsScreen()))),
       (Icons.campaign_rounded, ar ? 'الإشعارات' : 'Notifications',
           ar ? 'إرسال Push + إحصائيات' : 'Send push + stats',
           const Color(0xFFC2410C),

@@ -102,6 +102,17 @@ class AdminApi {
     return ((r['data'] as Map?) ?? const {}).cast<String, dynamic>();
   }
 
+  /// v2.2.147 — قائمة حملات الفلاش/العروض (الحالة + الجدولة).
+  Future<Map<String, dynamic>> campaigns() async {
+    final r = await UellowApi.instance
+        .getRaw('/api/mobile/v2/admin/campaigns', auth: true);
+    return ((r['data'] as Map?) ?? const {}).cast<String, dynamic>();
+  }
+
+  /// v2.2.147 — تشغيل/إيقاف حملة فوريًا.
+  Future<Map<String, dynamic>> campaignToggle(int id, bool active) =>
+      _post('/api/mobile/v2/admin/campaign/$id/toggle', {'active': active});
+
   Future<Map<String, dynamic>> posSessions(
       {int page = 1, String state = '', String? dateFrom,
       String? dateTo}) async {
