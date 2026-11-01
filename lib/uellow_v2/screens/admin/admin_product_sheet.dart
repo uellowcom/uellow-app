@@ -6,7 +6,11 @@
 //   sale price · cost (per-variant when variations exist) · on-hand qty
 //   continue-selling toggle · barcode (typed OR camera-scanned)
 // =============================================================================
+import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../../../api/uellow_api.dart';
@@ -48,6 +52,10 @@ class _AdminProductSheetState extends State<_AdminProductSheet> {
   final Map<int, TextEditingController> _vCost = {};
   final Map<int, TextEditingController> _vBarcode = {};
   final Map<int, TextEditingController> _vPrice = {};
+  // v2.2.148 — إدارة الصور (رئيسية + كتالوج)
+  String? _mainImg;
+  List<Map<String, dynamic>> _catalog = [];
+  bool _imgBusy = false;
   // v2.2.41 — eCommerce category (section) editing
   List<Map<String, dynamic>> _cats = [];
   final Set<int> _selCats = {};
@@ -80,6 +88,11 @@ class _AdminProductSheetState extends State<_AdminProductSheet> {
       _continueSelling = d['continue_selling'] == true;
       _published = d['published'] != false;
       _availableInPos = d['available_in_pos'] != false;
+      _mainImg = (d['image'] as String?);
+      _catalog = ((d['catalog_images'] as List?) ?? const [])
+          .whereType<Map>()
+          .map((e) => e.cast<String, dynamic>())
+          .toList();
       for (final v in (d['variants'] as List? ?? const [])) {
         final id = ((v as Map)['id'] as num).toInt();
         _vCost[id] = TextEditingController(text: '${v['cost'] ?? ''}');
@@ -248,6 +261,9 @@ class _AdminProductSheetState extends State<_AdminProductSheet> {
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+          // v2.2.148 — إدارة الصور (رئيسية + كتالوج)
+          _imageSection(ar),
+          const SizedBox(height: 14),
           Row(children: [
             Expanded(child: _numField(
                 ar ? 'سعر البيع ($sym)' : 'Sale price ($sym)', _price,
@@ -486,6 +502,184 @@ class _AdminProductSheetState extends State<_AdminProductSheet> {
         );
       }),
     );
+  }
+
+  // ── v2.2.148 — إدارة الصور ──────────────────────────────────────────
+  String _imgUrl(String raw) =>
+      raw.startsWith('http') ? raw : '${UellowApi.instance.baseUrl}$raw';
+
+  Future<ImageSource?> _chooseSource(bool ar) {
+    return showModalBottomSheet<ImageSource>(
+      context: context,
+      builder: (c) => SafeArea(child: Column(mainAxisSize: MainAxisSize.min,
+          children: [
+        ListTile(
+          leading: const Icon(Icons.photo_library_outlined),
+          title: Text(ar ? 'من المعرض' : 'From gallery'),
+          onTap: () => Navigator.pop(c, ImageSource.gallery),
+        ),
+        ListTile(
+          leading: const Icon(Icons.photo_camera_outlined),
+          title: Text(ar ? 'التقاط بالكاميرا' : 'Take a photo'),
+          onTap: () => Navigator.pop(c, ImageSource.camera),
+        ),
+      ])),
+    );
+  }
+
+  Future<void> _pickImage(String kind, bool ar) async {
+    if (_imgBusy) return;
+    final src = await _chooseSource(ar);
+    if (src == null) return;
+    final x = await ImagePicker()
+        .pickImage(source: src, imageQuality: 85, maxWidth: 1920);
+    if (x == null) return;
+    setState(() => _imgBusy = true);
+    try {
+      final bytes = await File(x.path).readAsBytes();
+      final b64 = base64Encode(bytes);
+      final r = await AdminApi.instance
+          .productSetImage(widget.tmplId, b64, kind);
+      final data = (r['data'] as Map?)?.cast<String, dynamic>() ?? {};
+      if (kind == 'main') {
+        setState(() => _mainImg = (data['image'] as String?) ?? _mainImg);
+      } else {
+        final id = (data['id'] as num?)?.toInt();
+        if (id != null) {
+          setState(() => _catalog.add({'id': id, 'image': data['image']}));
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(e.toString().replaceAll('Exception: ', '')),
+            backgroundColor: UellowColors.danger));
+      }
+    } finally {
+      if (mounted) setState(() => _imgBusy = false);
+    }
+  }
+
+  Future<void> _delCatalog(int id, bool ar) async {
+    if (_imgBusy) return;
+    setState(() => _imgBusy = true);
+    try {
+      await AdminApi.instance.productDeleteImage(widget.tmplId, id);
+      setState(() => _catalog
+          .removeWhere((c) => (c['id'] as num?)?.toInt() == id));
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(e.toString().replaceAll('Exception: ', '')),
+            backgroundColor: UellowColors.danger));
+      }
+    } finally {
+      if (mounted) setState(() => _imgBusy = false);
+    }
+  }
+
+  Widget _imageSection(bool ar) {
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Row(children: [
+        Container(
+          width: 72, height: 72,
+          decoration: BoxDecoration(
+            color: const Color(0xFFF1EEE7),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: const Color(0xFFE9E1D1)),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: (_mainImg != null && _mainImg!.isNotEmpty)
+              ? CachedNetworkImage(imageUrl: _imgUrl(_mainImg!),
+                  fit: BoxFit.cover,
+                  errorWidget: (_, __, ___) => const Icon(
+                      Icons.image_outlined, color: UellowColors.muted))
+              : const Icon(Icons.image_outlined, color: UellowColors.muted),
+        ),
+        const SizedBox(width: 12),
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+          OutlinedButton.icon(
+            onPressed: _imgBusy ? null : () => _pickImage('main', ar),
+            icon: const Icon(Icons.photo_camera_outlined, size: 18),
+            label: Text(ar ? 'تغيير الصورة الرئيسية' : 'Change main image'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: const Color(0xFF412402),
+              side: const BorderSide(color: Color(0xFFE8A800)),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(11)),
+            ),
+          ),
+          Text(ar ? 'من المعرض أو الكاميرا' : 'From gallery or camera',
+              style: const TextStyle(fontSize: 10.5, color: UellowColors.muted)),
+        ])),
+      ]),
+      const SizedBox(height: 12),
+      Text(ar ? '🗂️ صور الكتالوج (${_catalog.length})'
+              : '🗂️ Catalog images (${_catalog.length})',
+          style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w900,
+              color: UellowColors.darkBrown)),
+      const SizedBox(height: 8),
+      SizedBox(height: 66, child: ListView(
+        scrollDirection: Axis.horizontal,
+        children: [
+          for (final c in _catalog)
+            Padding(
+              padding: const EdgeInsetsDirectional.only(end: 8),
+              child: Stack(clipBehavior: Clip.none, children: [
+                Container(
+                  width: 62, height: 62,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF1EEE7),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: const Color(0xFFE9E1D1)),
+                  ),
+                  clipBehavior: Clip.antiAlias,
+                  child: CachedNetworkImage(
+                      imageUrl: _imgUrl((c['image'] ?? '').toString()),
+                      fit: BoxFit.cover,
+                      errorWidget: (_, __, ___) => const Icon(
+                          Icons.image_outlined, size: 18,
+                          color: UellowColors.muted)),
+                ),
+                PositionedDirectional(
+                  top: -6, start: -6,
+                  child: GestureDetector(
+                    onTap: _imgBusy
+                        ? null
+                        : () => _delCatalog((c['id'] as num).toInt(), ar),
+                    child: Container(
+                      width: 20, height: 20,
+                      decoration: BoxDecoration(
+                        color: UellowColors.danger, shape: BoxShape.circle,
+                        border: Border.all(color: Colors.white, width: 1.5),
+                      ),
+                      child: const Icon(Icons.close, size: 12,
+                          color: Colors.white),
+                    ),
+                  ),
+                ),
+              ]),
+            ),
+          GestureDetector(
+            onTap: _imgBusy ? null : () => _pickImage('catalog', ar),
+            child: Container(
+              width: 62, height: 62,
+              decoration: BoxDecoration(
+                color: const Color(0xFFFDF3D6),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFFE8A800)),
+              ),
+              child: const Icon(Icons.add, size: 26, color: Color(0xFFB58A00)),
+            ),
+          ),
+        ],
+      )),
+      if (_imgBusy) const Padding(
+        padding: EdgeInsets.only(top: 8),
+        child: LinearProgressIndicator(minHeight: 2),
+      ),
+    ]);
   }
 
   // v2.2.141 — صفّ توجل عام (أيقونة + عنوان + Switch) بنفس ستايل البطاقة.
