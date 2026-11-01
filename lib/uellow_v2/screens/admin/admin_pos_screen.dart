@@ -3,6 +3,7 @@
 // totals) + sales feed, with per-session drill-down.
 // =============================================================================
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../../widgets/admin_console_nav.dart';
 
 import '../../../api/uellow_api.dart';
@@ -333,6 +334,25 @@ class _PosOrdersTabState extends State<_PosOrdersTab>
   final List<Map<String, dynamic>> _rows = [];
   int _page = 1, _pages = 1;
   bool _loading = false;
+  // v2.2.145 — فلتر تاريخ شغّال (اليوم/٧ أيام/٣٠ يوم/الكل).
+  String _range = 'today';
+
+  ({String? from, String? to}) _rangeDates() {
+    if (_range == 'all') return (from: null, to: null);
+    final now = DateTime.now();
+    String fmt(DateTime d) =>
+        '${d.year.toString().padLeft(4, '0')}-'
+        '${d.month.toString().padLeft(2, '0')}-'
+        '${d.day.toString().padLeft(2, '0')}';
+    final to = fmt(now);
+    DateTime fromD;
+    switch (_range) {
+      case '7d':  fromD = now.subtract(const Duration(days: 6));  break;
+      case '30d': fromD = now.subtract(const Duration(days: 29)); break;
+      default:    fromD = now; // today
+    }
+    return (from: fmt(fromD), to: to);
+  }
 
   @override
   void initState() {
@@ -361,8 +381,13 @@ class _PosOrdersTabState extends State<_PosOrdersTab>
     }
     setState(() => _loading = true);
     try {
-      final d = await AdminApi.instance
-          .posOrders(page: _page, sessionId: widget.sessionId);
+      // v2.2.145 — لا نطبّق فلتر التاريخ عند تصفّح جلسة محدّدة.
+      final r = widget.sessionId != null
+          ? (from: null, to: null)
+          : _rangeDates();
+      final d = await AdminApi.instance.posOrders(
+          page: _page, sessionId: widget.sessionId,
+          dateFrom: r.from, dateTo: r.to);
       _pages = (d['pages'] as num?)?.toInt() ?? 1;
       _rows.addAll(((d['orders'] as List?) ?? const [])
           .map((e) => (e as Map).cast<String, dynamic>()));
@@ -374,11 +399,10 @@ class _PosOrdersTabState extends State<_PosOrdersTab>
   Widget build(BuildContext context) {
     super.build(context);
     final ar = UellowApi.instance.lang == 'ar';
-    if (_rows.isEmpty && _loading) {
-      return const Center(child: CircularProgressIndicator(
-          color: UellowColors.darkBrown));
-    }
-    return RefreshIndicator(
+    final list = (_rows.isEmpty && _loading)
+        ? const Center(child: CircularProgressIndicator(
+            color: UellowColors.darkBrown))
+        : RefreshIndicator(
       onRefresh: () => _load(reset: true),
       child: ListView.builder(
         controller: _scroll,
@@ -407,6 +431,9 @@ class _PosOrdersTabState extends State<_PosOrdersTab>
                     horizontal: 13, vertical: 2),
                 childrenPadding: const EdgeInsets.fromLTRB(13, 0, 13, 10),
                 title: Row(children: [
+                  // v2.2.145 — صور منتجات مصغّرة متداخلة
+                  _posThumbs(lines),
+                  const SizedBox(width: 8),
                   Expanded(child: Text(o['name']?.toString() ?? '',
                       maxLines: 1, overflow: TextOverflow.ellipsis,
                       style: const TextStyle(fontSize: 12.5,
@@ -457,6 +484,103 @@ class _PosOrdersTabState extends State<_PosOrdersTab>
           );
         },
       ),
+    );
+    // v2.2.145 — شيبات فلتر التاريخ أعلى القائمة (تُخفى داخل جلسة محدّدة).
+    if (widget.sessionId != null) return list;
+    return Column(children: [_filterChips(ar), Expanded(child: list)]);
+  }
+
+  // v2.2.145 — صور منتجات مصغّرة متداخلة (حتى 3 + عدّاد «+N»).
+  Widget _posThumbs(List lines) {
+    final imgs = <String>[];
+    for (final l in lines) {
+      final im = (l is Map) ? (l['image'] as String?) : null;
+      if (im != null && im.isNotEmpty) imgs.add(im);
+      if (imgs.length >= 3) break;
+    }
+    final extra = lines.length - imgs.length;
+    if (imgs.isEmpty) {
+      return Container(
+        width: 34, height: 34,
+        decoration: BoxDecoration(
+          color: const Color(0xFFF1EEE7),
+          borderRadius: BorderRadius.circular(9),
+          border: Border.all(color: const Color(0xFFE9E1D1)),
+        ),
+        child: const Icon(Icons.shopping_bag_outlined, size: 16,
+            color: UellowColors.muted),
+      );
+    }
+    Widget thumb(String url, {bool overlap = false}) => Container(
+          width: 34, height: 34,
+          margin: EdgeInsetsDirectional.only(start: overlap ? -10 : 0),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(9),
+            border: Border.all(color: const Color(0xFFE9E1D1)),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: CachedNetworkImage(
+            imageUrl: url.startsWith('http')
+                ? url : '${UellowApi.instance.baseUrl}$url',
+            fit: BoxFit.cover,
+            errorWidget: (_, __, ___) => const Icon(
+                Icons.image_outlined, size: 15, color: UellowColors.muted),
+          ),
+        );
+    return Row(mainAxisSize: MainAxisSize.min, children: [
+      for (var i = 0; i < imgs.length; i++) thumb(imgs[i], overlap: i > 0),
+      if (extra > 0) Container(
+        width: 34, height: 34,
+        margin: const EdgeInsetsDirectional.only(start: -10),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: const Color(0xFFE8A800),
+          borderRadius: BorderRadius.circular(9),
+          border: Border.all(color: Colors.white, width: 1.5),
+        ),
+        child: Text('+$extra', style: const TextStyle(fontSize: 10,
+            fontWeight: FontWeight.w900, color: Color(0xFF2A1D00))),
+      ),
+    ]);
+  }
+
+  Widget _filterChips(bool ar) {
+    final opts = <(String, String)>[
+      ('today', ar ? 'اليوم' : 'Today'),
+      ('7d', ar ? '٧ أيام' : '7 days'),
+      ('30d', ar ? '٣٠ يوم' : '30 days'),
+      ('all', ar ? 'الكل' : 'All'),
+    ];
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      padding: const EdgeInsets.fromLTRB(14, 10, 14, 2),
+      child: Row(children: [
+        for (final o in opts) Padding(
+          padding: const EdgeInsetsDirectional.only(end: 7),
+          child: GestureDetector(
+            onTap: () {
+              if (_range == o.$1) return;
+              setState(() => _range = o.$1);
+              _load(reset: true);
+            },
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+              decoration: BoxDecoration(
+                color: _range == o.$1
+                    ? const Color(0xFFE8A800) : Colors.white,
+                borderRadius: BorderRadius.circular(999),
+                border: Border.all(color: _range == o.$1
+                    ? const Color(0xFFE8A800) : const Color(0xFFE5E5E5)),
+              ),
+              child: Text(o.$2, style: TextStyle(fontSize: 11.5,
+                  fontWeight: FontWeight.w800,
+                  color: _range == o.$1
+                      ? const Color(0xFF2A1D00) : UellowColors.muted)),
+            ),
+          ),
+        ),
+      ]),
     );
   }
 }
