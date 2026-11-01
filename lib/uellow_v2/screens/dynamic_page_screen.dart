@@ -203,6 +203,7 @@ Widget _renderBlock(BuildContext c, Map<String, dynamic> b, DynTheme t) {
     case 'searchbar':  inner = _SearchBarBlock(p: p, t: t, ar: ar); break;
     case 'countdown':  inner = _CountdownBlock(p: p, t: t, ar: ar); break;
     case 'smart-cats': inner = SmartCategoriesBlock(ar: ar); break;
+    case 'anker-banner': inner = const AnkerBannerBlock(); break;
     case 'cats-grid':
     case 'cats-strip': inner = (p['smart'] == true)
         ? SmartCategoriesBlock(ar: ar)
