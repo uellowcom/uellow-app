@@ -449,9 +449,11 @@ class _PosOrdersTabState extends State<_PosOrdersTab>
                           fontWeight: FontWeight.w900,
                           color: UellowColors.darkBrown))),
                   Text('${(m['amount'] as num? ?? 0).toStringAsFixed((m['digits'] as num?)?.toInt() ?? 3)} ${m['symbol'] ?? ''}',
-                      style: const TextStyle(fontSize: 13,
+                      style: TextStyle(fontSize: 13,
                           fontWeight: FontWeight.w900,
-                          color: UellowColors.darkBrown)),
+                          color: ((m['amount'] as num? ?? 0) < 0)
+                              ? const Color(0xFFEF4444)
+                              : UellowColors.darkBrown)),
                 ]),
                 subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start,
                     children: [

@@ -1325,6 +1325,22 @@ class _BannerMulti extends StatelessWidget {
   }
 }
 
+// v2.2.153 — صندوق اسم الماركة النظيف (بديل الحرف الواحد عند غياب اللوجو).
+Widget _brandNameBox(String name, DynTheme t) => Container(
+  width: 48, height: 48, alignment: Alignment.center,
+  padding: const EdgeInsets.all(3),
+  decoration: BoxDecoration(
+    color: t.primary.withValues(alpha: 0.10),
+    borderRadius: BorderRadius.circular(12),
+    border: Border.all(color: t.primary.withValues(alpha: 0.30)),
+  ),
+  child: Text(name.isEmpty ? '?' : name,
+      maxLines: 2, overflow: TextOverflow.ellipsis,
+      textAlign: TextAlign.center,
+      style: TextStyle(color: t.dark, fontSize: 8.5,
+          fontWeight: FontWeight.w900, height: 1.05)),
+);
+
 class _VendorsBlock extends StatelessWidget {
   const _VendorsBlock({required this.p, required this.data, required this.t, required this.ar});
   final Map<String, dynamic> p;
@@ -1365,20 +1381,19 @@ class _VendorsBlock extends StatelessWidget {
                     border: Border.all(color: t.dark.withValues(alpha: 0.08)),
                   ),
                   child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                    Container(width: 48, height: 48,
-                      decoration: BoxDecoration(
-                        color: t.primary.withValues(alpha: 0.2),
-                        shape: BoxShape.circle),
-                      clipBehavior: Clip.antiAlias,
-                      child: url.isNotEmpty
-                          ? CachedNetworkImage(imageUrl: url, fit: BoxFit.cover,
-                              errorWidget: (_, __, ___) => Center(child: Text(
-                                  (name.isNotEmpty ? name[0] : '?').toUpperCase(),
-                                  style: TextStyle(color: t.dark,
-                                      fontSize: 18, fontWeight: FontWeight.w900))))
-                          : Center(child: Text((name.isNotEmpty ? name[0] : '?').toUpperCase(),
-                              style: TextStyle(color: t.dark,
-                                  fontSize: 18, fontWeight: FontWeight.w900)))),
+                    // v2.2.153 — ماركة بلا لوجو: تظهر باسمها نظيفًا في صندوق
+                    // ذهبي خفيف (بدل حرف واحد على خلفية مشوّهة).
+                    url.isNotEmpty
+                        ? Container(width: 48, height: 48,
+                            decoration: BoxDecoration(
+                              color: t.primary.withValues(alpha: 0.2),
+                              shape: BoxShape.circle),
+                            clipBehavior: Clip.antiAlias,
+                            child: CachedNetworkImage(imageUrl: url,
+                                fit: BoxFit.cover,
+                                errorWidget: (_, __, ___) => _brandNameBox(
+                                    name, t)))
+                        : _brandNameBox(name, t),
                     const SizedBox(height: 4),
                     Text(name, maxLines: 1, overflow: TextOverflow.ellipsis,
                         style: TextStyle(color: t.dark,

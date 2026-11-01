@@ -1338,6 +1338,9 @@ class _MenuListState extends State<_MenuList> {
   Widget build(BuildContext context) {
     final ar = UellowApi.instance.lang == 'ar';
     final items = <(IconData, String, VoidCallback)>[
+      // v2.2.153 — عناويني (الشاشة موجودة لكن ماكانتش مربوطة من حسابي)
+      (Icons.location_on_outlined, ar ? 'عناويني' : 'My addresses',
+        () => Navigator.pushNamed(context, '/addresses')),
       // v2.1.58 — Affiliate / partner center
       (Icons.handshake_outlined, ar ? '🤝 شركاء يلو — اربح معنا' : '🤝 Uellow Partners — earn with us',
         () => Navigator.pushNamed(context, '/affiliate')),
