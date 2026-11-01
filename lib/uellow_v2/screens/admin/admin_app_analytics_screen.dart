@@ -55,6 +55,11 @@ class _AdminAppAnalyticsScreenState extends State<AdminAppAnalyticsScreen> {
             style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w900)),
         actions: [
           IconButton(
+            tooltip: ar ? 'مزامنة أرقام المتجر' : 'Sync store numbers',
+            onPressed: _storeSync,
+            icon: const Icon(Icons.sync_rounded),
+          ),
+          IconButton(
             tooltip: ar ? 'تصدير التقرير' : 'Export report',
             onPressed: _export,
             icon: const Icon(Icons.ios_share_rounded),
@@ -106,6 +111,18 @@ class _AdminAppAnalyticsScreenState extends State<AdminAppAnalyticsScreen> {
         _Kpi(ar ? '🧾 إجمالي الجلسات' : '🧾 Sessions',
             '${gi(installs, 'sessions_total')}', const Color(0xFF1D5FB4)),
       ]),
+      if ((installs['store_synced_at'] ?? '').toString().isNotEmpty) ...[
+        const SizedBox(height: 6),
+        _subhd(ar
+            ? 'من المتجر (مُزامَن ${installs['store_synced_at']})'
+            : 'From store (synced ${installs['store_synced_at']})'),
+        _kpiGrid([
+          _Kpi(ar ? '⬇️ تحميلات المتجر' : '⬇️ Store downloads',
+              '${gi(installs, 'store_downloads')}', const Color(0xFF2563EB)),
+          _Kpi(ar ? '❌ ألغوا التثبيت' : '❌ Uninstalls',
+              '${gi(installs, 'store_uninstalls')}', const Color(0xFFC23B2B)),
+        ]),
+      ],
       const SizedBox(height: 6),
       _subhd(ar ? 'فتحات التطبيق' : 'App opens'),
       _kpiGrid([
@@ -239,6 +256,56 @@ class _AdminAppAnalyticsScreenState extends State<AdminAppAnalyticsScreen> {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text(ar ? 'تم نسخ ملخّص التقرير'
                             : 'Report summary copied')));
+    }
+  }
+
+  Future<void> _storeSync() async {
+    final ar = _ar;
+    final inst = (_data?['installs'] as Map?) ?? const {};
+    final dlC = TextEditingController(
+        text: '${(inst['store_downloads'] as num?)?.toInt() ?? ''}');
+    final unC = TextEditingController(
+        text: '${(inst['store_uninstalls'] as num?)?.toInt() ?? ''}');
+    final go = await showDialog<bool>(context: context, builder: (c) =>
+        AlertDialog(
+          title: Text(ar ? '🔄 مزامنة أرقام المتجر' : '🔄 Sync store numbers'),
+          content: Column(mainAxisSize: MainAxisSize.min, children: [
+            Text(ar
+                ? 'أدخل الأرقام من Play Console / App Store Connect.'
+                : 'Enter totals from Play Console / App Store Connect.',
+                style: const TextStyle(fontSize: 12,
+                    color: UellowColors.muted)),
+            const SizedBox(height: 10),
+            TextField(controller: dlC, keyboardType: TextInputType.number,
+                decoration: InputDecoration(
+                    labelText: ar ? 'إجمالي التحميلات' : 'Total downloads')),
+            const SizedBox(height: 8),
+            TextField(controller: unC, keyboardType: TextInputType.number,
+                decoration: InputDecoration(
+                    labelText: ar ? 'إجمالي إلغاء التثبيت' : 'Total uninstalls')),
+          ]),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(c, false),
+                child: Text(ar ? 'إلغاء' : 'Cancel')),
+            TextButton(onPressed: () => Navigator.pop(c, true),
+                child: Text(ar ? 'حفظ' : 'Save')),
+          ],
+        ));
+    if (go == true) {
+      try {
+        await AdminApi.instance.storeSync(
+            int.tryParse(dlC.text.trim()) ?? 0,
+            int.tryParse(unC.text.trim()) ?? 0);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+              content: Text(ar ? 'تم حفظ أرقام المتجر' : 'Store numbers saved')));
+          _load();
+        }
+      } catch (e) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(e.toString().replaceAll('Exception: ', '')),
+            backgroundColor: UellowColors.danger));
+      }
     }
   }
 

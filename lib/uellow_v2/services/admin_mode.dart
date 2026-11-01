@@ -95,6 +95,10 @@ class AdminApi {
   }
 
   /// v2.2.146 — تحليلات التطبيق الشاملة. period = today|7d|30d|all.
+  Future<Map<String, dynamic>> storeSync(int downloads, int uninstalls) =>
+      _post('/api/mobile/v2/admin/analytics/store-sync',
+          {'downloads': downloads, 'uninstalls': uninstalls});
+
   Future<Map<String, dynamic>> appAnalytics({String period = '30d', String? dateFrom}) async {
     final r = await UellowApi.instance.getRaw(
         '/api/mobile/v2/admin/app-analytics',
