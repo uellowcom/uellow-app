@@ -5,11 +5,14 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../api/uellow_api.dart';
 import '../../services/admin_mode.dart';
 import '../../theme/uellow_theme.dart';
 import 'admin_new_order_screen.dart';
+import 'admin_helpdesk_screen.dart';
 
 class AdminOrdersScreen extends StatefulWidget {
   const AdminOrdersScreen({super.key});
@@ -353,7 +356,10 @@ class _AdminOrderDetailScreenState extends State<AdminOrderDetailScreen> {
             ]),
             _card(title: ar ? '👤 العميل' : '👤 Customer', children: [
               _kv(ar ? 'الاسم' : 'Name', cust['name']?.toString() ?? ''),
-              _kv(ar ? 'الهاتف' : 'Phone', cust['phone']?.toString() ?? ''),
+              if ((cust['phone'] ?? '').toString().isNotEmpty)
+                _phoneRow(context, ar, cust['phone'].toString())
+              else
+                _kv(ar ? 'الهاتف' : 'Phone', '—'),
               if ((cust['email'] ?? '').toString().isNotEmpty)
                 _kv('Email', cust['email'].toString()),
               if ((d['shipping_address'] ?? '').toString().isNotEmpty)
@@ -361,33 +367,57 @@ class _AdminOrderDetailScreenState extends State<AdminOrderDetailScreen> {
                     d['shipping_address'].toString()),
               if ((d['carrier'] ?? '').toString().isNotEmpty)
                 _kv(ar ? 'شركة الشحن' : 'Carrier', d['carrier'].toString()),
+              if ((cust['phone'] ?? '').toString().isNotEmpty) ...[
+                const SizedBox(height: 11),
+                Row(children: [
+                  Expanded(child: _contactBtn(
+                      Icons.phone_rounded, ar ? 'اتصال' : 'Call',
+                      const Color(0xFF2563EB),
+                      () => _call(context, ar, cust['phone'].toString()))),
+                  const SizedBox(width: 8),
+                  Expanded(child: _contactBtn(
+                      Icons.chat_rounded, ar ? 'واتساب' : 'WhatsApp',
+                      const Color(0xFF25D366),
+                      () => _whatsapp(context, ar, cust['phone'].toString()))),
+                ]),
+              ],
             ]),
             _card(title: ar ? '🛒 المنتجات' : '🛒 Items', children: [
-              for (final l in lines) Padding(
-                padding: const EdgeInsets.symmetric(vertical: 5),
-                child: Row(children: [
-                  ClipRRect(borderRadius: BorderRadius.circular(8),
-                      child: Image.network((l as Map)['image']?.toString()
-                          ?? '', width: 40, height: 40, fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => Container(
-                              width: 40, height: 40,
-                              color: UellowColors.border))),
-                  const SizedBox(width: 10),
-                  Expanded(child: Text(l['name']?.toString() ?? '',
-                      maxLines: 2, overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontSize: 11.5,
-                          fontWeight: FontWeight.w600))),
-                  const SizedBox(width: 8),
-                  Column(crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                    Text('×${(l['qty'] as num? ?? 0).toStringAsFixed(0)}',
-                        style: const TextStyle(fontSize: 10.5,
-                            color: UellowColors.muted)),
-                    Text('${l['total'] ?? 0}', style: const TextStyle(
-                        fontSize: 12, fontWeight: FontWeight.w900,
-                        color: UellowColors.darkBrown)),
+              for (final l in lines) InkWell(
+                onTap: () => _showProductDialog(
+                    context, ar, (l as Map).cast<String, dynamic>()),
+                borderRadius: BorderRadius.circular(10),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 6),
+                  child: Row(children: [
+                    ClipRRect(borderRadius: BorderRadius.circular(8),
+                        child: Image.network((l as Map)['image']?.toString()
+                            ?? '', width: 42, height: 42, fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => Container(
+                                width: 42, height: 42,
+                                color: UellowColors.border,
+                                child: const Icon(Icons.image_not_supported_rounded,
+                                    size: 18, color: UellowColors.muted)))),
+                    const SizedBox(width: 10),
+                    Expanded(child: Text(l['name']?.toString() ?? '',
+                        maxLines: 2, overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 11.5,
+                            fontWeight: FontWeight.w600))),
+                    const SizedBox(width: 8),
+                    Column(crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                      Text('×${(l['qty'] as num? ?? 0).toStringAsFixed(0)}',
+                          style: const TextStyle(fontSize: 10.5,
+                              color: UellowColors.muted)),
+                      Text('${l['total'] ?? 0}', style: const TextStyle(
+                          fontSize: 12, fontWeight: FontWeight.w900,
+                          color: UellowColors.darkBrown)),
+                    ]),
+                    const SizedBox(width: 2),
+                    const Icon(Icons.chevron_left_rounded, size: 18,
+                        color: UellowColors.muted),
                   ]),
-                ]),
+                ),
               ),
             ]),
             _card(title: ar ? '💰 المبالغ' : '💰 Amounts', children: [
@@ -412,6 +442,7 @@ class _AdminOrderDetailScreenState extends State<AdminOrderDetailScreen> {
                     '${(t as Map)['provider'] ?? ''} (${t['state'] ?? ''})',
                     '${t['amount'] ?? 0}'),
               ]),
+            _supportCard(context, d, ar),
             _fulfilCard(d, ar),
             _actionCard(d, ar),
             const SizedBox(height: 24),
@@ -464,6 +495,217 @@ class _AdminOrderDetailScreenState extends State<AdminOrderDetailScreen> {
             style: TextStyle(fontSize: 13, fontWeight: FontWeight.w900,
                 color: col)),
       ]),
+    );
+  }
+
+  // ── Contact (call / WhatsApp / copy) ──────────────────────────────────
+  String _waNumber(String raw) {
+    var p = raw.replaceAll(RegExp(r'[^0-9+]'), '');
+    if (p.startsWith('+')) {
+      p = p.substring(1);
+    } else if (p.startsWith('00')) {
+      p = p.substring(2);
+    } else if (p.length == 8) {
+      p = '965$p'; // رقم كويتي محلي
+    }
+    return p;
+  }
+
+  Future<void> _launch(bool ar, Uri uri, String copyText) async {
+    try {
+      final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (ok) return;
+    } catch (_) {}
+    if (!mounted) return;
+    await Clipboard.setData(ClipboardData(text: copyText));
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(ar ? 'تعذّر الفتح — تم نسخ الرقم'
+                          : 'Could not open — number copied')));
+  }
+
+  Future<void> _call(BuildContext ctx, bool ar, String phone) =>
+      _launch(ar, Uri(scheme: 'tel', path: phone.replaceAll(' ', '')), phone);
+
+  Future<void> _whatsapp(BuildContext ctx, bool ar, String phone) => _launch(
+      ar, Uri.parse('https://wa.me/${_waNumber(phone)}'), phone);
+
+  Future<void> _copyPhone(BuildContext ctx, bool ar, String phone) async {
+    await Clipboard.setData(ClipboardData(text: phone));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(ar ? 'تم نسخ الرقم' : 'Number copied')));
+  }
+
+  Widget _phoneRow(BuildContext context, bool ar, String phone) => InkWell(
+    onTap: () => _call(context, ar, phone),
+    onLongPress: () => _copyPhone(context, ar, phone),
+    borderRadius: BorderRadius.circular(8),
+    child: Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        SizedBox(width: 92, child: Text(ar ? 'الهاتف' : 'Phone',
+            style: const TextStyle(fontSize: 11, color: UellowColors.muted,
+                fontWeight: FontWeight.w700))),
+        Expanded(child: Text(phone, textDirection: TextDirection.ltr,
+            style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800,
+                color: Color(0xFF2563EB)))),
+        const Icon(Icons.touch_app_rounded, size: 14,
+            color: UellowColors.muted),
+      ]),
+    ),
+  );
+
+  Widget _contactBtn(IconData icon, String label, Color color,
+      VoidCallback onTap) => ElevatedButton.icon(
+    onPressed: onTap,
+    icon: Icon(icon, size: 17),
+    label: Text(label, style: const TextStyle(
+        fontWeight: FontWeight.w900, fontSize: 12.5)),
+    style: ElevatedButton.styleFrom(
+      backgroundColor: color, foregroundColor: Colors.white, elevation: 0,
+      padding: const EdgeInsets.symmetric(vertical: 11),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(11)),
+    ),
+  );
+
+  // ── Professional product dialog (image + full line economics) ─────────
+  void _showProductDialog(BuildContext context, bool ar,
+      Map<String, dynamic> l) {
+    final qty = (l['qty'] as num? ?? 0);
+    final unit = (l['price_unit'] as num? ?? 0);
+    final disc = (l['discount'] as num? ?? 0);
+    final total = (l['total'] as num? ?? 0);
+    final cost = (l['cost'] as num? ?? 0);
+    final margin = (l['margin'] as num? ?? 0);
+    final loss = margin < 0;
+    String m(num v) => v.toStringAsFixed(3);
+    showDialog(context: context, builder: (c) => Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        ClipRRect(
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(18)),
+          child: Image.network(l['image']?.toString() ?? '',
+              height: 180, width: double.infinity, fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => Container(height: 180,
+                  color: UellowColors.border,
+                  child: const Icon(Icons.image_not_supported_rounded,
+                      size: 40, color: UellowColors.muted))),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+            Text(l['name']?.toString() ?? '', style: const TextStyle(
+                fontSize: 14.5, fontWeight: FontWeight.w900,
+                color: UellowColors.darkBrown)),
+            const SizedBox(height: 12),
+            _dlgRow(ar ? 'الكمية' : 'Qty', qty.toStringAsFixed(0)),
+            _dlgRow(ar ? 'سعر الوحدة' : 'Unit price', m(unit)),
+            if (disc != 0) _dlgRow(ar ? 'الخصم' : 'Discount',
+                '${disc.toStringAsFixed(2)}%'),
+            const Divider(height: 18),
+            _dlgRow(ar ? 'إجمالي السطر' : 'Line total', m(total), bold: true),
+            _dlgRow(ar ? 'التكلفة' : 'Cost', m(cost)),
+            _dlgRow(ar ? 'الربح' : 'Profit', m(margin),
+                color: loss ? UellowColors.danger : UellowColors.successDk,
+                bold: true),
+            const SizedBox(height: 14),
+            SizedBox(width: double.infinity, child: TextButton(
+              onPressed: () => Navigator.pop(c),
+              child: Text(ar ? 'إغلاق' : 'Close',
+                  style: const TextStyle(fontWeight: FontWeight.w900)),
+            )),
+          ]),
+        ),
+      ]),
+    ));
+  }
+
+  Widget _dlgRow(String k, String v, {bool bold = false, Color? color}) =>
+      Padding(
+    padding: const EdgeInsets.symmetric(vertical: 3.5),
+    child: Row(children: [
+      Text(k, style: TextStyle(fontSize: bold ? 12.5 : 11.5,
+          fontWeight: bold ? FontWeight.w900 : FontWeight.w600,
+          color: color ?? UellowColors.text)),
+      const Spacer(),
+      Text(v, textDirection: TextDirection.ltr, style: TextStyle(
+          fontSize: bold ? 13.5 : 12,
+          fontWeight: FontWeight.w900,
+          color: color ?? UellowColors.darkBrown)),
+    ]),
+  );
+
+  // ── In-order support thread (badge of unread customer messages) ───────
+  Widget _supportCard(BuildContext context, Map<String, dynamic> d, bool ar) {
+    final tickets = ((d['tickets'] as List?) ?? const [])
+        .map((e) => (e as Map).cast<String, dynamic>()).toList();
+    if (tickets.isEmpty) return const SizedBox.shrink();
+    final pending = (d['support_pending'] as num? ?? 0).toInt();
+    return _card(children: [
+      Row(children: [
+        Text(ar ? '🎧 الدعم الفني' : '🎧 Support', style: UT.h3),
+        const SizedBox(width: 8),
+        if (pending > 0) _badge(pending),
+      ]),
+      const SizedBox(height: 10),
+      for (final t in tickets) _ticketRow(context, ar, t),
+    ]);
+  }
+
+  Widget _badge(int n) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+    decoration: BoxDecoration(color: UellowColors.danger,
+        borderRadius: BorderRadius.circular(10)),
+    child: Text('$n', style: const TextStyle(color: Colors.white,
+        fontSize: 10.5, fontWeight: FontWeight.w900)),
+  );
+
+  Widget _ticketRow(BuildContext context, bool ar, Map<String, dynamic> t) {
+    final pend = (t['pending'] as num? ?? 0).toInt();
+    final closed = t['closed'] == true;
+    final id = (t['id'] as num).toInt();
+    return InkWell(
+      onTap: () async {
+        await Navigator.push(context, MaterialPageRoute(
+            builder: (_) => AdminHelpdeskTicketScreen(ticketId: id)));
+        _reload();
+      },
+      borderRadius: BorderRadius.circular(10),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 7),
+        padding: const EdgeInsets.fromLTRB(11, 9, 9, 9),
+        decoration: BoxDecoration(
+            color: pend > 0 ? const Color(0xFFFFF4F4) : const Color(0xFFF7F8FA),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: pend > 0
+                ? UellowColors.danger.withValues(alpha: .25)
+                : const Color(0xFFECECEC))),
+        child: Row(children: [
+          Icon(closed ? Icons.check_circle_rounded
+                      : Icons.support_agent_rounded,
+              size: 20,
+              color: closed ? UellowColors.successDk : UellowColors.darkBrown),
+          const SizedBox(width: 10),
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+            Text('#${t['ref'] ?? ''} · ${t['subject'] ?? ''}',
+                maxLines: 1, overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                    color: UellowColors.darkBrown)),
+            const SizedBox(height: 2),
+            Text('${t['stage'] ?? ''}'
+                '${(t['last_at'] ?? '').toString().isNotEmpty ? ' · ${t['last_at']}' : ''}',
+                style: const TextStyle(fontSize: 10,
+                    color: UellowColors.muted)),
+          ])),
+          if (pend > 0) ...[const SizedBox(width: 6), _badge(pend)],
+          const SizedBox(width: 4),
+          const Icon(Icons.chevron_left_rounded, size: 18,
+              color: UellowColors.muted),
+        ]),
+      ),
     );
   }
 
