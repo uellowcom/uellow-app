@@ -72,7 +72,7 @@ class _AdminConsoleNavState extends State<AdminConsoleNav> {
     final ar = UellowApi.instance.lang == 'ar';
     const gold = Color(0xFFE8A800);
     const muted = Color(0xFF8F8774);
-    final items = <(_NavItemData)>[
+    final items = <_NavItemData>[
       _NavItemData(AdminTab.orders, Icons.list_alt_rounded,
           ar ? 'الطلبات' : 'Orders'),
       _NavItemData(AdminTab.pos, Icons.point_of_sale_rounded,
