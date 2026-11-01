@@ -114,6 +114,12 @@ class AdminApi {
   }
 
   /// v2.2.147 — تشغيل/إيقاف حملة فوريًا.
+  Future<Map<String, dynamic>> campaignCreate(Map<String, dynamic> body) =>
+      _post('/api/mobile/v2/admin/campaign/create', body);
+
+  Future<Map<String, dynamic>> campaignStyle(int id, Map<String, dynamic> body) =>
+      _post('/api/mobile/v2/admin/campaign/$id/style', body);
+
   Future<Map<String, dynamic>> campaignSchedule(int id, Map<String, dynamic> body) =>
       _post('/api/mobile/v2/admin/campaign/$id/schedule', body);
 

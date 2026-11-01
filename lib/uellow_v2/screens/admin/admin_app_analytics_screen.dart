@@ -152,8 +152,12 @@ class _AdminAppAnalyticsScreenState extends State<AdminAppAnalyticsScreen> {
             ])),
       _card(ar ? '📈 الجلسات آخر ١٤ يوم' : '📈 Sessions (14 days)',
           _barChart((d['dau_series'] as List?) ?? const [])),
-      _card(ar ? '🧭 مسار التحويل' : '🧭 Funnel',
+      _card(ar ? '🧭 المسار السلوكي داخل التطبيق' : '🧭 In-app behaviour',
           _funnel((d['funnel'] as List?) ?? const [], ar)),
+      if (((d['acq_funnel'] as List?) ?? const []).isNotEmpty)
+        _card(ar ? '📥 مسار الاكتساب (تثبيت→فتح→تسجيل→شراء)'
+                 : '📥 Acquisition funnel',
+            _funnel((d['acq_funnel'] as List?) ?? const [], ar)),
       _card(ar ? '📱 المنصّات' : '📱 Platforms',
           _splitBars((d['platforms'] as List?) ?? const [])),
       if (((d['versions'] as List?) ?? const []).isNotEmpty)

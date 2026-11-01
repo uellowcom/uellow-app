@@ -69,6 +69,13 @@ class _AdminCampaignsScreenState extends State<AdminCampaignsScreen> {
         foregroundColor: Colors.white,
         title: Text(ar ? 'العروض والحملات' : 'Offers & campaigns',
             style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w900)),
+        actions: [
+          IconButton(
+            tooltip: ar ? 'عرض جديد' : 'New offer',
+            onPressed: () => _createCampaign(ar),
+            icon: const Icon(Icons.add_circle_outline_rounded),
+          ),
+        ],
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator(
@@ -209,8 +216,90 @@ class _AdminCampaignsScreenState extends State<AdminCampaignsScreen> {
           Expanded(child: _campBtn(Icons.inventory_2_outlined,
               ar ? '🏷️ المنتجات' : '🏷️ Products', () => _showProducts(c, ar))),
         ]),
+        const SizedBox(height: 8),
+        Row(children: [
+          Expanded(child: _campBtn(Icons.palette_outlined,
+              ar ? '🎨 الألوان' : '🎨 Colors', () => _editColors(c, ar))),
+          const SizedBox(width: 8),
+          Expanded(child: _campBtn(Icons.visibility_outlined,
+              ar ? '👁️ معاينة' : '👁️ Preview', () => _showProducts(c, ar))),
+        ]),
       ]),
     );
+  }
+
+  Future<void> _createCampaign(bool ar) async {
+    final nC = TextEditingController();
+    final go = await showDialog<bool>(context: context, builder: (c) =>
+        AlertDialog(
+          title: Text(ar ? '➕ عرض جديد' : '➕ New offer'),
+          content: Column(mainAxisSize: MainAxisSize.min, children: [
+            TextField(controller: nC, decoration: InputDecoration(
+                labelText: ar ? 'اسم الحملة' : 'Campaign name')),
+            const SizedBox(height: 6),
+            Text(ar
+                ? 'المنتجات والبنر تُضاف من باني الويب بعد الإنشاء.'
+                : 'Add products & banner from the web builder after creating.',
+                style: const TextStyle(fontSize: 11,
+                    color: UellowColors.muted)),
+          ]),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(c, false),
+                child: Text(ar ? 'إلغاء' : 'Cancel')),
+            TextButton(onPressed: () => Navigator.pop(c, true),
+                child: Text(ar ? 'إنشاء' : 'Create')),
+          ],
+        ));
+    if (go == true && nC.text.trim().isNotEmpty) {
+      try {
+        await AdminApi.instance.campaignCreate(
+            {'name': nC.text.trim(), 'name_ar': nC.text.trim()});
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+              content: Text(ar ? 'تم إنشاء الحملة' : 'Campaign created')));
+          _load();
+        }
+      } catch (e) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(e.toString().replaceAll('Exception: ', '')),
+            backgroundColor: UellowColors.danger));
+      }
+    }
+  }
+
+  Future<void> _editColors(Map<String, dynamic> c, bool ar) async {
+    final id = (c['id'] as num).toInt();
+    final bgC = TextEditingController(
+        text: (c['bg_color'] ?? '#F5C320').toString());
+    final go = await showDialog<bool>(context: context, builder: (ctx) =>
+        AlertDialog(
+          title: Text(ar ? '🎨 ألوان الحملة' : '🎨 Campaign colors'),
+          content: Column(mainAxisSize: MainAxisSize.min, children: [
+            TextField(controller: bgC, decoration: InputDecoration(
+                labelText: ar ? 'لون الخلفية (#RRGGBB)' : 'Background (#RRGGBB)')),
+          ]),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false),
+                child: Text(ar ? 'إلغاء' : 'Cancel')),
+            TextButton(onPressed: () => Navigator.pop(ctx, true),
+                child: Text(ar ? 'حفظ' : 'Save')),
+          ],
+        ));
+    if (go == true) {
+      try {
+        await AdminApi.instance.campaignStyle(id,
+            {'background_color': bgC.text.trim()});
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+              content: Text(ar ? 'تم حفظ الألوان' : 'Colors saved')));
+          _load();
+        }
+      } catch (e) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(e.toString().replaceAll('Exception: ', '')),
+            backgroundColor: UellowColors.danger));
+      }
+    }
   }
 
   Widget _campBtn(IconData icon, String label, VoidCallback onTap) =>
