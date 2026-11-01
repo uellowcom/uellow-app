@@ -1364,6 +1364,9 @@ class _MenuListState extends State<_MenuList> {
       // v2.2.153 — عناويني (الشاشة موجودة لكن ماكانتش مربوطة من حسابي)
       (Icons.location_on_outlined, ar ? 'عناويني' : 'My addresses',
         () => Navigator.pushNamed(context, '/addresses')),
+      // v2.2.163 — قائمة مرتجعاتي
+      (Icons.assignment_return_outlined, ar ? 'مرتجعاتي' : 'My returns',
+        () => Navigator.pushNamed(context, '/my-returns')),
       // v2.1.58 — Affiliate / partner center
       (Icons.handshake_outlined, ar ? '🤝 شركاء يلو — اربح معنا' : '🤝 Uellow Partners — earn with us',
         () => Navigator.pushNamed(context, '/affiliate')),

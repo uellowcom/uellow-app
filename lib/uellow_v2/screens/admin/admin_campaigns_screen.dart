@@ -136,14 +136,27 @@ class _AdminCampaignsScreenState extends State<AdminCampaignsScreen> {
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
-          Container(
-            width: 44, height: 44,
-            decoration: BoxDecoration(
-                color: const Color(0xFFF3EFE6),
-                borderRadius: BorderRadius.circular(12)),
-            child: const Icon(Icons.campaign_rounded, size: 22,
-                color: Color(0xFFE8820A)),
-          ),
+          Builder(builder: (_) {
+            final th = (c['thumbs'] as List?) ?? const [];
+            final img = th.isNotEmpty ? th.first.toString() : '';
+            return Container(
+              width: 44, height: 44,
+              clipBehavior: Clip.antiAlias,
+              decoration: BoxDecoration(
+                  color: const Color(0xFFF3EFE6),
+                  borderRadius: BorderRadius.circular(12)),
+              child: img.isNotEmpty
+                  ? Image.network(
+                      img.startsWith('http')
+                          ? img : '${UellowApi.instance.baseUrl}$img',
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => const Icon(
+                          Icons.campaign_rounded, size: 22,
+                          color: Color(0xFFE8820A)))
+                  : const Icon(Icons.campaign_rounded, size: 22,
+                      color: Color(0xFFE8820A)),
+            );
+          }),
           const SizedBox(width: 11),
           Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start,
               children: [
