@@ -135,11 +135,16 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       safeGet('$base/api/mobile/v2/orders/shipping-methods$shipSel$addrQ', needAuth: true),
       safeGet(pmUrl, needAuth: false),
       safeGet('$base/api/mobile/v2/orders/checkout/geoip', needAuth: true),
+      // v2.2.139 — وسائل الدفع غير المتوفرة (طبقة عرض إضافية فقط). endpoint
+      // منفصل تمامًا عن الوسائل المتاحة → صفر خطر على منطق الدفع.
+      safeGet('$base/api/mobile/v2/orders/payment-methods/unavailable',
+          needAuth: false),
     ]);
     final summary = results[0];
     final shipping = results[1];
     final payment = results[2];
     final geoip = results[3];
+    final payUnavail = results[4];
 
     Map<String, dynamic>? asMap(dynamic d) =>
         d is Map ? d.cast<String, dynamic>() : null;
@@ -153,6 +158,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       shippingMethods: shipping['success'] == true ? asList(shipping['data']) : [],
       paymentMethods: payment['success'] == true ? asList(payment['data']) : [],
       geoip: geoip['success'] == true ? asMap(geoip['data']) : null,
+      unavailableMethods:
+          payUnavail['success'] == true ? asList(payUnavail['data']) : [],
     );
     // The summary endpoint is the load-bearing one — surface its failure
     // as the screen-level error so the user sees a friendly message.
@@ -665,6 +672,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       _section(num: 3, title: UellowApi.instance.lang == 'ar' ? 'طريقة الدفع' : 'PAYMENT METHOD',
           child: _PaymentMethodGrid(
             methods: d.paymentMethods,
+            unavailable: d.unavailableMethods,
             selected: _selectedPaymentId,
             codAllowed: _codAllowed(d),
             onSelect: (id) {
@@ -720,9 +728,12 @@ class _CheckoutData {
   final List<Map<String, dynamic>> shippingMethods;
   final List<Map<String, dynamic>> paymentMethods;
   final Map<String, dynamic>? geoip;
+  // v2.2.139 — وسائل الدفع المعطّلة (عرض فقط، غير قابلة للاختيار).
+  final List<Map<String, dynamic>> unavailableMethods;
   _CheckoutData({
     required this.summary, required this.shippingMethods,
     required this.paymentMethods, required this.geoip,
+    this.unavailableMethods = const [],
   });
 }
 
@@ -1254,9 +1265,11 @@ class _ShippingMethodList extends StatelessWidget {
 class _PaymentMethodGrid extends StatelessWidget {
   const _PaymentMethodGrid({
     required this.methods, required this.selected, required this.onSelect,
-    this.codAllowed = true,
+    this.codAllowed = true, this.unavailable = const [],
   });
   final List<Map<String, dynamic>> methods;
+  // v2.2.139 — وسائل معطّلة تُعرض باهتة بليبل «غير متوفر» وغير قابلة للاختيار.
+  final List<Map<String, dynamic>> unavailable;
   final int? selected;
   final ValueChanged<int> onSelect;
   // v2.1.77 — payment derives from the carrier company: when the chosen
@@ -1383,7 +1396,7 @@ class _PaymentMethodGrid extends StatelessWidget {
             style: UT.body),
       );
     }
-    return GridView.builder(
+    final grid = GridView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
@@ -1445,6 +1458,76 @@ class _PaymentMethodGrid extends StatelessWidget {
         );
       },
     );
+    // v2.2.139 — من غير أي تغيير في تصميم الوسائل المتاحة؛ لو فيه وسائل
+    // معطّلة نعرضها كقسم منفصل باهت بليبل أحمر «غير متوفر» وغير قابلة للاختيار.
+    if (unavailable.isEmpty) return grid;
+    final ar = UellowApi.instance.lang == 'ar';
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      grid,
+      const SizedBox(height: 14),
+      Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: Text(ar ? 'غير متوفرة حاليًا' : 'Currently unavailable',
+            style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w800,
+                color: UellowColors.muted)),
+      ),
+      GridView.builder(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 2, crossAxisSpacing: 8,
+          mainAxisSpacing: 8, childAspectRatio: 2.1,
+        ),
+        itemCount: unavailable.length,
+        itemBuilder: (_, i) {
+          final m = unavailable[i];
+          final code = (m['code'] as String?) ?? '';
+          final rawName = m['name'];
+          final label = rawName is Map
+              ? (rawName[ar ? 'ar' : 'en'] ?? rawName['en'] ?? code).toString()
+              : (rawName as String?) ?? code;
+          return Opacity(
+            opacity: 0.55,
+            child: Stack(children: [
+              Container(
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF5F4F0),
+                  border: Border.all(color: UellowColors.border),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                alignment: Alignment.center,
+                padding: const EdgeInsets.all(8),
+                child: Column(mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                  _brandMark(code) != null
+                      ? SizedBox(height: 22, child: Center(child: _brandMark(code)))
+                      : Icon(_iconFor(code), size: 22, color: UellowColors.muted),
+                  const SizedBox(height: 4),
+                  Text(label, textAlign: TextAlign.center, maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 11, height: 1.2,
+                          fontWeight: FontWeight.w700,
+                          color: UellowColors.muted)),
+                ]),
+              ),
+              PositionedDirectional(
+                top: 6, start: 6,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFC23B2B),
+                    borderRadius: BorderRadius.circular(5),
+                  ),
+                  child: Text(ar ? 'غير متوفر' : 'Unavailable',
+                      style: const TextStyle(color: Colors.white,
+                          fontSize: 8.5, fontWeight: FontWeight.w900)),
+                ),
+              ),
+            ]),
+          );
+        },
+      ),
+    ]);
   }
 }
 
