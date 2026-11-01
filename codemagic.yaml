@@ -124,6 +124,14 @@ workflows:
   # ───────────────────────── Android (Huawei AppGallery / مباشر) ─────────────────────────
   android-release:
     name: Android — APK + AAB (Huawei/AppGallery)
+    # v2.2.149 — بناء تلقائي عند الدفع على فرع التطوير + تسليم الـAAB بالإيميل
+    triggering:
+      events:
+        - push
+      branch_patterns:
+        - pattern: 'feat/admin-dashboard-v2'
+          include: true
+          source: true
     instance_type: mac_mini_m2
     max_build_duration: 60
     environment:
@@ -153,6 +161,13 @@ workflows:
     artifacts:
       - build/app/outputs/flutter-apk/*.apk
       - build/app/outputs/bundle/release/*.aab
+    publishing:
+      email:
+        recipients:
+          - ali@uellow.com
+        notify:
+          success: true
+          failure: true
 
   # ───────────────────────── Huawei AppGallery (publish .aab via API) ─────────
   # AppGallery accepts the standard .aab via its Publishing API (is_aab:true) —
