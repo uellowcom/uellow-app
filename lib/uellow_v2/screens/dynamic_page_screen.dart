@@ -202,8 +202,11 @@ Widget _renderBlock(BuildContext c, Map<String, dynamic> b, DynTheme t) {
     case 'carousel':   inner = _CarouselBlock(p: p, data: data, t: t, ar: ar); break;
     case 'searchbar':  inner = _SearchBarBlock(p: p, t: t, ar: ar); break;
     case 'countdown':  inner = _CountdownBlock(p: p, t: t, ar: ar); break;
+    case 'smart-cats': inner = SmartCategoriesBlock(ar: ar); break;
     case 'cats-grid':
-    case 'cats-strip': inner = _CategoriesBlock(p: p, data: data, t: t, ar: ar); break;
+    case 'cats-strip': inner = (p['smart'] == true)
+        ? SmartCategoriesBlock(ar: ar)
+        : _CategoriesBlock(p: p, data: data, t: t, ar: ar); break;
     case 'flash':      inner = _FlashBlock(p: p, data: data, t: t, ar: ar); break;
     case 'products':
     case 'rec-ai':

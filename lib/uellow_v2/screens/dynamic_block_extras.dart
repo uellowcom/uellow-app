@@ -5967,3 +5967,150 @@ class TrustStripBlock extends StatelessWidget {
     );
   }
 }
+
+// v2.2.155 — بلوك الأقسام الذكية (دوائر تتغيّر يوميًا + شارات New/Hot) كبلوك
+// في البيلدر: يُفعّل عبر props.smart على cats-grid أو عبر kind=smart-cats.
+// يجلب بياناته بنفسه من /api/mobile/v2/categories/smart.
+class SmartCategoriesBlock extends StatefulWidget {
+  const SmartCategoriesBlock({super.key, required this.ar});
+  final bool ar;
+  @override
+  State<SmartCategoriesBlock> createState() => _SmartCategoriesBlockState();
+}
+
+class _SmartCategoriesBlockState extends State<SmartCategoriesBlock> {
+  List<Map<String, dynamic>> _items = const [];
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final res = await UellowApi.instance
+          .getRaw('/api/mobile/v2/categories/smart');
+      final data = res['data'];
+      if (data is Map && data['enabled'] != false) {
+        final its = (data['items'] as List?) ?? const [];
+        _items = its
+            .whereType<Map>()
+            .map((e) => e.cast<String, dynamic>())
+            .toList();
+      }
+    } catch (_) {}
+    if (mounted) setState(() => _loading = false);
+  }
+
+  void _open(Map<String, dynamic> c) {
+    final ar = widget.ar;
+    final nm = c['name'];
+    final title = nm is Map
+        ? (nm[ar ? 'ar' : 'en'] ?? nm['en'] ?? '').toString()
+        : (nm?.toString() ?? '');
+    Navigator.pushNamed(context, Routes.collection, arguments: {
+      'category_id': (c['id'] as num?)?.toInt(),
+      'title': title,
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading || _items.isEmpty) return const SizedBox.shrink();
+    final ar = widget.ar;
+    return Container(
+      color: UellowColors.bg,
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          padding: EdgeInsets.zero,
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 5, mainAxisSpacing: 14, crossAxisSpacing: 2,
+            childAspectRatio: 0.64,
+          ),
+          itemCount: _items.length,
+          itemBuilder: (_, i) => _circle(_items[i], ar),
+        ),
+      ]),
+    );
+  }
+
+  Widget _circle(Map<String, dynamic> c, bool ar) {
+    final nm = c['name'];
+    final name = nm is Map
+        ? (nm[ar ? 'ar' : 'en'] ?? nm['en'] ?? '').toString()
+        : (nm?.toString() ?? '');
+    final img = (c['image'] as String?) ?? '';
+    final isNew = c['is_new'] == true;
+    final isHot = c['is_hot'] == true;
+    final disc = (c['discount_pct'] as num?)?.toInt() ?? 0;
+    const hot2 = Color(0xFFF97316);
+    const newC = Color(0xFF22C55E);
+    return GestureDetector(
+      onTap: () => _open(c),
+      behavior: HitTestBehavior.opaque,
+      child: Column(children: [
+        SizedBox(
+          height: 62,
+          child: Stack(clipBehavior: Clip.none, alignment: Alignment.center,
+              children: [
+            Container(
+              width: 56, height: 56,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                shape: BoxShape.circle,
+                border: Border.all(
+                    color: isHot ? hot2 : (isNew ? newC : UellowColors.border),
+                    width: (isHot || isNew) ? 2 : 1),
+                boxShadow: const [BoxShadow(
+                    color: Color(0x14000000), blurRadius: 10,
+                    offset: Offset(0, 5))],
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: img.isNotEmpty
+                  ? CachedNetworkImage(
+                      imageUrl: img.startsWith('http')
+                          ? img : '${UellowApi.instance.baseUrl}$img',
+                      fit: BoxFit.contain,
+                      placeholder: (_, __) => const SizedBox(),
+                      errorWidget: (_, __, ___) => const Icon(
+                          Icons.category_outlined, size: 22,
+                          color: UellowColors.muted))
+                  : const Icon(Icons.category_outlined, size: 22,
+                      color: UellowColors.muted),
+            ),
+            if (isHot || isNew)
+              Positioned(
+                top: -6,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(colors: isHot
+                        ? const [Color(0xFFDC2626), Color(0xFFF97316)]
+                        : const [Color(0xFF16A34A), Color(0xFF22C55E)]),
+                    borderRadius: BorderRadius.circular(999),
+                    border: Border.all(color: UellowColors.bg, width: 1.5),
+                  ),
+                  child: Text(
+                      isHot ? (disc > 0 ? '🔥 $disc٪' : '🔥 Hot')
+                            : (ar ? 'جديد' : 'New'),
+                      style: const TextStyle(color: Colors.white, fontSize: 8,
+                          fontWeight: FontWeight.w900, height: 1.0)),
+                ),
+              ),
+          ]),
+        ),
+        const SizedBox(height: 5),
+        Text(name, maxLines: 2, overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w500,
+                height: 1.12, color: UellowColors.muted)),
+      ]),
+    );
+  }
+}
