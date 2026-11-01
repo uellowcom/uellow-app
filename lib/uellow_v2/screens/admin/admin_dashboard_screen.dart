@@ -114,6 +114,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             SliverToBoxAdapter(child: _KpiGrid(
                 kpis: (range['kpis'] as Map?)?.cast<String, dynamic>()
                     ?? const {}, sym: sym, ar: ar)),
+            SliverToBoxAdapter(child: _PosOnlineCard(
+                range: range, sym: sym, ar: ar)),
             SliverToBoxAdapter(child: _RangeChart(
                 series: (range['series'] as List?) ?? const [],
                 sym: sym, ar: ar)),
@@ -990,6 +992,102 @@ class _KpiCard extends StatelessWidget {
 }
 
 // ── revenue over the period: current bars + previous-period line ──
+// v2.2.164 — بلاطتا POS/أونلاين + شارت POS-vs-أونلاين اليومي.
+class _PosOnlineCard extends StatelessWidget {
+  const _PosOnlineCard(
+      {required this.range, required this.sym, required this.ar});
+  final Map<String, dynamic> range;
+  final String sym;
+  final bool ar;
+  @override
+  Widget build(BuildContext context) {
+    final pos = (range['pos_total'] as num?)?.toDouble() ?? 0;
+    final online = (range['online_total'] as num?)?.toDouble() ?? 0;
+    final split = ((range['series_split'] as List?) ?? const [])
+        .whereType<Map>().toList();
+    const posC = Color(0xFF7C3AED), onlC = Color(0xFF1D5FB4);
+    String f(num v) => v.toStringAsFixed(v >= 1000 ? 0 : 1);
+    double mx = 1;
+    for (final s in split) {
+      final p = (s['pos'] as num?)?.toDouble() ?? 0;
+      final o = (s['online'] as num?)?.toDouble() ?? 0;
+      if (p > mx) mx = p;
+      if (o > mx) mx = o;
+    }
+    return Container(
+      margin: const EdgeInsets.fromLTRB(14, 0, 14, 11),
+      padding: const EdgeInsets.all(13),
+      decoration: BoxDecoration(color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: const Color(0xFFECECEC))),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Expanded(child: _tile(ar ? 'نقاط البيع POS' : 'POS',
+              '${f(pos)} $sym', posC)),
+          const SizedBox(width: 10),
+          Expanded(child: _tile(ar ? 'أونلاين' : 'Online',
+              '${f(online)} $sym', onlC)),
+        ]),
+        if (split.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          SizedBox(height: 70, child: Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              for (final s in split.length > 31
+                  ? split.sublist(split.length - 31) : split)
+                Expanded(child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 1),
+                  child: Column(mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                    Container(height: (((s['pos'] as num?)?.toDouble() ?? 0)
+                            / mx * 56).clamp(0, 56),
+                        decoration: const BoxDecoration(color: posC,
+                            borderRadius: BorderRadius.vertical(
+                                top: Radius.circular(2)))),
+                    Container(height: (((s['online'] as num?)?.toDouble() ?? 0)
+                            / mx * 56).clamp(0, 56),
+                        decoration: const BoxDecoration(color: onlC,
+                            borderRadius: BorderRadius.vertical(
+                                bottom: Radius.circular(2)))),
+                  ]),
+                )),
+            ],
+          )),
+          const SizedBox(height: 6),
+          Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+            _legend(posC, ar ? 'POS' : 'POS'), const SizedBox(width: 14),
+            _legend(onlC, ar ? 'أونلاين' : 'Online'),
+          ]),
+        ],
+      ]),
+    );
+  }
+
+  Widget _tile(String label, String value, Color c) => Container(
+    padding: const EdgeInsets.all(11),
+    decoration: BoxDecoration(color: c.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(13),
+        border: Border.all(color: c.withValues(alpha: 0.25))),
+    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text(label, style: TextStyle(fontSize: 11,
+          fontWeight: FontWeight.w700, color: c)),
+      const SizedBox(height: 4),
+      FittedBox(fit: BoxFit.scaleDown, alignment: Alignment.centerLeft,
+          child: Text(value, style: TextStyle(fontSize: 18,
+              fontWeight: FontWeight.w900, color: c))),
+    ]),
+  );
+
+  Widget _legend(Color c, String t) => Row(mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(width: 10, height: 10, decoration: BoxDecoration(color: c,
+            borderRadius: BorderRadius.circular(3))),
+        const SizedBox(width: 4),
+        Text(t, style: const TextStyle(fontSize: 11,
+            fontWeight: FontWeight.w700, color: UellowColors.muted)),
+      ]);
+}
+
 class _RangeChart extends StatelessWidget {
   const _RangeChart({required this.series, required this.sym,
       required this.ar});
