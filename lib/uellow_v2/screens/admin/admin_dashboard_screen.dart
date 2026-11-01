@@ -214,6 +214,14 @@ class _Header extends StatelessWidget {
               style: const TextStyle(color: UellowColors.yellowLight,
                   fontSize: 11, fontWeight: FontWeight.w800)),
           ),
+          const SizedBox(width: 8),
+          _CircleBtn(icon: Icons.headset_mic_rounded,
+              onTap: () => Navigator.push(context, MaterialPageRoute(
+                  builder: (_) => const AdminCustomerServiceScreen()))),
+          const SizedBox(width: 8),
+          _CircleBtn(icon: Icons.notifications_rounded,
+              onTap: () => Navigator.push(context, MaterialPageRoute(
+                  builder: (_) => const AdminNotificationsScreen()))),
         ]),
         const SizedBox(height: 18),
         Row(children: [
@@ -817,6 +825,7 @@ class _PeriodBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final opts = <(String, String)>[
       ('today', ar ? 'اليوم' : 'Today'),
+      ('yesterday', ar ? 'أمس' : 'Yesterday'),
       ('7d', ar ? '٧ أيام' : '7 days'),
       ('30d', ar ? '٣٠ يوم' : '30 days'),
       ('month', ar ? 'هذا الشهر' : 'This month'),

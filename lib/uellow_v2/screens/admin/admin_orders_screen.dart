@@ -306,10 +306,15 @@ class AdminOrderDetailScreen extends StatefulWidget {
 
 class _AdminOrderDetailScreenState extends State<AdminOrderDetailScreen> {
   late Future<Map<String, dynamic>> _future;
+  Map<String, dynamic>? _d; // v2.2.159 — للشريط السفلي الثابت
+  void _fetch() {
+    _future = AdminApi.instance.orderDetail(widget.orderId);
+    _future.then((d) { if (mounted) setState(() => _d = d); });
+  }
   @override
   void initState() {
     super.initState();
-    _future = AdminApi.instance.orderDetail(widget.orderId);
+    _fetch();
   }
 
   @override
@@ -317,6 +322,7 @@ class _AdminOrderDetailScreenState extends State<AdminOrderDetailScreen> {
     final ar = UellowApi.instance.lang == 'ar';
     return Scaffold(
       backgroundColor: const Color(0xFFF2F3F5),
+      bottomNavigationBar: _d == null ? null : _stickyBar(ar, _d!),
       appBar: AppBar(
         backgroundColor: const Color(0xFF412402),
         foregroundColor: UellowColors.yellow,
@@ -487,9 +493,7 @@ class _AdminOrderDetailScreenState extends State<AdminOrderDetailScreen> {
 
   bool _busy = false;
 
-  void _reload() => setState(() {
-        _future = AdminApi.instance.orderDetail(widget.orderId);
-      });
+  void _reload() => setState(_fetch);
 
   Future<void> _run(Future<Map<String, dynamic>> Function() op,
       String okMsg) async {
@@ -869,6 +873,66 @@ class _AdminOrderDetailScreenState extends State<AdminOrderDetailScreen> {
       ...btns,
     ]);
   }
+
+  // v2.2.159 — شريط إجراءات سفلي ثابت (إلغاء + الإجراء الأساسي حسب الحالة).
+  Widget? _stickyBar(bool ar, Map<String, dynamic> d) {
+    final can = (d['can'] as Map?) ?? const {};
+    final state = (d['state'] ?? '').toString();
+    if (state == 'cancel') return null;
+    final id = widget.orderId;
+    Widget? primary;
+    if (can['confirm'] == true) {
+      primary = _barBtn(ar ? '✅ اعتماد الطلب' : '✅ Approve',
+          UellowColors.successDk,
+          () => _run(() => AdminApi.instance.orderApprove(id),
+              ar ? 'تم الاعتماد' : 'Approved'));
+    } else if (can['deliver'] == true) {
+      primary = _barBtn(ar ? '📦 تأكيد التسليم' : '📦 Deliver',
+          const Color(0xFF0D9488),
+          () => _run(() => AdminApi.instance.orderDeliver(id),
+              ar ? 'تم التسليم' : 'Delivered'));
+    } else if (can['invoice'] == true) {
+      primary = _barBtn(ar ? '🧾 إنشاء فاتورة' : '🧾 Invoice',
+          const Color(0xFF7C3AED),
+          () => _run(() => AdminApi.instance.orderInvoice(id),
+              ar ? 'تم إنشاء الفاتورة' : 'Invoiced'));
+    }
+    final canCancel = can.containsKey('cancel') ? can['cancel'] == true : true;
+    if (primary == null && !canCancel) return null;
+    return SafeArea(top: false, child: Container(
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+      decoration: const BoxDecoration(color: Colors.white,
+          border: Border(top: BorderSide(color: Color(0xFFECECEC)))),
+      child: Row(children: [
+        if (canCancel)
+          Expanded(flex: 2, child: _barBtn(ar ? 'إلغاء' : 'Cancel',
+              UellowColors.danger, () => _confirmCancel(id, ar),
+              outline: true)),
+        if (canCancel && primary != null) const SizedBox(width: 8),
+        if (primary != null) Expanded(flex: 3, child: primary),
+      ]),
+    ));
+  }
+
+  Widget _barBtn(String label, Color color, VoidCallback onTap,
+          {bool outline = false}) =>
+      outline
+          ? OutlinedButton(onPressed: _busy ? null : onTap,
+              style: OutlinedButton.styleFrom(foregroundColor: color,
+                  side: BorderSide(color: color),
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12))),
+              child: Text(label,
+                  style: const TextStyle(fontWeight: FontWeight.w900)))
+          : ElevatedButton(onPressed: _busy ? null : onTap,
+              style: ElevatedButton.styleFrom(backgroundColor: color,
+                  foregroundColor: Colors.white, elevation: 0,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12))),
+              child: Text(label,
+                  style: const TextStyle(fontWeight: FontWeight.w900)));
 
   Widget _actBtn(String label, Color color, VoidCallback onTap,
       {Color fg = Colors.white}) => Padding(
