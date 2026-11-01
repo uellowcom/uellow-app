@@ -7,6 +7,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import '../../widgets/admin_console_nav.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../api/uellow_api.dart';
@@ -132,6 +133,7 @@ class _AdminPurchaseScreenState extends State<AdminPurchaseScreen> {
   Widget build(BuildContext context) {
     final ar = UellowApi.instance.lang == 'ar';
     return Scaffold(
+      bottomNavigationBar: const AdminConsoleNav(current: AdminTab.purchases),
       backgroundColor: const Color(0xFFF2F3F5),
       appBar: AppBar(
         backgroundColor: _brown,

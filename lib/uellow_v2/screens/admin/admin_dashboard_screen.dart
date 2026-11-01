@@ -7,6 +7,7 @@
 // Orders / Products / POS managers.
 // =============================================================================
 import 'package:flutter/material.dart';
+import '../../widgets/admin_console_nav.dart';
 
 import '../../../api/uellow_api.dart';
 import '../../services/admin_mode.dart';
@@ -88,6 +89,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     final sym = _sym(d);
     final range = (d['range'] as Map?)?.cast<String, dynamic>();
     return Scaffold(
+      bottomNavigationBar: const AdminConsoleNav(),
       backgroundColor: const Color(0xFFF2F3F5),
       body: RefreshIndicator(
         onRefresh: _load,

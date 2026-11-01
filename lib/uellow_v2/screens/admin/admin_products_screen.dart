@@ -6,6 +6,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import '../../widgets/admin_console_nav.dart';
 
 import '../../../api/uellow_api.dart';
 import '../../services/admin_mode.dart';
@@ -71,6 +72,7 @@ class _AdminProductsScreenState extends State<AdminProductsScreen> {
   Widget build(BuildContext context) {
     final ar = UellowApi.instance.lang == 'ar';
     return Scaffold(
+      bottomNavigationBar: const AdminConsoleNav(current: AdminTab.products),
       backgroundColor: const Color(0xFFF2F3F5),
       appBar: AppBar(
         backgroundColor: const Color(0xFF412402),

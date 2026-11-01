@@ -11,6 +11,7 @@ import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import '../../widgets/admin_console_nav.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../../api/uellow_api.dart';
@@ -136,6 +137,7 @@ class _CSState extends State<AdminCustomerServiceScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      bottomNavigationBar: const AdminConsoleNav(current: AdminTab.support),
       backgroundColor: const Color(0xFFF6F3EC),
       appBar: AppBar(
         backgroundColor: _tealDark,
