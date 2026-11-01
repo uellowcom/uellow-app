@@ -322,6 +322,10 @@ class _ProductScreenState extends State<ProductScreen> with RouteAware {
       // v2.2.26 — Brain: margin-aware installments nudge (Tabby/Tamara).
       if (p.installments != null && p.installments!['available'] == true)
         SliverToBoxAdapter(child: _InstallmentsCard(data: p.installments!)),
+      // v2.2.139 — بادج صغير «غير متاح» عند تعطيل خدمة الأقساط عالميًا.
+      if (p.installments != null && p.installments!['available'] == false
+          && p.installments!['disabled'] == true)
+        SliverToBoxAdapter(child: _InstallmentsUnavailBadge(data: p.installments!)),
       // v2.2.20 — when this product is a BUNDLE, list everything inside it
       // with each component's own price + the total savings.
       if (p.bundle != null)
@@ -1165,6 +1169,46 @@ class MidStrikePrice extends StatelessWidget {
 // deems the product eligible (price + margin). Pure UI.
 // v2.2.36 — one-line installments nudge → opens a professional sheet with a
 // payment timeline, instructions and the provider lockup (Taly / Deema soon).
+// v2.2.139 — بادج «غير متاح» للأقساط (الخدمة مُعطّلة إداريًا).
+class _InstallmentsUnavailBadge extends StatelessWidget {
+  const _InstallmentsUnavailBadge({required this.data});
+  final Map<String, dynamic> data;
+  @override
+  Widget build(BuildContext context) {
+    final ar = UellowApi.instance.lang == 'ar';
+    final lbl = data['label'];
+    final text = lbl is Map
+        ? (lbl[ar ? 'ar' : 'en'] ?? lbl['en'] ?? '').toString()
+        : (ar ? 'الأقساط غير متاحة حاليًا' : 'Installments currently unavailable');
+    return Container(
+      margin: const EdgeInsets.fromLTRB(14, 6, 14, 0),
+      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 8),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF3F1EC),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFFE3DAC6)),
+      ),
+      child: Row(children: [
+        const Icon(Icons.schedule_rounded, size: 15, color: Color(0xFF938B78)),
+        const SizedBox(width: 7),
+        Expanded(child: Text(text,
+            style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700,
+                color: Color(0xFF6A6454)))),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+          decoration: BoxDecoration(
+            color: const Color(0xFFBBB3A0),
+            borderRadius: BorderRadius.circular(5),
+          ),
+          child: Text(ar ? 'غير متاح' : 'Unavailable',
+              style: const TextStyle(color: Colors.white, fontSize: 8.5,
+                  fontWeight: FontWeight.w900)),
+        ),
+      ]),
+    );
+  }
+}
+
 class _InstallmentsCard extends StatelessWidget {
   const _InstallmentsCard({required this.data});
   final Map<String, dynamic> data;
