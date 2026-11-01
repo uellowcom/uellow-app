@@ -250,6 +250,8 @@ class _HomeScreenState extends State<HomeScreen> {
           // v2.2.137 — شريط «تواصل» الأخضر النابض (متصل الآن · يرد خلال دقائق)
           // يفتح محادثة خدمة العملاء — مطابقةً للموكاب.
           const SliverToBoxAdapter(child: _ContactPill()),
+          // v2.2.143 — بلوك الأقسام الذكية (دوائر تتغيّر يوميًا + New/Hot).
+          const SliverToBoxAdapter(child: _SmartCategories()),
           // Uellow World entry banner removed — the globe icon in the top bar
           // (Icons.public) remains the entry point into the World store.
           // v2.1.57 — targeted announcement strip (admin-controlled).
@@ -675,6 +677,168 @@ class _ContactPillState extends State<_ContactPill>
         Text(ar ? 'يرد خلال دقائق' : 'Replies in minutes',
             style: const TextStyle(color: UellowColors.muted, fontSize: 11,
                 fontWeight: FontWeight.w700)),
+      ]),
+    );
+  }
+}
+
+// ─── v2.2.143 — بلوك الأقسام الذكية (دوائر) ────────────────────────────
+// دوائر بصور حقيقية تتغيّر يوميًا، مع ليبلات «جديد» (أخضر) و«Hot» (أحمر نابض).
+// المصدر: GET /api/mobile/v2/categories/smart (دوران + معايير من الكونسول).
+class _SmartCategories extends StatefulWidget {
+  const _SmartCategories();
+  @override
+  State<_SmartCategories> createState() => _SmartCategoriesState();
+}
+
+class _SmartCategoriesState extends State<_SmartCategories> {
+  List<Map<String, dynamic>> _items = const [];
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final res = await UellowApi.instance
+          .getRaw('/api/mobile/v2/categories/smart');
+      final data = res['data'];
+      if (data is Map && data['enabled'] != false) {
+        final its = (data['items'] as List?) ?? const [];
+        _items = its
+            .whereType<Map>()
+            .map((e) => e.cast<String, dynamic>())
+            .toList();
+      }
+    } catch (_) {}
+    if (mounted) setState(() => _loading = false);
+  }
+
+  void _open(Map<String, dynamic> c) {
+    final ar = UellowApi.instance.lang == 'ar';
+    final nm = c['name'];
+    final title = nm is Map ? (nm[ar ? 'ar' : 'en'] ?? nm['en'] ?? '').toString()
+                            : (nm?.toString() ?? '');
+    Navigator.pushNamed(context, Routes.collection, arguments: {
+      'category_id': (c['id'] as num?)?.toInt(),
+      'title': title,
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading || _items.isEmpty) return const SizedBox.shrink();
+    final ar = UellowApi.instance.lang == 'ar';
+    return Container(
+      color: UellowColors.bg,
+      padding: const EdgeInsets.fromLTRB(12, 2, 12, 10),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(2, 2, 2, 10),
+          child: Row(children: [
+            Text(ar ? 'تصفّح الأقسام' : 'Browse categories',
+                style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w900,
+                    color: UellowColors.ink)),
+            const SizedBox(width: 7),
+            Text(ar ? 'يتغيّر يوميًا' : 'updates daily',
+                style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700,
+                    color: UellowColors.muted)),
+            const Spacer(),
+            InkWell(
+              onTap: () => Navigator.pushNamed(context, Routes.category),
+              child: Text(ar ? 'الكل ›' : 'All ›',
+                  style: const TextStyle(fontSize: 11.5,
+                      fontWeight: FontWeight.w800, color: Color(0xFFC8920B))),
+            ),
+          ]),
+        ),
+        GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          padding: EdgeInsets.zero,
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 5, mainAxisSpacing: 14, crossAxisSpacing: 2,
+            childAspectRatio: 0.72,
+          ),
+          itemCount: _items.length,
+          itemBuilder: (_, i) => _circle(_items[i], ar),
+        ),
+      ]),
+    );
+  }
+
+  Widget _circle(Map<String, dynamic> c, bool ar) {
+    final nm = c['name'];
+    final name = nm is Map ? (nm[ar ? 'ar' : 'en'] ?? nm['en'] ?? '').toString()
+                           : (nm?.toString() ?? '');
+    final img = (c['image'] as String?) ?? '';
+    final isNew = c['is_new'] == true;
+    final isHot = c['is_hot'] == true;
+    final disc = (c['discount_pct'] as num?)?.toInt() ?? 0;
+    const hot2 = Color(0xFFF97316);
+    const newC = Color(0xFF22C55E);
+    return GestureDetector(
+      onTap: () => _open(c),
+      behavior: HitTestBehavior.opaque,
+      child: Column(children: [
+        SizedBox(
+          height: 62,
+          child: Stack(clipBehavior: Clip.none, alignment: Alignment.center,
+              children: [
+            Container(
+              width: 56, height: 56,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                shape: BoxShape.circle,
+                border: Border.all(
+                    color: isHot ? hot2 : (isNew ? newC : UellowColors.border),
+                    width: (isHot || isNew) ? 2 : 1),
+                boxShadow: const [BoxShadow(
+                    color: Color(0x14000000), blurRadius: 10,
+                    offset: Offset(0, 5))],
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: img.isNotEmpty
+                  ? CachedNetworkImage(
+                      imageUrl: img.startsWith('http')
+                          ? img : '${UellowApi.instance.baseUrl}$img',
+                      fit: BoxFit.contain,
+                      placeholder: (_, __) => const SizedBox(),
+                      errorWidget: (_, __, ___) => const Icon(
+                          Icons.category_outlined, size: 22,
+                          color: UellowColors.muted))
+                  : const Icon(Icons.category_outlined, size: 22,
+                      color: UellowColors.muted),
+            ),
+            if (isHot || isNew)
+              Positioned(
+                top: -6,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(colors: isHot
+                        ? const [Color(0xFFDC2626), Color(0xFFF97316)]
+                        : const [Color(0xFF16A34A), Color(0xFF22C55E)]),
+                    borderRadius: BorderRadius.circular(999),
+                    border: Border.all(color: UellowColors.bg, width: 1.5),
+                  ),
+                  child: Text(
+                      isHot ? (disc > 0 ? '🔥 $disc٪' : '🔥 Hot')
+                            : (ar ? 'جديد' : 'New'),
+                      style: const TextStyle(color: Colors.white, fontSize: 8,
+                          fontWeight: FontWeight.w900, height: 1.0)),
+                ),
+              ),
+          ]),
+        ),
+        const SizedBox(height: 5),
+        Text(name, maxLines: 1, overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800,
+                color: UellowColors.muted)),
       ]),
     );
   }
