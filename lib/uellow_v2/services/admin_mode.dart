@@ -328,6 +328,14 @@ class AdminApi {
   Future<Map<String, dynamic>> orderVerifyPayment(int id) =>
       _post('/api/mobile/v2/admin/order/$id/verify-payment');
 
+  /// إتمام الطلب دفعة واحدة: تسليم + فاتورة + دفع + قفل (زر Complete).
+  Future<Map<String, dynamic>> orderComplete(int id) =>
+      _post('/api/mobile/v2/admin/order/$id/complete');
+
+  /// تعيين حالة تجهيز الطلب (preparation_state).
+  Future<Map<String, dynamic>> orderSetPrepState(int id, String state) =>
+      _post('/api/mobile/v2/admin/order/$id/prep-state', {'state': state});
+
   // ── v2.2.151 — إشعار مخصّص / تعديل أصناف / مستندات طلب ──
   Future<Map<String, dynamic>> orderNotify(
           int id, Map<String, dynamic> body) =>
@@ -493,9 +501,15 @@ class AdminApi {
   }
 
   /// رابط PDF لكشف حساب مورّد طلب الشراء.
-  Future<Map<String, dynamic>> purchaseStatementUrl(int id) async {
-    final r = await UellowApi.instance
-        .getRaw('/api/mobile/v2/admin/purchase/$id/statement', auth: true);
+  Future<Map<String, dynamic>> purchaseStatementUrl(int id,
+      {String? dateFrom, String? dateTo}) async {
+    final r = await UellowApi.instance.getRaw(
+        '/api/mobile/v2/admin/purchase/$id/statement',
+        query: {
+          if (dateFrom != null) 'date_from': dateFrom,
+          if (dateTo != null) 'date_to': dateTo,
+        },
+        auth: true);
     return ((r['data'] as Map?) ?? const {}).cast<String, dynamic>();
   }
 

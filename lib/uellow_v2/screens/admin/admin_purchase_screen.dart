@@ -15,6 +15,7 @@ import '../../../api/uellow_api.dart';
 import '../../theme/uellow_theme.dart';
 import '../../services/admin_mode.dart';
 import 'admin_purchase_create_screen.dart';
+import '../doc_viewer_screen.dart';
 
 const _brown = Color(0xFF412402);
 
@@ -527,14 +528,17 @@ class _PurchaseDetailSheetState extends State<_PurchaseDetailSheet> {
   }
 
   /// يجلب رابط PDF (طباعة/كشف) ويفتحه خارجيًا.
-  Future<void> _openDocUrl(Future<Map<String, dynamic>> fut, bool ar) async {
+  Future<void> _openDocUrl(Future<Map<String, dynamic>> fut, bool ar,
+      {String title = 'PDF', String fileName = 'document.pdf'}) async {
     if (_busy) return;
     setState(() => _busy = true);
     try {
       final d = await fut;
       final url = (d['url'] ?? '').toString();
       if (url.isNotEmpty) {
-        await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+        if (!mounted) return;
+        await Navigator.push(context, MaterialPageRoute(builder: (_) =>
+            DocViewerScreen(title: title, url: url, fileName: fileName)));
       } else if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
             content: Text(ar ? 'تعذّر إنشاء المستند' : 'Could not build document')));
@@ -548,6 +552,35 @@ class _PurchaseDetailSheetState extends State<_PurchaseDetailSheet> {
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  // كشف الحساب: اختيار النطاق (من→إلى) قبل التوليد ثم فتحه داخل التطبيق.
+  Future<void> _openStatement(bool ar) async {
+    final now = DateTime.now();
+    final picked = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(now.year - 3),
+      lastDate: now,
+      initialDateRange: DateTimeRange(
+          start: DateTime(now.year, now.month, 1), end: now),
+      helpText: ar ? 'نطاق كشف الحساب' : 'Statement date range',
+      builder: (ctx, child) => Theme(
+        data: Theme.of(ctx).copyWith(
+            colorScheme: const ColorScheme.light(
+                primary: UellowColors.darkBrown, onPrimary: Colors.white)),
+        child: child!,
+      ),
+    );
+    if (picked == null) return;
+    String f(DateTime x) =>
+        '${x.year}-${x.month.toString().padLeft(2, '0')}-'
+        '${x.day.toString().padLeft(2, '0')}';
+    await _openDocUrl(
+        AdminApi.instance.purchaseStatementUrl(widget.poId,
+            dateFrom: f(picked.start), dateTo: f(picked.end)),
+        ar,
+        title: ar ? 'كشف حساب المورّد' : 'Vendor statement',
+        fileName: 'statement.pdf');
   }
 
   @override
@@ -638,8 +671,7 @@ class _PurchaseDetailSheetState extends State<_PurchaseDetailSheet> {
       if ((v['ref'] ?? '').toString().isNotEmpty)
         _kv(ar ? 'مرجع المورد' : 'Vendor ref', v['ref'].toString()),
       InkWell(
-        onTap: () => _openDocUrl(
-            AdminApi.instance.purchaseStatementUrl(widget.poId), ar),
+        onTap: () => _openStatement(ar),
         borderRadius: BorderRadius.circular(8),
         child: Padding(
           padding: const EdgeInsets.only(top: 6),
@@ -787,12 +819,13 @@ class _PurchaseDetailSheetState extends State<_PurchaseDetailSheet> {
           const Color(0xFF2563EB), () => _openEdit(d, ar)));
     }
     // v2.2.144 — طباعة PDF + كشف حساب المورّد (روابط عامة من الباك-اند)
-    btns.add(_actBtn(ar ? '🖨️ طباعة PDF' : '🖨️ Print PDF',
+    btns.add(_actBtn(ar ? '🖨️ طباعة أمر الشراء' : '🖨️ Print PO',
         const Color(0xFF475569),
-        () => _openDocUrl(AdminApi.instance.purchasePdfUrl(id), ar)));
+        () => _openDocUrl(AdminApi.instance.purchasePdfUrl(id), ar,
+            title: ar ? 'أمر الشراء' : 'Purchase order',
+            fileName: 'po.pdf')));
     btns.add(_actBtn(ar ? '📊 كشف حساب المورّد' : '📊 Vendor statement',
-        const Color(0xFF0E7490),
-        () => _openDocUrl(AdminApi.instance.purchaseStatementUrl(id), ar)));
+        const Color(0xFF0E7490), () => _openStatement(ar)));
     if (flag('cancel')) {
       btns.add(_actBtn(ar ? '✖ إلغاء الطلب' : '✖ Cancel order',
           UellowColors.danger, () => _confirmCancel(ar)));
@@ -805,8 +838,24 @@ class _PurchaseDetailSheetState extends State<_PurchaseDetailSheet> {
       ]);
     }
     return _card(title: ar ? '⚙️ الإجراءات' : '⚙️ Actions',
-        children: [for (final b in btns) Padding(
-            padding: const EdgeInsets.only(bottom: 8), child: b)]);
+        children: [_pairRows(btns)]);
+  }
+
+  // زرّان في كل سطر (الفردي الأخير يملأ عرض السطر).
+  Widget _pairRows(List<Widget> items) {
+    final rows = <Widget>[];
+    for (var i = 0; i < items.length; i += 2) {
+      final a = items[i];
+      final b = (i + 1 < items.length) ? items[i + 1] : null;
+      rows.add(Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: Row(children: [
+          Expanded(child: a),
+          if (b != null) ...[const SizedBox(width: 8), Expanded(child: b)],
+        ]),
+      ));
+    }
+    return Column(children: rows);
   }
 
   // ── small shared widgets ──
@@ -849,19 +898,18 @@ class _PurchaseDetailSheetState extends State<_PurchaseDetailSheet> {
         ]),
       );
 
-  Widget _actBtn(String label, Color c, VoidCallback onTap) => SizedBox(
-        width: double.infinity,
-        child: ElevatedButton(
-          onPressed: _busy ? null : onTap,
-          style: ElevatedButton.styleFrom(
-            backgroundColor: c, foregroundColor: Colors.white,
-            elevation: 0,
-            padding: const EdgeInsets.symmetric(vertical: 13),
-            shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12)),
-          ),
-          child: Text(label, style: const TextStyle(fontSize: 13.5,
-              fontWeight: FontWeight.w900)),
+  Widget _actBtn(String label, Color c, VoidCallback onTap) =>
+      ElevatedButton(
+        onPressed: _busy ? null : onTap,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: c, foregroundColor: Colors.white, elevation: 0,
+          padding: const EdgeInsets.symmetric(vertical: 11, horizontal: 8),
+          minimumSize: const Size(0, 48),
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12)),
         ),
+        child: Text(label, textAlign: TextAlign.center, maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800)),
       );
 }

@@ -14,6 +14,7 @@ import '../../services/admin_mode.dart';
 import '../../theme/uellow_theme.dart';
 import 'admin_new_order_screen.dart';
 import 'admin_helpdesk_screen.dart';
+import '../doc_viewer_screen.dart';
 
 class AdminOrdersScreen extends StatefulWidget {
   const AdminOrdersScreen({super.key});
@@ -482,6 +483,7 @@ class _AdminOrderDetailScreenState extends State<AdminOrderDetailScreen> {
               ]),
             _supportCard(context, d, ar),
             _fulfilCard(d, ar),
+            _prepCard(d, ar),
             _docsCard(d, ar),
             _actionCard(d, ar),
             const SizedBox(height: 24),
@@ -823,6 +825,11 @@ class _AdminOrderDetailScreenState extends State<AdminOrderDetailScreen> {
           () => _run(() => AdminApi.instance.orderDeliver(id),
               ar ? 'تم تأكيد التسليم' : 'Delivery validated')));
     }
+    if (flag('complete', false)) {
+      btns.add(_actBtn(
+          ar ? '✅ إتمام الطلب' : '✅ Complete & settle',
+          const Color(0xFF15803D), () => _confirmComplete(id, ar)));
+    }
     if (flag('invoice', false)) {
       btns.add(_actBtn(ar ? '🧾 إنشاء فاتورة' : '🧾 Create invoice',
           const Color(0xFF7C3AED),
@@ -870,7 +877,7 @@ class _AdminOrderDetailScreenState extends State<AdminOrderDetailScreen> {
     return _card(title: ar ? '⚙️ إجراءات' : '⚙️ Actions', children: [
       if (_busy) const Padding(padding: EdgeInsets.only(bottom: 8),
           child: LinearProgressIndicator(minHeight: 2)),
-      ...btns,
+      _pairRows(btns),
     ]);
   }
 
@@ -886,6 +893,9 @@ class _AdminOrderDetailScreenState extends State<AdminOrderDetailScreen> {
           UellowColors.successDk,
           () => _run(() => AdminApi.instance.orderApprove(id),
               ar ? 'تم الاعتماد' : 'Approved'));
+    } else if (can['complete'] == true) {
+      primary = _barBtn(ar ? '✅ إتمام الطلب' : '✅ Complete',
+          const Color(0xFF15803D), () => _confirmComplete(id, ar));
     } else if (can['deliver'] == true) {
       primary = _barBtn(ar ? '📦 تأكيد التسليم' : '📦 Deliver',
           const Color(0xFF0D9488),
@@ -935,20 +945,62 @@ class _AdminOrderDetailScreenState extends State<AdminOrderDetailScreen> {
                   style: const TextStyle(fontWeight: FontWeight.w900)));
 
   Widget _actBtn(String label, Color color, VoidCallback onTap,
-      {Color fg = Colors.white}) => Padding(
-    padding: const EdgeInsets.only(bottom: 8),
-    child: SizedBox(width: double.infinity, child: ElevatedButton(
-      onPressed: _busy ? null : onTap,
-      style: ElevatedButton.styleFrom(
-        backgroundColor: color, foregroundColor: fg,
-        elevation: 0, padding: const EdgeInsets.symmetric(vertical: 12),
-        shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12)),
-      ),
-      child: Text(label, style: TextStyle(
-          fontWeight: FontWeight.w900, color: fg)),
-    )),
-  );
+          {Color fg = Colors.white}) =>
+      ElevatedButton(
+        onPressed: _busy ? null : onTap,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: color, foregroundColor: fg, elevation: 0,
+          padding: const EdgeInsets.symmetric(vertical: 11, horizontal: 8),
+          minimumSize: const Size(0, 48),
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12)),
+        ),
+        child: Text(label, textAlign: TextAlign.center, maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12.5,
+                color: fg)),
+      );
+
+  // ترتيب الأزرار زرّين في كل سطر (الفردي الأخير يملأ عرض السطر).
+  Widget _pairRows(List<Widget> items) {
+    final rows = <Widget>[];
+    for (var i = 0; i < items.length; i += 2) {
+      final a = items[i];
+      final b = (i + 1 < items.length) ? items[i + 1] : null;
+      rows.add(Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: Row(children: [
+          Expanded(child: a),
+          if (b != null) ...[const SizedBox(width: 8), Expanded(child: b)],
+        ]),
+      ));
+    }
+    return Column(children: rows);
+  }
+
+  // تأكيد إتمام الطلب (تسليم + فاتورة + دفع + قفل).
+  Future<void> _confirmComplete(int id, bool ar) async {
+    final okd = await showDialog<bool>(context: context, builder: (c) =>
+        AlertDialog(
+          title: Text(ar ? 'إتمام الطلب؟' : 'Complete order?'),
+          content: Text(ar
+              ? 'سيتم تأكيد التسليم وإنشاء الفاتورة وتسوية الدفع وقفل الطلب.'
+              : 'Validates delivery, invoices, settles payment and locks.'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(c, false),
+                child: Text(ar ? 'إلغاء' : 'Cancel')),
+            ElevatedButton(onPressed: () => Navigator.pop(c, true),
+                style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF15803D),
+                    foregroundColor: Colors.white),
+                child: Text(ar ? 'إتمام' : 'Complete')),
+          ],
+        ));
+    if (okd == true) {
+      await _run(() => AdminApi.instance.orderComplete(id),
+          ar ? 'تم إتمام الطلب' : 'Order completed');
+    }
+  }
 
   Future<void> _confirmCancel(int id, bool ar) async {
     final ok = await showDialog<bool>(context: context, builder: (c) =>
@@ -1211,28 +1263,74 @@ class _AdminOrderDetailScreenState extends State<AdminOrderDetailScreen> {
 
   Widget _docsCard(Map<String, dynamic> d, bool ar) {
     final id = widget.orderId;
-    Future<void> open(String kind) async {
+    final name = (d['name'] ?? '').toString().replaceAll('/', '-');
+    Future<void> open(String kind, String title) async {
+      setState(() => _busy = true);
       try {
         final url = await AdminApi.instance.orderDocumentUrl(id, kind);
         if (url == null || url.isEmpty) throw Exception('no url');
         if (!mounted) return;
-        await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+        await Navigator.push(context, MaterialPageRoute(builder: (_) =>
+            DocViewerScreen(title: title, url: url,
+                fileName: '${kind}_$name.pdf')));
       } catch (_) {
         if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
             content: Text(ar ? 'تعذّر فتح المستند' : 'Could not open document'),
             backgroundColor: UellowColors.danger));
+      } finally {
+        if (mounted) setState(() => _busy = false);
       }
     }
     return _card(title: ar ? '🖨️ المستندات' : '🖨️ Documents', children: [
+      Text(ar ? 'تفتح داخل التطبيق مع زرّي طباعة ومشاركة.'
+              : 'Open in-app with Print & Share.',
+          style: const TextStyle(fontSize: 11, color: UellowColors.muted,
+              fontWeight: FontWeight.w600)),
+      const SizedBox(height: 8),
       Row(children: [
         Expanded(child: _docBtn(ar ? '🧾 فاتورة' : '🧾 Invoice',
-            () => open('invoice'))),
+            () => open('invoice', ar ? 'فاتورة' : 'Invoice'))),
         const SizedBox(width: 8),
         Expanded(child: _docBtn(ar ? '📜 ضمان' : '📜 Warranty',
-            () => open('warranty'))),
+            () => open('warranty', ar ? 'شهادة ضمان' : 'Warranty'))),
         const SizedBox(width: 8),
-        Expanded(child: _docBtn(ar ? '🧾 إيصال' : '🧾 Receipt',
-            () => open('receipt'))),
+        Expanded(child: _docBtn(ar ? '🏷️ ليبل' : '🏷️ Label',
+            () => open('label', ar ? 'ليبل التوصيل' : 'Delivery label'))),
+      ]),
+    ]);
+  }
+
+  // بطاقة حالة تجهيز الطلب (preparation_state) مع التبديل الفوري.
+  Widget _prepCard(Map<String, dynamic> d, bool ar) {
+    final cur = (d['preparation_state'] ?? 'to_prepare').toString();
+    final states = (d['preparation_states'] as List?) ?? const [];
+    if (states.isEmpty) return const SizedBox.shrink();
+    return _card(title: ar ? '📦 حالة التجهيز' : '📦 Preparation', children: [
+      Wrap(spacing: 8, runSpacing: 8, children: [
+        for (final sMap in states) Builder(builder: (_) {
+          final m = sMap as Map;
+          final v = (m['value'] ?? '').toString();
+          final on = v == cur;
+          return GestureDetector(
+            onTap: (_busy || on) ? null
+                : () => _run(() => AdminApi.instance
+                    .orderSetPrepState(widget.orderId, v),
+                    ar ? 'تم تحديث حالة التجهيز' : 'Preparation updated'),
+            child: Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: on ? UellowColors.darkBrown : Colors.white,
+                borderRadius: BorderRadius.circular(999),
+                border: Border.all(color: on
+                    ? UellowColors.darkBrown : const Color(0xFFE2E2E2)),
+              ),
+              child: Text((m[ar ? 'ar' : 'en'] ?? v).toString(),
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800,
+                      color: on ? Colors.white : UellowColors.muted)),
+            ),
+          );
+        }),
       ]),
     ]);
   }
