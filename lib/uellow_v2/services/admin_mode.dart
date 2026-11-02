@@ -99,10 +99,16 @@ class AdminApi {
       _post('/api/mobile/v2/admin/analytics/store-sync',
           {'downloads': downloads, 'uninstalls': uninstalls});
 
-  Future<Map<String, dynamic>> appAnalytics({String period = '30d', String? dateFrom}) async {
+  Future<Map<String, dynamic>> appAnalytics(
+      {String period = '30d', String? dateFrom, String? dateTo}) async {
     final r = await UellowApi.instance.getRaw(
         '/api/mobile/v2/admin/app-analytics',
-        query: {'period': period, if (dateFrom != null) 'date_from': dateFrom}, auth: true);
+        query: {
+          'period': period,
+          if (dateFrom != null) 'date_from': dateFrom,
+          if (dateTo != null) 'date_to': dateTo,
+        },
+        auth: true);
     return ((r['data'] as Map?) ?? const {}).cast<String, dynamic>();
   }
 

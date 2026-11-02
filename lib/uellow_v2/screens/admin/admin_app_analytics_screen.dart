@@ -1,7 +1,10 @@
 // =============================================================================
-// AdminAppAnalyticsScreen (v2.2.146) — تحليلات التطبيق الشاملة:
-// التثبيتات/النشطون/الفتحات + DAU 14 يوم + المنصّات + الإصدارات + القمع +
-// الإشعارات + التوزيع الجغرافي. المصدر: /api/mobile/v2/admin/app-analytics.
+// AdminAppAnalyticsScreen (v2.2.169) — تحليلات التطبيق:
+// • «في الفترة المختارة» = مقاييس تتأثّر بالفلتر + مقارنة بالفترة السابقة (deltas)
+// • «النشاط الآن» = متدحرج مستقل عن الفلتر (DAU/WAU/MAU/متصل)
+// • أرقام صحيحة: النشطون/التثبيتات بالأجهزة (device_id)، القمع بـ screen_view فقط
+// • فلتر نطاق مخصّص من→إلى + ترويسة واضحة بالفترة والمدى.
+// المصدر: /api/mobile/v2/admin/app-analytics.
 // =============================================================================
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -19,7 +22,8 @@ class AdminAppAnalyticsScreen extends StatefulWidget {
 
 class _AdminAppAnalyticsScreenState extends State<AdminAppAnalyticsScreen> {
   String _period = '30d';
-  String? _dateFrom; // v2.2.152 — نطاق مخصّص
+  String? _dateFrom; // نطاق مخصّص — من
+  String? _dateTo; // نطاق مخصّص — إلى
   Map<String, dynamic>? _data;
   bool _loading = true;
   String? _error;
@@ -33,8 +37,8 @@ class _AdminAppAnalyticsScreenState extends State<AdminAppAnalyticsScreen> {
   Future<void> _load() async {
     setState(() { _loading = true; _error = null; });
     try {
-      _data = await AdminApi.instance
-          .appAnalytics(period: _period, dateFrom: _dateFrom);
+      _data = await AdminApi.instance.appAnalytics(
+          period: _period, dateFrom: _dateFrom, dateTo: _dateTo);
     } catch (e) {
       _error = e.toString().replaceAll('Exception: ', '');
     }
@@ -60,7 +64,7 @@ class _AdminAppAnalyticsScreenState extends State<AdminAppAnalyticsScreen> {
             icon: const Icon(Icons.sync_rounded),
           ),
           IconButton(
-            tooltip: ar ? 'تصدير التقرير' : 'Export report',
+            tooltip: ar ? 'تصدير الملخّص' : 'Export summary',
             onPressed: _export,
             icon: const Icon(Icons.ios_share_rounded),
           ),
@@ -84,38 +88,116 @@ class _AdminAppAnalyticsScreenState extends State<AdminAppAnalyticsScreen> {
 
   List<Widget> _body(bool ar) {
     final d = _data ?? const {};
+    final pk = (d['period_kpi'] as Map?) ?? const {};
+    final delta = (d['delta'] as Map?) ?? const {};
     final active = (d['active'] as Map?) ?? const {};
     final installs = (d['installs'] as Map?) ?? const {};
-    final opens = (d['opens'] as Map?) ?? const {};
     final notif = (d['notifications'] as Map?) ?? const {};
     int gi(Map m, String k) => (m[k] as num?)?.toInt() ?? 0;
+    double? gd(Map m, String k) => (m[k] as num?)?.toDouble();
+
+    final plabel = (d['period_label'] as Map?) ?? const {};
+    final range = (d['range'] as Map?) ?? const {};
+    final rangeTxt = (range['from'] != null && range['to'] != null)
+        ? (ar
+            ? 'من ${range['from']} إلى ${range['to']}'
+            : '${range['from']} → ${range['to']}')
+        : '';
+
     return [
       _periodChips(ar),
-      const SizedBox(height: 10),
-      _subhd(ar ? 'التثبيت والنشاط' : 'Installs & activity'),
+      const SizedBox(height: 8),
+      // ترويسة واضحة: الفترة والمدى
+      Container(
+        width: double.infinity,
+        padding: const EdgeInsets.fromLTRB(14, 10, 14, 11),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+              colors: [Color(0xFF3B2B10), Color(0xFF5A4316)],
+              begin: Alignment.topLeft, end: Alignment.bottomRight),
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            const Icon(Icons.insights_rounded,
+                color: Color(0xFFF5C320), size: 17),
+            const SizedBox(width: 7),
+            Text(
+                (plabel[ar ? 'ar' : 'en'] ??
+                        (ar ? 'الفترة المختارة' : 'Selected period'))
+                    .toString(),
+                style: const TextStyle(color: Colors.white, fontSize: 14,
+                    fontWeight: FontWeight.w900)),
+          ]),
+          if (rangeTxt.isNotEmpty) ...[
+            const SizedBox(height: 3),
+            Text(rangeTxt, style: const TextStyle(
+                color: Color(0xFFE8D9B5), fontSize: 11.5,
+                fontWeight: FontWeight.w600)),
+          ],
+        ]),
+      ),
+      const SizedBox(height: 12),
+
+      // ── في الفترة المختارة (تتأثّر بالفلتر + مقارنة) ──
+      _subhd(ar ? '📊 في الفترة المختارة · مقارنةً بالفترة السابقة'
+                : '📊 Selected period · vs previous period'),
       _kpiGrid([
-        _Kpi(ar ? '⬇️ أجهزة مثبّتة' : '⬇️ Installs',
-            '${gi(installs, 'downloads')}', const Color(0xFF2563EB)),
-        _Kpi(ar ? '🆕 تثبيتات اليوم' : '🆕 New today',
-            '${gi(installs, 'new_today')}', const Color(0xFF16A34A)),
-        _Kpi(ar ? '📲 عندهم التطبيق' : '📲 Have the app',
-            '${gi(installs, 'push_users')}', const Color(0xFF16A34A)),
+        _Kpi(ar ? '📱 أجهزة نشطة' : '📱 Active devices',
+            '${gi(pk, 'active_devices')}', const Color(0xFF2563EB),
+            delta: gd(delta, 'active_devices')),
+        _Kpi(ar ? '🆕 أجهزة جديدة' : '🆕 New devices',
+            '${gi(pk, 'new_devices')}', const Color(0xFF16A34A),
+            delta: gd(delta, 'new_devices')),
+        _Kpi(ar ? '👆 فتحات التطبيق' : '👆 App opens',
+            '${gi(pk, 'opens')}', UellowColors.darkBrown,
+            delta: gd(delta, 'opens')),
+        _Kpi(ar ? '🧾 الجلسات' : '🧾 Sessions',
+            '${gi(pk, 'sessions')}', const Color(0xFF1D5FB4),
+            delta: gd(delta, 'sessions')),
+        _Kpi(ar ? '🛒 الطلبات' : '🛒 Orders',
+            '${gi(pk, 'orders')}', const Color(0xFFB45309),
+            delta: gd(delta, 'orders')),
+        _Kpi(ar ? '🔑 مسجّلون دخلوا' : '🔑 Logged-in',
+            '${gi(pk, 'logins')}', const Color(0xFF7C3AED)),
+      ]),
+      Padding(
+        padding: const EdgeInsets.only(top: 6, right: 2, left: 2),
+        child: Text(
+            ar ? 'السهم والنسبة = التغيّر مقابل نفس عدد الأيام قبل هذه الفترة.'
+               : 'Arrow & % = change vs the same number of days before.',
+            style: const TextStyle(fontSize: 10.5, color: UellowColors.muted,
+                fontWeight: FontWeight.w600)),
+      ),
+      const SizedBox(height: 12),
+
+      // ── النشاط الآن (متدحرج مستقل عن الفلتر) ──
+      _subhd(ar ? '⚡ النشاط الآن · لا يتأثّر بالفلتر'
+                : '⚡ Live activity · independent of filter'),
+      _kpiGrid([
         _Kpi(ar ? '🟢 متصل الآن' : '🟢 Online now',
             '${gi(active, 'online')}', const Color(0xFF16A34A)),
-        _Kpi(ar ? '📅 نشطون اليوم (DAU)' : '📅 DAU',
+        _Kpi(ar ? '📅 نشطون اليوم' : '📅 DAU (today)',
             '${gi(active, 'dau')}', UellowColors.darkBrown),
-        _Kpi(ar ? '🗓️ هذا الأسبوع (WAU)' : '🗓️ WAU',
+        _Kpi(ar ? '🗓️ آخر ٧ أيام' : '🗓️ WAU (7d)',
             '${gi(active, 'wau')}', UellowColors.darkBrown),
-        _Kpi(ar ? '📆 هذا الشهر (MAU)' : '📆 MAU',
+        _Kpi(ar ? '📆 آخر ٣٠ يوم' : '📆 MAU (30d)',
             '${gi(active, 'mau')}', UellowColors.darkBrown),
-        _Kpi(ar ? '🧾 إجمالي الجلسات' : '🧾 Sessions',
+        _Kpi(ar ? '⬇️ أجهزة مثبّتة (تقديري)' : '⬇️ Installs (est.)',
+            '${gi(installs, 'devices')}', const Color(0xFF2563EB)),
+        _Kpi(ar ? '🔔 مفعّلو الإشعارات' : '🔔 Push-enabled',
+            '${gi(installs, 'push_users')}', const Color(0xFF16A34A)),
+        _Kpi(ar ? '🆕 أجهزة جديدة اليوم' : '🆕 New today',
+            '${gi(installs, 'new_today')}', const Color(0xFF16A34A)),
+        _Kpi(ar ? '🧮 إجمالي الجلسات' : '🧮 Total sessions',
             '${gi(installs, 'sessions_total')}', const Color(0xFF1D5FB4)),
       ]),
+
       if ((installs['store_synced_at'] ?? '').toString().isNotEmpty) ...[
-        const SizedBox(height: 6),
+        const SizedBox(height: 10),
         _subhd(ar
-            ? 'من المتجر (مُزامَن ${installs['store_synced_at']})'
-            : 'From store (synced ${installs['store_synced_at']})'),
+            ? '🏬 من المتجر · مُزامَن ${installs['store_synced_at']}'
+            : '🏬 From store · synced ${installs['store_synced_at']}'),
         _kpiGrid([
           _Kpi(ar ? '⬇️ تحميلات المتجر' : '⬇️ Store downloads',
               '${gi(installs, 'store_downloads')}', const Color(0xFF2563EB)),
@@ -123,17 +205,15 @@ class _AdminAppAnalyticsScreenState extends State<AdminAppAnalyticsScreen> {
               '${gi(installs, 'store_uninstalls')}', const Color(0xFFC23B2B)),
         ]),
       ],
-      const SizedBox(height: 6),
-      _subhd(ar ? 'فتحات التطبيق' : 'App opens'),
-      _kpiGrid([
-        _Kpi(ar ? 'اليوم' : 'Today', '${gi(opens, 'today')}',
-            UellowColors.darkBrown),
-        _Kpi(ar ? '٧ أيام' : '7 days', '${gi(opens, 'week')}',
-            UellowColors.darkBrown),
-        _Kpi(ar ? '٣٠ يوم' : '30 days', '${gi(opens, 'month')}',
-            UellowColors.darkBrown),
-      ]),
-      const SizedBox(height: 6),
+
+      _card(ar ? '📈 الأجهزة النشطة · آخر ١٤ يوم' : '📈 Active devices · 14 days',
+          _barChart((d['dau_series'] as List?) ?? const [])),
+      _card(ar ? '🧭 المسار داخل التطبيق (الفترة)' : '🧭 In-app behaviour',
+          _funnel((d['funnel'] as List?) ?? const [], ar)),
+      if (((d['acq_funnel'] as List?) ?? const []).isNotEmpty)
+        _card(ar ? '📥 قمع الاكتساب (نشِط→مسجّل→مشترٍ)'
+                 : '📥 Acquisition funnel',
+            _funnel((d['acq_funnel'] as List?) ?? const [], ar)),
       if (d['retention'] is Map || d['sessions'] is Map)
         _card(ar ? '🔁 الاحتفاظ والجلسات' : '🔁 Retention & sessions',
             Column(children: [
@@ -146,31 +226,42 @@ class _AdminAppAnalyticsScreenState extends State<AdminAppAnalyticsScreen> {
               if (d['sessions'] is Map) ...[
                 _kvRow(ar ? 'متوسط مدة الجلسة (دقيقة)' : 'Avg session (min)',
                     '${((d['sessions'] as Map)['avg_minutes'] ?? 0)}'),
-                _kvRow(ar ? 'جلسات لكل مستخدم' : 'Sessions per user',
+                _kvRow(ar ? 'جلسات لكل جهاز' : 'Sessions per device',
                     '${((d['sessions'] as Map)['per_user'] ?? 0)}'),
               ],
             ])),
-      _card(ar ? '📈 الجلسات آخر ١٤ يوم' : '📈 Sessions (14 days)',
-          _barChart((d['dau_series'] as List?) ?? const [])),
-      _card(ar ? '🧭 المسار السلوكي داخل التطبيق' : '🧭 In-app behaviour',
-          _funnel((d['funnel'] as List?) ?? const [], ar)),
-      if (((d['acq_funnel'] as List?) ?? const []).isNotEmpty)
-        _card(ar ? '📥 مسار الاكتساب (تثبيت→فتح→تسجيل→شراء)'
-                 : '📥 Acquisition funnel',
-            _funnel((d['acq_funnel'] as List?) ?? const [], ar)),
-      _card(ar ? '📱 المنصّات' : '📱 Platforms',
+      _card(ar ? '📱 المنصّات (الفترة)' : '📱 Platforms',
           _splitBars((d['platforms'] as List?) ?? const [])),
+      if (((d['languages'] as List?) ?? const []).isNotEmpty)
+        _card(ar ? '🗣️ اللغات (الفترة)' : '🗣️ Languages',
+            _splitBars(_langRows((d['languages'] as List?) ?? const [], ar))),
       if (((d['versions'] as List?) ?? const []).isNotEmpty)
-        _card(ar ? '🔖 الإصدارات' : 'App versions',
+        _card(ar ? '🔖 الإصدارات (الفترة)' : '🔖 App versions',
             _kvList((d['versions'] as List?) ?? const [], 'name', 'count')),
-      _card(ar ? '🔔 الإشعارات' : 'Notifications', Column(children: [
+      _card(ar ? '🔔 الإشعارات (الفترة)' : '🔔 Notifications',
+          Column(children: [
         _kvRow(ar ? 'مُرسلة' : 'Sent', '${gi(notif, 'sent')}'),
         _kvRow(ar ? 'وصلت' : 'Delivered', '${gi(notif, 'delivered')}'),
         _kvRow(ar ? 'فُتحت' : 'Opened', '${gi(notif, 'opened')}'),
       ])),
       if (((d['geo'] as List?) ?? const []).isNotEmpty)
-        _card(ar ? '🌍 التوزيع الجغرافي' : 'Geography',
+        _card(ar ? '🌍 التوزيع الجغرافي (الفترة)' : '🌍 Geography',
             _kvList((d['geo'] as List?) ?? const [], 'country', 'count')),
+    ];
+  }
+
+  List _langRows(List rows, bool ar) {
+    String nm(String c) {
+      switch (c) {
+        case 'ar': return ar ? 'العربية' : 'Arabic';
+        case 'en': return ar ? 'الإنجليزية' : 'English';
+        default: return c;
+      }
+    }
+    return [
+      for (final r in rows)
+        {'name': nm(((r as Map)['name'] ?? '—').toString()),
+         'count': r['count'] ?? 0}
     ];
   }
 
@@ -182,61 +273,65 @@ class _AdminAppAnalyticsScreenState extends State<AdminAppAnalyticsScreen> {
       ('30d', ar ? '٣٠ يوم' : '30 days'),
       ('all', ar ? 'كل الوقت' : 'All time'),
     ];
+    Widget chip(bool on, String label, VoidCallback onTap) => Padding(
+          padding: const EdgeInsetsDirectional.only(end: 7),
+          child: GestureDetector(
+            onTap: onTap,
+            child: Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              decoration: BoxDecoration(
+                color: on ? const Color(0xFFE8A800) : Colors.white,
+                borderRadius: BorderRadius.circular(999),
+                border: Border.all(color: on
+                    ? const Color(0xFFE8A800) : const Color(0xFFE5E5E5)),
+              ),
+              child: Text(label, style: TextStyle(fontSize: 12,
+                  fontWeight: FontWeight.w800,
+                  color: on ? const Color(0xFF2A1D00) : UellowColors.muted)),
+            ),
+          ),
+        );
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: Row(children: [
-        for (final o in opts) Padding(
-          padding: const EdgeInsetsDirectional.only(end: 7),
-          child: GestureDetector(
-            onTap: () { if (_period != o.$1) { _period = o.$1; _load(); } },
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-              decoration: BoxDecoration(
-                color: _period == o.$1 ? const Color(0xFFE8A800) : Colors.white,
-                borderRadius: BorderRadius.circular(999),
-                border: Border.all(color: _period == o.$1
-                    ? const Color(0xFFE8A800) : const Color(0xFFE5E5E5)),
-              ),
-              child: Text(o.$2, style: TextStyle(fontSize: 12,
-                  fontWeight: FontWeight.w800,
-                  color: _period == o.$1
-                      ? const Color(0xFF2A1D00) : UellowColors.muted)),
-            ),
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsetsDirectional.only(end: 7),
-          child: GestureDetector(
-            onTap: _pickCustomRange,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-              decoration: BoxDecoration(
-                color: _period == 'custom'
-                    ? const Color(0xFFE8A800) : Colors.white,
-                borderRadius: BorderRadius.circular(999),
-                border: Border.all(color: _period == 'custom'
-                    ? const Color(0xFFE8A800) : const Color(0xFFE5E5E5)),
-              ),
-              child: Text(ar ? '📅 مخصّص' : '📅 Custom',
-                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800,
-                      color: _period == 'custom'
-                          ? const Color(0xFF2A1D00) : UellowColors.muted)),
-            ),
-          ),
-        ),
+        for (final o in opts)
+          chip(_period == o.$1, o.$2, () {
+            if (_period != o.$1) {
+              _period = o.$1;
+              _dateFrom = null;
+              _dateTo = null;
+              _load();
+            }
+          }),
+        chip(_period == 'custom', ar ? '📅 مخصّص' : '📅 Custom',
+            _pickCustomRange),
       ]),
     );
   }
 
   Future<void> _pickCustomRange() async {
     final now = DateTime.now();
-    final picked = await showDatePicker(
-      context: context, firstDate: DateTime(now.year - 2),
-      lastDate: now, initialDate: now.subtract(const Duration(days: 30)));
+    final picked = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(now.year - 2),
+      lastDate: now,
+      initialDateRange: DateTimeRange(
+          start: now.subtract(const Duration(days: 29)), end: now),
+      builder: (ctx, child) => Theme(
+        data: Theme.of(ctx).copyWith(
+            colorScheme: const ColorScheme.light(
+                primary: UellowColors.darkBrown,
+                onPrimary: Colors.white)),
+        child: child!,
+      ),
+    );
     if (picked != null) {
-      _dateFrom =
-          '${picked.year}-${picked.month.toString().padLeft(2, '0')}-'
-          '${picked.day.toString().padLeft(2, '0')}';
+      String f(DateTime x) =>
+          '${x.year}-${x.month.toString().padLeft(2, '0')}-'
+          '${x.day.toString().padLeft(2, '0')}';
+      _dateFrom = f(picked.start);
+      _dateTo = f(picked.end);
       _period = 'custom';
       _load();
     }
@@ -244,14 +339,19 @@ class _AdminAppAnalyticsScreenState extends State<AdminAppAnalyticsScreen> {
 
   Future<void> _export() async {
     final d = _data ?? const {};
-    final installs = (d['installs'] as Map?) ?? const {};
+    final pk = (d['period_kpi'] as Map?) ?? const {};
     final active = (d['active'] as Map?) ?? const {};
+    final range = (d['range'] as Map?) ?? const {};
     final ar = _ar;
     final txt = StringBuffer()
       ..writeln(ar ? 'تقرير تحليلات التطبيق' : 'App analytics report')
-      ..writeln('period: ${d['period'] ?? _period}')
-      ..writeln('installs: ${installs['downloads'] ?? 0}')
-      ..writeln('new_today: ${installs['new_today'] ?? 0}')
+      ..writeln('range: ${range['from']} → ${range['to']}')
+      ..writeln('active_devices: ${pk['active_devices'] ?? 0}')
+      ..writeln('new_devices: ${pk['new_devices'] ?? 0}')
+      ..writeln('opens: ${pk['opens'] ?? 0}')
+      ..writeln('sessions: ${pk['sessions'] ?? 0}')
+      ..writeln('orders: ${pk['orders'] ?? 0}')
+      ..writeln('— live —')
       ..writeln('online: ${active['online'] ?? 0}')
       ..writeln('dau: ${active['dau'] ?? 0}  wau: ${active['wau'] ?? 0}'
           '  mau: ${active['mau'] ?? 0}');
@@ -323,7 +423,7 @@ class _AdminAppAnalyticsScreenState extends State<AdminAppAnalyticsScreen> {
         shrinkWrap: true,
         physics: const NeverScrollableScrollPhysics(),
         crossAxisCount: 2, crossAxisSpacing: 9, mainAxisSpacing: 9,
-        childAspectRatio: 2.4,
+        childAspectRatio: 2.15,
         children: [for (final k in kpis) _kpiCard(k)],
       );
 
@@ -338,10 +438,44 @@ class _AdminAppAnalyticsScreenState extends State<AdminAppAnalyticsScreen> {
               style: const TextStyle(fontSize: 11,
                   fontWeight: FontWeight.w700, color: UellowColors.muted)),
           const SizedBox(height: 3),
-          Text(k.value, style: TextStyle(fontSize: 20,
-              fontWeight: FontWeight.w900, color: k.color)),
+          Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+            Text(k.value, style: TextStyle(fontSize: 20,
+                fontWeight: FontWeight.w900, color: k.color)),
+            if (k.delta != null) ...[
+              const SizedBox(width: 6),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 3),
+                child: _deltaChip(k.delta!),
+              ),
+            ],
+          ]),
         ]),
       );
+
+  Widget _deltaChip(double pct) {
+    final up = pct >= 0;
+    final flat = pct.abs() < 0.05;
+    final color = flat
+        ? UellowColors.muted
+        : (up ? const Color(0xFF16A34A) : const Color(0xFFC23B2B));
+    final icon = flat
+        ? Icons.remove_rounded
+        : (up ? Icons.arrow_upward_rounded : Icons.arrow_downward_rounded);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Icon(icon, size: 10, color: color),
+        const SizedBox(width: 1),
+        Text('${pct.abs().toStringAsFixed(pct.abs() >= 100 ? 0 : 1)}%',
+            style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w900,
+                color: color)),
+      ]),
+    );
+  }
 
   Widget _card(String title, Widget child) => Container(
         margin: const EdgeInsets.only(top: 11),
@@ -493,8 +627,9 @@ class _AdminAppAnalyticsScreenState extends State<AdminAppAnalyticsScreen> {
 }
 
 class _Kpi {
-  _Kpi(this.label, this.value, this.color);
+  _Kpi(this.label, this.value, this.color, {this.delta});
   final String label;
   final String value;
   final Color color;
+  final double? delta;
 }
