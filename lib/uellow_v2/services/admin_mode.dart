@@ -165,10 +165,16 @@ class AdminApi {
 
   /// Aggregate POS report (sales/profit/margin by day, cashier, payment,
   /// top products) over the last [days].
-  Future<Map<String, dynamic>> posReport({int days = 30}) async {
+  Future<Map<String, dynamic>> posReport(
+      {String? period, int days = 30, String? dateFrom, String? dateTo}) async {
     final r = await UellowApi.instance.getRaw(
         '/api/mobile/v2/admin/pos/report',
-        query: {'days': '$days'}, auth: true);
+        query: {
+          if (period != null) 'period': period,
+          if (period == null) 'days': '$days',
+          if (dateFrom != null) 'date_from': dateFrom,
+          if (dateTo != null) 'date_to': dateTo,
+        }, auth: true);
     return ((r['data'] as Map?) ?? const {}).cast<String, dynamic>();
   }
 

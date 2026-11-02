@@ -3,6 +3,7 @@
 // totals) + sales feed, with per-session drill-down.
 // =============================================================================
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../widgets/admin_console_nav.dart';
 
@@ -790,13 +791,25 @@ class _ReportTab extends StatefulWidget {
   State<_ReportTab> createState() => _ReportTabState();
 }
 
+// v2.2.168 — تاب تقارير احترافي: فلاتر شهر/سنة/مخصّص + مقارنة + ساعات ذروة
+// + دونات دفع + لوحة كاشير + فئات + أكثر ربحًا/كمية + أبرز أرقام + تنبيه ذكي.
 class _ReportTabState extends State<_ReportTab>
     with AutomaticKeepAliveClientMixin {
   @override
   bool get wantKeepAlive => true;
-  int _days = 30;
+  String _period = 'month';
+  String? _from, _to;
   Map<String, dynamic>? _data;
   bool _loading = false;
+  bool _topQty = false;
+
+  static const _gold = Color(0xFFE8A800);
+  static const _good = Color(0xFF1A7A46);
+  static const _bad = Color(0xFFC23B2B);
+  static const _info = Color(0xFF1D5FB4);
+  static const _pos = Color(0xFF7C3AED);
+  static const _cash = Color(0xFF0D9488);
+  static const _brown = Color(0xFF412402);
 
   @override
   void initState() {
@@ -807,9 +820,26 @@ class _ReportTabState extends State<_ReportTab>
   Future<void> _load() async {
     setState(() => _loading = true);
     try {
-      _data = await AdminApi.instance.posReport(days: _days);
+      _data = await AdminApi.instance.posReport(
+          period: _period, dateFrom: _from, dateTo: _to);
     } catch (_) {}
     if (mounted) setState(() => _loading = false);
+  }
+
+  Future<void> _pickCustom() async {
+    final now = DateTime.now();
+    final r = await showDateRangePicker(context: context,
+        firstDate: DateTime(now.year - 3), lastDate: now,
+        initialDateRange: DateTimeRange(
+            start: now.subtract(const Duration(days: 29)), end: now));
+    if (r != null) {
+      String f(DateTime d) => '${d.year}-${d.month.toString().padLeft(2, '0')}'
+          '-${d.day.toString().padLeft(2, '0')}';
+      _from = f(r.start);
+      _to = f(r.end);
+      _period = 'custom';
+      _load();
+    }
   }
 
   @override
@@ -824,168 +854,539 @@ class _ReportTabState extends State<_ReportTab>
     if (d == null) {
       return Center(child: Text(ar ? 'تعذر التحميل' : 'Failed to load'));
     }
+    if (d['available'] == false) {
+      return Center(child: Text(ar ? 'نقاط البيع غير مفعّلة'
+                                   : 'POS not available'));
+    }
     final k = (d['kpi'] as Map?) ?? const {};
-    final byPay = (d['by_payment'] as List?) ?? const [];
-    final byCash = (d['by_cashier'] as List?) ?? const [];
-    final top = (d['top_products'] as List?) ?? const [];
-    final byDay = (d['by_day'] as List?) ?? const [];
-    final cur = d['currency']?.toString() ?? 'KD';
-    num amt(dynamic m) => (m is Map ? (m['amount'] as num? ?? 0) : 0);
-    return RefreshIndicator(
-      onRefresh: _load,
-      child: ListView(padding: const EdgeInsets.fromLTRB(14, 12, 14, 28),
-          children: [
-        // period selector
-        Row(children: [
-          Text(ar ? 'الفترة:' : 'Period:', style: const TextStyle(
-              fontSize: 12, fontWeight: FontWeight.w800,
-              color: UellowColors.muted)),
-          const SizedBox(width: 8),
-          for (final n in const [7, 30, 90, 365]) Padding(
-            padding: const EdgeInsets.only(right: 6),
-            child: ChoiceChip(
-              label: Text(n == 365 ? (ar ? 'سنة' : '1y') : '$n${ar ? 'ي' : 'd'}',
-                  style: const TextStyle(fontSize: 11.5,
-                      fontWeight: FontWeight.w800)),
-              selected: _days == n,
-              selectedColor: UellowColors.yellow,
-              onSelected: (_) { setState(() => _days = n); _load(); },
-            ),
+    final dl = (d['delta'] as Map?) ?? const {};
+    final cur = (d['currency'] ?? 'KD').toString();
+    final hl = (d['highlights'] as Map?) ?? const {};
+    final alert = d['alert'] as Map?;
+    num nv(dynamic x) => (x as num?) ?? 0;
+    String money(dynamic x) =>
+        '${nv(x).toStringAsFixed(nv(x).abs() >= 1000 ? 0 : 1)} $cur';
+
+    return RefreshIndicator(onRefresh: _load, child: ListView(
+      padding: const EdgeInsets.fromLTRB(14, 10, 14, 30), children: [
+      _periodChips(ar),
+      const SizedBox(height: 10),
+      Row(children: [
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+          Text(_periodLabel(ar, d), style: const TextStyle(fontSize: 15,
+              fontWeight: FontWeight.w900, color: UellowColors.darkBrown)),
+          Text(ar ? 'مقارنة بالفترة السابقة' : 'vs previous period',
+              style: const TextStyle(fontSize: 11,
+                  color: UellowColors.muted, fontWeight: FontWeight.w700)),
+        ])),
+        InkWell(
+          onTap: () => _export(ar, d),
+          borderRadius: BorderRadius.circular(999),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
+            decoration: BoxDecoration(color: const Color(0xFFFDF3D6),
+                borderRadius: BorderRadius.circular(999)),
+            child: Text(ar ? '⬇️ تصدير' : '⬇️ Export',
+                style: const TextStyle(fontSize: 11.5,
+                    fontWeight: FontWeight.w800, color: Color(0xFF6B4E00))),
           ),
-          if (_loading) const Padding(padding: EdgeInsets.only(left: 6),
-              child: SizedBox(width: 14, height: 14,
-                  child: CircularProgressIndicator(strokeWidth: 2))),
+        ),
+      ]),
+      const SizedBox(height: 10),
+      if (alert != null) _alertBanner(ar, alert),
+      Row(children: [
+        Expanded(child: _kpiCard(ar ? 'المبيعات' : 'Sales',
+            money(k['net']), dl['sales'], _gold)),
+        const SizedBox(width: 9),
+        Expanded(child: _kpiCard(ar ? 'صافي الربح' : 'Profit',
+            '${money(k['profit'])} · ${nv(k['margin_pct'])}%',
+            dl['profit'], _good)),
+      ]),
+      const SizedBox(height: 9),
+      Row(children: [
+        Expanded(child: _kpiCard(ar ? 'عدد العمليات' : 'Orders',
+            '${nv(k['orders'])}', dl['orders'], _pos)),
+        const SizedBox(width: 9),
+        Expanded(child: _kpiCard(ar ? 'متوسط السلة' : 'Avg basket',
+            money(k['avg_basket']), dl['avg_basket'], _info)),
+      ]),
+      const SizedBox(height: 9),
+      Row(children: [
+        _miniKpi('${nv(k['items'])}', ar ? 'الأصناف' : 'Items'),
+        const SizedBox(width: 7),
+        _miniKpi('${nv(k['refunds'])}',
+            ar ? 'مرتجعات (${nv(k['refunds_count'])})' : 'Refunds', red: true),
+        const SizedBox(width: 7),
+        _miniKpi(money(k['daily_avg']), ar ? 'متوسط يومي' : 'Daily avg'),
+        const SizedBox(width: 7),
+        _miniKpi('${nv(k['sessions'])}', ar ? 'جلسات' : 'Sessions'),
+      ]),
+      const SizedBox(height: 12),
+      _section(ar ? '📈 المبيعات اليومية' : '📈 Daily sales',
+          [_dailyChart((d['by_day'] as List?) ?? const [])],
+          side: ar ? 'الحالي · السابق' : 'current · prev'),
+      _section(ar ? '🕒 ساعات الذروة' : '🕒 Peak hours',
+          [_hourChart((d['hourly'] as List?) ?? const [], ar)]),
+      if (((d['by_payment'] as List?) ?? const []).isNotEmpty)
+        _section(ar ? '💳 توزيع طرق الدفع' : '💳 Payment mix',
+            [_payMix((d['by_payment'] as List?) ?? const [], cur)]),
+      if (((d['by_cashier'] as List?) ?? const []).isNotEmpty)
+        _section(ar ? '👤 أداء الكاشيرية' : '👤 Cashiers', [
+          for (int i = 0; i < ((d['by_cashier'] as List).length);
+               i++)
+            _cashierRow(i, (d['by_cashier'] as List)[i] as Map, cur, ar),
         ]),
-        const SizedBox(height: 12),
-        // headline KPIs
-        Row(children: [
-          _kpi(ar ? 'المبيعات' : 'Sales',
-              '${amt(k['sales']).toStringAsFixed(3)} $cur',
-              const Color(0xFF412402)),
-          const SizedBox(width: 10),
-          _kpi(ar ? 'الربح' : 'Profit',
-              '${amt(k['profit']).toStringAsFixed(3)} $cur',
-              (amt(k['profit']) < 0)
-                  ? const Color(0xFFEF4444) : const Color(0xFF059669),
-              sub: '${k['margin_pct'] ?? 0}%'),
-        ]),
-        const SizedBox(height: 10),
-        Row(children: [
-          _kpi(ar ? 'العمليات' : 'Orders', '${k['orders'] ?? 0}',
-              const Color(0xFF2563EB)),
-          const SizedBox(width: 10),
-          _kpi(ar ? 'الأصناف' : 'Items', '${k['items'] ?? 0}',
-              const Color(0xFF7C3AED)),
-          const SizedBox(width: 10),
-          _kpi(ar ? 'متوسط السلة' : 'Avg basket',
-              amt(k['avg_basket']).toStringAsFixed(3),
-              const Color(0xFF0D9488)),
-        ]),
-        if ((k['refunds_count'] as num? ?? 0) != 0) ...[
-          const SizedBox(height: 10),
-          _kpi(ar ? 'المرتجعات' : 'Refunds',
-              '${amt(k['refunds']).toStringAsFixed(3)} $cur '
-              '(${k['refunds_count']})', const Color(0xFFEF4444)),
-        ],
-        const SizedBox(height: 16),
-        if (byDay.length > 1)
-          _section(ar ? '📈 المبيعات اليومية' : '📈 Daily sales',
-              [_dayChart(byDay)]),
-        if (byPay.isNotEmpty)
-          _section(ar ? '💳 حسب طريقة الدفع' : '💳 By payment method', [
-            for (final p in byPay) _line((p as Map)['method']?.toString() ?? '',
-                '${(p['amount'] as num? ?? 0).toStringAsFixed(3)} $cur'),
-          ]),
-        if (byCash.isNotEmpty)
-          _section(ar ? '👤 حسب الكاشير' : '👤 By cashier', [
-            for (final c in byCash) _line(
-                '${(c as Map)['name'] ?? ''} · ${c['orders'] ?? 0}',
-                '${ar ? 'ربح' : 'P'} ${(c['profit'] as num? ?? 0).toStringAsFixed(3)} / '
-                '${(c['sales'] as num? ?? 0).toStringAsFixed(3)}'),
-          ]),
-        if (top.isNotEmpty)
-          _section(ar ? '🏆 الأكثر ربحًا' : '🏆 Top by profit', [
-            for (final p in top) _line(
-                '${(p as Map)['name'] ?? ''} ×${p['qty'] ?? 0}',
-                '${(p['profit'] as num? ?? 0).toStringAsFixed(3)} $cur'),
-          ]),
+      _section(ar ? '🏆 أكثر المنتجات' : '🏆 Top products', [
+        _segToggle(ar),
+        const SizedBox(height: 4),
+        for (final p in ((_topQty ? d['top_qty'] : d['top_profit']) as List?)
+            ?? const [])
+          _prodRow(p as Map, cur, ar),
+      ]),
+      if (((d['by_category'] as List?) ?? const []).isNotEmpty)
+        _section(ar ? '🗂️ المبيعات حسب الفئة' : '🗂️ By category',
+            [_catBars((d['by_category'] as List?) ?? const [], cur)]),
+      _section(ar ? '✨ أبرز الأرقام' : '✨ Highlights',
+          [_highlights(ar, hl, cur)]),
+      const SizedBox(height: 6),
+      Text(ar ? 'كل رقم يتحدّث حسب الفلتر المختار ومصدره نقاط البيع الفعلية.'
+              : 'Everything updates with the selected filter, from real POS.',
+          textAlign: TextAlign.center, style: const TextStyle(fontSize: 10.5,
+              color: UellowColors.muted, fontWeight: FontWeight.w600)),
+    ]));
+  }
+
+  // ── pieces ──
+  Widget _periodChips(bool ar) {
+    final opts = <(String, String)>[
+      ('today', ar ? 'اليوم' : 'Today'),
+      ('week', ar ? 'أسبوع' : 'Week'),
+      ('month', ar ? 'الشهر' : 'Month'),
+      ('year', ar ? 'السنة' : 'Year'),
+    ];
+    return SingleChildScrollView(scrollDirection: Axis.horizontal,
+      child: Row(children: [
+        for (final o in opts) Padding(
+          padding: const EdgeInsetsDirectional.only(end: 7),
+          child: GestureDetector(
+            onTap: () {
+              if (_period == o.$1) return;
+              setState(() { _period = o.$1; _from = null; _to = null; });
+              _load();
+            },
+            child: _chipBox(o.$2, _period == o.$1)),
+        ),
+        GestureDetector(onTap: _pickCustom,
+            child: _chipBox(ar ? '📅 مخصّص' : '📅 Custom', _period == 'custom')),
       ]),
     );
   }
 
-  Widget _kpi(String label, String value, Color color, {String? sub}) =>
-      Expanded(child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 12),
-        decoration: BoxDecoration(color: Colors.white,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: const Color(0xFFECECEC))),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(label, style: const TextStyle(fontSize: 10.5,
-              color: UellowColors.muted, fontWeight: FontWeight.w700)),
-          const SizedBox(height: 5),
-          FittedBox(fit: BoxFit.scaleDown, alignment: Alignment.centerLeft,
-              child: Text(value, style: TextStyle(fontSize: 15,
-                  fontWeight: FontWeight.w900, color: color))),
-          if (sub != null) Text(sub, style: TextStyle(fontSize: 10.5,
-              fontWeight: FontWeight.w800, color: color)),
-        ]),
-      ));
+  Widget _chipBox(String t, bool on) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+    decoration: BoxDecoration(
+      color: on ? _gold : Colors.white,
+      borderRadius: BorderRadius.circular(999),
+      border: Border.all(color: on ? _gold : const Color(0xFFE5E5E5)),
+    ),
+    child: Text(t, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800,
+        color: on ? const Color(0xFF2A1D00) : UellowColors.muted)),
+  );
 
-  Widget _dayChart(List byDay) {
-    final days = byDay.whereType<Map>().toList();
-    double mx = 1;
-    for (final d in days) {
-      final v = (d['sales'] as num?)?.toDouble() ?? 0;
-      if (v > mx) mx = v;
+  String _periodLabel(bool ar, Map d) {
+    final p = (d['period'] ?? '').toString();
+    const mAr = ['', 'يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو',
+        'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
+    final from = DateTime.tryParse('${d['from']}');
+    if (p == 'month' && from != null) {
+      return ar ? '${mAr[from.month]} ${from.year}'
+                : '${from.month}/${from.year}';
     }
-    final show = days.length > 31 ? days.sublist(days.length - 31) : days;
-    return SizedBox(height: 90, child: Row(
-      crossAxisAlignment: CrossAxisAlignment.end,
-      children: [
+    if (p == 'year' && from != null) return '${from.year}';
+    if (p == 'today') return ar ? 'اليوم' : 'Today';
+    if (p == 'week') return ar ? 'آخر ٧ أيام' : 'Last 7 days';
+    return '${d['from']} → ${d['to']}';
+  }
+
+  Widget _alertBanner(bool ar, Map a) {
+    final down = a['level'] == 'down';
+    final c = down ? _bad : _good;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 11),
+      padding: const EdgeInsets.all(11),
+      decoration: BoxDecoration(color: c.withValues(alpha: .10),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: c.withValues(alpha: .30))),
+      child: Row(children: [
+        Icon(down ? Icons.trending_down_rounded : Icons.trending_up_rounded,
+            color: c, size: 20),
+        const SizedBox(width: 8),
+        Expanded(child: Text((ar ? a['ar'] : a['en'])?.toString() ?? '',
+            style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800,
+                color: c))),
+      ]),
+    );
+  }
+
+  Widget _kpiCard(String label, String value, dynamic delta, Color accent) {
+    final dn = delta is num;
+    final down = dn && delta < 0;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(13, 12, 13, 12),
+      decoration: BoxDecoration(color: Colors.white,
+          borderRadius: BorderRadius.circular(15),
+          border: Border.all(color: const Color(0xFFECECEC))),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Container(width: 4, height: 15, decoration: BoxDecoration(
+              color: accent, borderRadius: BorderRadius.circular(2))),
+          const SizedBox(width: 6),
+          Expanded(child: Text(label, style: const TextStyle(fontSize: 11,
+              color: UellowColors.muted, fontWeight: FontWeight.w700))),
+        ]),
+        const SizedBox(height: 5),
+        FittedBox(fit: BoxFit.scaleDown, alignment: Alignment.centerLeft,
+            child: Text(value, style: const TextStyle(fontSize: 18,
+                fontWeight: FontWeight.w900, color: UellowColors.darkBrown))),
+        if (dn) ...[
+          const SizedBox(height: 3),
+          Text('${down ? '▼' : '▲'} ${delta.abs()}%',
+              style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800,
+                  color: down ? _bad : _good)),
+        ],
+      ]),
+    );
+  }
+
+  Widget _miniKpi(String v, String l, {bool red = false}) => Expanded(
+    child: Container(
+      padding: const EdgeInsets.symmetric(vertical: 9, horizontal: 5),
+      decoration: BoxDecoration(color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: const Color(0xFFECECEC))),
+      child: Column(children: [
+        FittedBox(fit: BoxFit.scaleDown, child: Text(v, style: TextStyle(
+            fontSize: 14, fontWeight: FontWeight.w900,
+            color: red ? _bad : UellowColors.darkBrown))),
+        const SizedBox(height: 2),
+        Text(l, textAlign: TextAlign.center, style: const TextStyle(
+            fontSize: 9.5, color: UellowColors.muted,
+            fontWeight: FontWeight.w700)),
+      ]),
+    ),
+  );
+
+  Widget _section(String title, List<Widget> children, {String? side}) =>
+      Container(
+    margin: const EdgeInsets.only(bottom: 11),
+    padding: const EdgeInsets.all(13),
+    decoration: BoxDecoration(color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFECECEC))),
+    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Row(children: [
+        Expanded(child: Text(title, style: const TextStyle(fontSize: 14,
+            fontWeight: FontWeight.w900, color: UellowColors.darkBrown))),
+        if (side != null) Text(side, style: const TextStyle(fontSize: 10.5,
+            color: UellowColors.muted, fontWeight: FontWeight.w700)),
+      ]),
+      const SizedBox(height: 10),
+      ...children,
+    ]),
+  );
+
+  Widget _dailyChart(List days) {
+    final list = days.whereType<Map>().toList();
+    if (list.isEmpty) return const SizedBox(height: 40);
+    final show = list.length > 31 ? list.sublist(list.length - 31) : list;
+    double mx = 1;
+    for (final d in show) {
+      final a = (d['sales'] as num?)?.toDouble() ?? 0;
+      final b = (d['prev'] as num?)?.toDouble() ?? 0;
+      if (a > mx) mx = a;
+      if (b > mx) mx = b;
+    }
+    return SizedBox(height: 96, child: Row(
+      crossAxisAlignment: CrossAxisAlignment.end, children: [
         for (final d in show)
           Expanded(child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 1),
-            child: Column(mainAxisAlignment: MainAxisAlignment.end, children: [
+            child: Stack(alignment: Alignment.bottomCenter, children: [
               Container(
-                height: (((d['sales'] as num?)?.toDouble() ?? 0) / mx * 72)
-                    .clamp(1, 72),
-                decoration: BoxDecoration(
-                    color: ((d['sales'] as num?)?.toDouble() ?? 0) < 0
-                        ? const Color(0xFFEF4444)
-                        : UellowColors.yellow,
+                height: (((d['prev'] as num?)?.toDouble() ?? 0) / mx * 80)
+                    .clamp(0, 80),
+                decoration: BoxDecoration(color: const Color(0xFFD9D2C4),
                     borderRadius: const BorderRadius.vertical(
                         top: Radius.circular(2))),
               ),
+              FractionallySizedBox(widthFactor: 0.6, child: Container(
+                height: (((d['sales'] as num?)?.toDouble() ?? 0) / mx * 80)
+                    .clamp(1, 80),
+                decoration: BoxDecoration(color: _gold,
+                    borderRadius: const BorderRadius.vertical(
+                        top: Radius.circular(2))),
+              )),
             ]),
           )),
       ],
     ));
   }
 
-  Widget _section(String title, List<Widget> children) => Container(
-    margin: const EdgeInsets.only(bottom: 12),
-    padding: const EdgeInsets.fromLTRB(14, 12, 14, 8),
-    decoration: BoxDecoration(color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFECECEC))),
-    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Text(title, style: const TextStyle(fontSize: 12.5,
-          fontWeight: FontWeight.w900, color: UellowColors.darkBrown)),
-      const SizedBox(height: 8),
-      ...children,
-    ]),
+  Widget _hourChart(List hourly, bool ar) {
+    final h = hourly.map((e) => (e as num?)?.toDouble() ?? 0).toList();
+    while (h.length < 24) h.add(0);
+    double mx = 1;
+    int peak = 0;
+    for (int i = 0; i < 24; i++) {
+      if (h[i] > mx) mx = h[i];
+      if (h[i] > h[peak]) peak = i;
+    }
+    return Column(children: [
+      SizedBox(height: 70, child: Row(
+        crossAxisAlignment: CrossAxisAlignment.end, children: [
+          for (int i = 0; i < 24; i++)
+            Expanded(child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 0.8),
+              child: Container(
+                height: (h[i] / mx * 60).clamp(2, 60),
+                decoration: BoxDecoration(
+                    color: i == peak ? _bad
+                        : (h[i] > mx * .6 ? _gold : const Color(0xFFE7DFCB)),
+                    borderRadius: const BorderRadius.vertical(
+                        top: Radius.circular(2))),
+              ),
+            )),
+        ],
+      )),
+      const SizedBox(height: 4),
+      Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: const [
+        Text('12', style: TextStyle(fontSize: 8.5, color: UellowColors.muted)),
+        Text('6', style: TextStyle(fontSize: 8.5, color: UellowColors.muted)),
+        Text('12', style: TextStyle(fontSize: 8.5, color: UellowColors.muted)),
+        Text('18', style: TextStyle(fontSize: 8.5, color: UellowColors.muted)),
+        Text('23', style: TextStyle(fontSize: 8.5, color: UellowColors.muted)),
+      ]),
+    ]);
+  }
+
+  Widget _payMix(List pays, String cur) {
+    final list = pays.whereType<Map>().toList();
+    final cols = [_info, _cash, _pos, _gold, _brown];
+    return Column(children: [
+      ClipRRect(borderRadius: BorderRadius.circular(999),
+        child: SizedBox(height: 16, child: Row(children: [
+          for (int i = 0; i < list.length; i++)
+            Expanded(flex: ((list[i]['pct'] as num?)?.toInt() ?? 0)
+                .clamp(1, 100),
+                child: Container(color: cols[i % cols.length])),
+        ])),
+      ),
+      const SizedBox(height: 10),
+      for (int i = 0; i < list.length; i++) Padding(
+        padding: const EdgeInsets.symmetric(vertical: 3),
+        child: Row(children: [
+          Container(width: 12, height: 12, decoration: BoxDecoration(
+              color: cols[i % cols.length],
+              borderRadius: BorderRadius.circular(3))),
+          const SizedBox(width: 8),
+          Expanded(child: Text(list[i]['method']?.toString() ?? '',
+              style: const TextStyle(fontSize: 12.5,
+                  fontWeight: FontWeight.w700))),
+          Text('${list[i]['amount'] ?? 0} $cur',
+              style: const TextStyle(fontSize: 11.5,
+                  color: UellowColors.muted, fontWeight: FontWeight.w600)),
+          const SizedBox(width: 8),
+          Text('${list[i]['pct'] ?? 0}%', style: const TextStyle(fontSize: 12.5,
+              fontWeight: FontWeight.w900, color: UellowColors.darkBrown)),
+        ]),
+      ),
+    ]);
+  }
+
+  Widget _cashierRow(int i, Map c, String cur, bool ar) {
+    const medals = ['🥇', '🥈', '🥉'];
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(children: [
+        SizedBox(width: 24, child: Text(i < 3 ? medals[i] : '${i + 1}',
+            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w900,
+                color: UellowColors.muted))),
+        const SizedBox(width: 6),
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+          Text(c['name']?.toString() ?? '', maxLines: 1,
+              overflow: TextOverflow.ellipsis, style: const TextStyle(
+                  fontSize: 12.5, fontWeight: FontWeight.w800)),
+          Text('${c['orders'] ?? 0} ${ar ? 'عملية' : 'ops'} · '
+              '${ar ? 'هامش' : 'margin'} ${c['margin_pct'] ?? 0}%',
+              style: const TextStyle(fontSize: 10.5,
+                  color: UellowColors.muted, fontWeight: FontWeight.w600)),
+        ])),
+        Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+          Text('${c['sales'] ?? 0} $cur', style: const TextStyle(fontSize: 13,
+              fontWeight: FontWeight.w900, color: UellowColors.darkBrown)),
+          Text('${ar ? 'ربح' : 'P'} ${c['profit'] ?? 0}',
+              style: const TextStyle(fontSize: 10,
+                  color: _good, fontWeight: FontWeight.w800)),
+        ]),
+      ]),
+    );
+  }
+
+  Widget _segToggle(bool ar) => Row(children: [
+    GestureDetector(onTap: () => setState(() => _topQty = false),
+        child: _segBox(ar ? 'الأكثر ربحًا' : 'By profit', !_topQty)),
+    const SizedBox(width: 6),
+    GestureDetector(onTap: () => setState(() => _topQty = true),
+        child: _segBox(ar ? 'الأكثر كمية' : 'By quantity', _topQty)),
+  ]);
+
+  Widget _segBox(String t, bool on) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
+    decoration: BoxDecoration(color: on ? _brown : const Color(0xFFF1EEE7),
+        borderRadius: BorderRadius.circular(999)),
+    child: Text(t, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800,
+        color: on ? const Color(0xFFF5C320) : UellowColors.muted)),
   );
 
-  Widget _line(String left, String right) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 4),
-    child: Row(children: [
-      Expanded(child: Text(left, maxLines: 1, overflow: TextOverflow.ellipsis,
-          style: const TextStyle(fontSize: 11.5))),
-      const SizedBox(width: 8),
-      Text(right, style: const TextStyle(fontSize: 11.5,
-          fontWeight: FontWeight.w800, color: UellowColors.darkBrown)),
-    ]),
-  );
+  Widget _prodRow(Map p, String cur, bool ar) {
+    final metric = _topQty
+        ? '${(p['qty'] as num?)?.toStringAsFixed(0) ?? 0} ${ar ? 'قطعة' : 'pcs'}'
+        : '${p['profit'] ?? 0} $cur';
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 5),
+      child: Row(children: [
+        ClipRRect(borderRadius: BorderRadius.circular(9),
+            child: Image.network(
+                (p['image'] ?? '').toString().startsWith('http')
+                    ? p['image'].toString()
+                    : '${UellowApi.instance.baseUrl}${p['image'] ?? ''}',
+                width: 38, height: 38, fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => Container(width: 38, height: 38,
+                    color: const Color(0xFFF1EEE7),
+                    child: const Icon(Icons.inventory_2_outlined, size: 16,
+                        color: UellowColors.muted)))),
+        const SizedBox(width: 9),
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+          Text(p['name']?.toString() ?? '', maxLines: 1,
+              overflow: TextOverflow.ellipsis, style: const TextStyle(
+                  fontSize: 12, fontWeight: FontWeight.w700)),
+          Text('×${(p['qty'] as num?)?.toStringAsFixed(0) ?? 0} · '
+              '${ar ? 'مبيعات' : 'sales'} ${p['sales'] ?? 0}',
+              style: const TextStyle(fontSize: 10,
+                  color: UellowColors.muted, fontWeight: FontWeight.w600)),
+        ])),
+        Text(metric, style: const TextStyle(fontSize: 13,
+            fontWeight: FontWeight.w900, color: UellowColors.darkBrown)),
+      ]),
+    );
+  }
+
+  Widget _catBars(List cats, String cur) {
+    final list = cats.whereType<Map>().toList();
+    double mx = 1;
+    for (final c in list) {
+      final v = (c['total'] as num?)?.toDouble() ?? 0;
+      if (v > mx) mx = v;
+    }
+    return Column(children: [
+      for (final c in list) Padding(
+        padding: const EdgeInsets.symmetric(vertical: 5),
+        child: Row(children: [
+          SizedBox(width: 92, child: Text(c['name']?.toString() ?? '',
+              maxLines: 1, overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 11.5,
+                  fontWeight: FontWeight.w700))),
+          Expanded(child: ClipRRect(borderRadius: BorderRadius.circular(999),
+            child: Container(height: 10, color: const Color(0xFFF1EEE7),
+              child: FractionallySizedBox(alignment: Alignment.centerRight,
+                widthFactor: (((c['total'] as num?)?.toDouble() ?? 0) / mx)
+                    .clamp(0.02, 1.0),
+                child: Container(decoration: const BoxDecoration(
+                    gradient: LinearGradient(
+                        colors: [_gold, Color(0xFFF5C320)]))))),
+          )),
+          const SizedBox(width: 8),
+          Text('${c['total'] ?? 0}', style: const TextStyle(fontSize: 11.5,
+              fontWeight: FontWeight.w900, color: UellowColors.darkBrown)),
+        ]),
+      ),
+    ]);
+  }
+
+  Widget _highlights(bool ar, Map hl, String cur) {
+    final bd = (hl['best_day'] as Map?) ?? const {};
+    final pk = (hl['peak_hour'] as Map?) ?? const {};
+    final bo = (hl['biggest_order'] as Map?) ?? const {};
+    final da = (hl['daily_avg'] as Map?) ?? const {};
+    final ph = (pk['hour'] as num?)?.toInt() ?? 0;
+    String hr(int h) => h == 0 ? '12${ar ? 'ص' : 'am'}'
+        : h < 12 ? '$h${ar ? 'ص' : 'am'}'
+        : h == 12 ? '12${ar ? 'م' : 'pm'}'
+        : '${h - 12}${ar ? 'م' : 'pm'}';
+    Widget card(String l, String v, String s) => Expanded(child: Container(
+      padding: const EdgeInsets.all(11),
+      decoration: BoxDecoration(
+          gradient: const LinearGradient(begin: Alignment.topRight,
+              end: Alignment.bottomLeft,
+              colors: [Color(0xFFFDF3D6), Colors.white]),
+          borderRadius: BorderRadius.circular(13),
+          border: Border.all(color: const Color(0xFFEFE4C6))),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(l, style: const TextStyle(fontSize: 10.5,
+            color: UellowColors.muted, fontWeight: FontWeight.w800)),
+        const SizedBox(height: 3),
+        FittedBox(fit: BoxFit.scaleDown, alignment: Alignment.centerLeft,
+            child: Text(v, style: const TextStyle(fontSize: 15,
+                fontWeight: FontWeight.w900, color: UellowColors.darkBrown))),
+        const SizedBox(height: 1),
+        Text(s, maxLines: 1, overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontSize: 9.5, color: UellowColors.muted,
+                fontWeight: FontWeight.w700)),
+      ]),
+    ));
+    return Column(children: [
+      Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        card(ar ? '📅 أفضل يوم' : '📅 Best day',
+            '${bd['date'] ?? '—'}',
+            '${bd['sales'] ?? 0} $cur · ${bd['orders'] ?? 0} ${ar ? 'عملية' : 'ops'}'),
+        const SizedBox(width: 9),
+        card(ar ? '🕗 أعلى ساعة' : '🕗 Peak hour', hr(ph),
+            '${pk['pct'] ?? 0}% ${ar ? 'من المبيعات' : 'of sales'}'),
+      ]),
+      const SizedBox(height: 9),
+      Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        card(ar ? '🧾 أكبر عملية' : '🧾 Biggest order',
+            '${bo['amount'] ?? 0} $cur',
+            '${bo['cashier'] ?? ''} · ${bo['date'] ?? ''}'),
+        const SizedBox(width: 9),
+        card(ar ? '📈 متوسط يومي' : '📈 Daily avg',
+            '${da['sales'] ?? 0} $cur',
+            '${da['orders'] ?? 0} ${ar ? 'عملية/يوم' : 'ops/day'}'),
+      ]),
+    ]);
+  }
+
+  Future<void> _export(bool ar, Map d) async {
+    final k = (d['kpi'] as Map?) ?? const {};
+    final cur = (d['currency'] ?? 'KD').toString();
+    final t = StringBuffer()
+      ..writeln(ar ? 'تقرير نقاط البيع' : 'POS report')
+      ..writeln('${d['from']} → ${d['to']}')
+      ..writeln('${ar ? 'المبيعات' : 'Sales'}: ${k['net']} $cur')
+      ..writeln('${ar ? 'الربح' : 'Profit'}: ${k['profit']} $cur '
+          '(${k['margin_pct']}%)')
+      ..writeln('${ar ? 'العمليات' : 'Orders'}: ${k['orders']}')
+      ..writeln('${ar ? 'متوسط السلة' : 'Avg basket'}: ${k['avg_basket']} $cur')
+      ..writeln('${ar ? 'المرتجعات' : 'Refunds'}: ${k['refunds']} $cur');
+    await Clipboard.setData(ClipboardData(text: t.toString()));
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(ar ? 'تم نسخ ملخّص التقرير' : 'Report summary copied')));
+    }
+  }
 }
 
 // Profit pill — green when positive, red on a loss; shows margin % + cost.
