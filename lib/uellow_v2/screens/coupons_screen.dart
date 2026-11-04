@@ -78,11 +78,15 @@ class _CouponsScreenState extends State<CouponsScreen> {
             return _errorState(err, ar);
           }
           final all = snap.data ?? const <_Coupon>[];
+          final active = all.where((c) => !c.expired).toList();
+          final expiredList = all.where((c) => c.expired).toList();
           final filtered = _tab == 0
-              ? all
+              ? active
               : _tab == 1
-                  ? all.where((c) => c.kind == 'program' || c.category == 'promotion').toList()
-                  : all.where((c) => c.kind == 'card').toList();
+                  ? active.where((c) => c.kind == 'program' || c.category == 'promotion').toList()
+                  : _tab == 2
+                      ? active.where((c) => c.kind == 'card').toList()
+                      : expiredList;
           return Column(children: [
             // Tabs
             Container(
@@ -91,11 +95,13 @@ class _CouponsScreenState extends State<CouponsScreen> {
                 border: Border(bottom: BorderSide(color: UellowColors.border)),
               ),
               child: Row(children: [
-                _tabBtn(ar ? 'الكل' : 'All', 0, all.length),
+                _tabBtn(ar ? 'الكل' : 'All', 0, active.length),
                 _tabBtn(ar ? 'العروض' : 'Promotions', 1,
-                    all.where((c) => c.kind == 'program' || c.category == 'promotion').length),
+                    active.where((c) => c.kind == 'program' || c.category == 'promotion').length),
                 _tabBtn(ar ? 'كوبوناتي' : 'My Codes', 2,
-                    all.where((c) => c.kind == 'card').length),
+                    active.where((c) => c.kind == 'card').length),
+                if (expiredList.isNotEmpty)
+                  _tabBtn(ar ? 'منتهية' : 'Expired', 3, expiredList.length),
               ]),
             ),
             Expanded(child: RefreshIndicator(
@@ -253,6 +259,11 @@ class _Coupon {
   final bool usableNow;
   final bool isAuto;              // v2.1.56 — true ⇔ auto-applied program
   final String color;             // hex like '#F5C320'
+  final int? daysRemaining;       // v2.2.172
+  final String status;            // active | locked | expired
+  final Map<String, String>? reason;
+  final int pointsNeeded;
+  final bool expired;
 
   const _Coupon({
     required this.id, required this.kind,
@@ -261,6 +272,8 @@ class _Coupon {
     this.expiry, required this.code, required this.terms,
     required this.category, required this.usableNow,
     this.isAuto = false, required this.color,
+    this.daysRemaining, this.status = 'active', this.reason,
+    this.pointsNeeded = 0, this.expired = false,
   });
 
   factory _Coupon.fromJson(Map<String, dynamic> j) {
@@ -287,6 +300,15 @@ class _Coupon {
       usableNow: (j['usable_now'] ?? true) as bool,
       isAuto: (j['is_auto'] ?? false) as bool,
       color: (j['color'] ?? '#F5C320').toString(),
+      daysRemaining: (j['days_remaining'] as num?)?.toInt(),
+      status: (j['status'] ?? 'active').toString(),
+      reason: j['reason'] is Map
+          ? {'en': ((j['reason'] as Map)['en'] ?? '').toString(),
+             'ar': ((j['reason'] as Map)['ar']
+                 ?? (j['reason'] as Map)['en'] ?? '').toString()}
+          : null,
+      pointsNeeded: (j['points_needed'] as num?)?.toInt() ?? 0,
+      expired: (j['expired'] ?? false) as bool,
     );
   }
 
@@ -480,6 +502,20 @@ class _CouponRow extends StatelessWidget {
                             fontSize: 10.5, fontWeight: FontWeight.w800))),
                   ]),
                 ),
+                if (!coupon.usableNow && !coupon.expired &&
+                    coupon.reason != null)
+                  Padding(padding: const EdgeInsets.only(top: 4),
+                    child: Row(children: [
+                      const Icon(Icons.lock_outline, size: 11,
+                          color: Color(0xFFB45309)),
+                      const SizedBox(width: 3),
+                      Flexible(child: Text(
+                          coupon.reason![ar ? 'ar' : 'en'] ?? '',
+                          maxLines: 2, overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(color: Color(0xFFB45309),
+                              fontSize: 10.5, fontWeight: FontWeight.w800))),
+                    ]),
+                  ),
               ]),
             ),
           )),
@@ -510,9 +546,8 @@ class _CouponRow extends StatelessWidget {
     final days = d.difference(DateTime.now()).inDays;
     if (days < 0) return ar ? 'منتهي الصلاحية' : 'Expired';
     if (days == 0) return ar ? 'ينتهي اليوم' : 'Expires today';
-    if (days <= 7) return ar ? 'باقي $days أيام' : '$days days left';
-    return ar ? 'ينتهي ${d.toIso8601String().split("T").first}'
-              : 'Expires ${d.toIso8601String().split("T").first}';
+    final ds = d.toIso8601String().split("T").first;
+    return ar ? 'باقي $days يوم · ينتهي $ds' : '$days days left · $ds';
   }
 
   static Color _expiryColor(String iso) {
