@@ -30,7 +30,7 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
   final List<Map<String, dynamic>> _rows = [];
   int _page = 1, _pages = 1, _total = 0;
   bool _loading = false;
-  String _q = '', _state = '';
+  String _q = '', _state = '', _prep = '';
 
   @override
   void initState() {
@@ -62,7 +62,7 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
     setState(() => _loading = true);
     try {
       final d = await AdminApi.instance
-          .orders(page: _page, q: _q, state: _state);
+          .orders(page: _page, q: _q, state: _state, prep: _prep);
       _pages = (d['pages'] as num?)?.toInt() ?? 1;
       _total = (d['total'] as num?)?.toInt() ?? 0;
       _rows.addAll(((d['orders'] as List?) ?? const [])
@@ -139,6 +139,19 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
                 _chip(ar ? 'ملغاة' : 'Cancelled', 'cancel'),
               ],
             )),
+            const SizedBox(height: 7),
+            SizedBox(height: 28, child: ListView(
+              scrollDirection: Axis.horizontal,
+              children: [
+                _prepChip(ar ? 'كل التجهيز' : 'All prep', ''),
+                _prepChip(ar ? '🕒 قيد الانتظار' : '🕒 To prepare',
+                    'to_prepare'),
+                _prepChip(ar ? '👨‍🍳 جارِ التحضير' : '👨‍🍳 Preparing',
+                    'preparing'),
+                _prepChip(ar ? '📦 جاهز' : '📦 Ready', 'ready_for_pickup'),
+                _prepChip(ar ? '✅ تم الاستلام' : '✅ Picked up', 'picked_up'),
+              ],
+            )),
           ]),
         ),
         Expanded(child: _rows.isEmpty && _loading
@@ -189,6 +202,21 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
       ),
     );
   }
+
+  Widget _prepChip(String label, String value) {
+    final sel = _prep == value;
+    return Padding(
+      padding: const EdgeInsetsDirectional.only(end: 8),
+      child: ChoiceChip(
+        label: Text(label, style: const TextStyle(fontSize: 10.5,
+            fontWeight: FontWeight.w800, color: UellowColors.darkBrown)),
+        selected: sel, showCheckmark: false,
+        selectedColor: UellowColors.yellow, backgroundColor: Colors.white,
+        side: BorderSide.none, visualDensity: VisualDensity.compact,
+        onSelected: (_) { _prep = value; _load(reset: true); },
+      ),
+    );
+  }
 }
 
 class _OrderTile extends StatelessWidget {
@@ -201,6 +229,25 @@ class _OrderTile extends StatelessWidget {
     'draft': Color(0xFF6B7280), 'sent': Color(0xFF6B7280),
     'cancel': Color(0xFFEF4444),
   };
+
+  static Color _prepColor(String v) {
+    switch (v) {
+      case 'preparing': return const Color(0xFFD97706);
+      case 'ready_for_pickup': return const Color(0xFF2563EB);
+      case 'picked_up': return const Color(0xFF16A34A);
+    }
+    return const Color(0xFF6B7280);
+  }
+
+  static String _prepLabel(String v, bool ar) {
+    switch (v) {
+      case 'to_prepare': return ar ? 'قيد الانتظار' : 'To prepare';
+      case 'preparing': return ar ? 'جارِ التحضير' : 'Preparing';
+      case 'ready_for_pickup': return ar ? 'جاهز' : 'Ready';
+      case 'picked_up': return ar ? 'تم الاستلام' : 'Picked up';
+    }
+    return '';
+  }
 
   String _stateLabel() {
     final ds = (o['delivery_status'] ?? '').toString();
@@ -247,6 +294,17 @@ class _OrderTile extends StatelessWidget {
               child: Text(_stateLabel(), style: TextStyle(fontSize: 9.5,
                   fontWeight: FontWeight.w800, color: c)),
             ),
+            if (o['is_lamma'] == true) ...[
+              const SizedBox(width: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 6, vertical: 2.5),
+                decoration: BoxDecoration(color: const Color(0xFFFEF3C7),
+                    borderRadius: BorderRadius.circular(6)),
+                child: const Text('🍯 لمّة', style: TextStyle(fontSize: 9.5,
+                    fontWeight: FontWeight.w900, color: Color(0xFF92400E))),
+              ),
+            ],
             const Spacer(),
             Text('${(m['amount'] as num? ?? 0).toStringAsFixed((m['digits'] as num?)?.toInt() ?? 3)} ${m['symbol'] ?? ''}',
                 style: const TextStyle(fontSize: 14,
@@ -267,7 +325,39 @@ class _OrderTile extends StatelessWidget {
             Text(o['date']?.toString() ?? '', style: const TextStyle(
                 fontSize: 10, color: UellowColors.muted)),
           ]),
-          const SizedBox(height: 4),
+          if ((o['area'] ?? '').toString().isNotEmpty) ...[
+            const SizedBox(height: 3),
+            Row(children: [
+              const Icon(Icons.location_on_outlined, size: 13,
+                  color: Color(0xFF0E7490)),
+              const SizedBox(width: 4),
+              Expanded(child: Text(o['area'].toString(),
+                  maxLines: 1, overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 10.5,
+                      fontWeight: FontWeight.w700, color: Color(0xFF0E7490)))),
+            ]),
+          ],
+          if (((o['thumbs'] as List?) ?? const []).isNotEmpty) ...[
+            const SizedBox(height: 6),
+            SizedBox(height: 30, child: Row(children: [
+              for (final t in ((o['thumbs'] as List?) ?? const []).take(5))
+                Padding(
+                  padding: const EdgeInsetsDirectional.only(end: 5),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(6),
+                    child: Image.network(t.toString(),
+                        width: 30, height: 30, fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => Container(
+                            width: 30, height: 30,
+                            color: const Color(0xFFF1F1F1),
+                            child: const Icon(
+                                Icons.image_not_supported_outlined,
+                                size: 14, color: UellowColors.muted))),
+                  ),
+                ),
+            ])),
+          ],
+          const SizedBox(height: 6),
           Row(children: [
             Container(
               padding: const EdgeInsets.symmetric(
@@ -289,6 +379,21 @@ class _OrderTile extends StatelessWidget {
               Text('· ${o['payment']}', style: const TextStyle(fontSize: 10,
                   color: UellowColors.muted)),
             ],
+            const Spacer(),
+            if ((o['preparation_state'] ?? '').toString().isNotEmpty)
+              Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 7, vertical: 2.5),
+                decoration: BoxDecoration(
+                    color: _prepColor(o['preparation_state'].toString())
+                        .withValues(alpha: .12),
+                    borderRadius: BorderRadius.circular(6)),
+                child: Text(
+                    _prepLabel(o['preparation_state'].toString(), ar),
+                    style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900,
+                        color: _prepColor(
+                            o['preparation_state'].toString()))),
+              ),
           ]),
         ]),
       ),

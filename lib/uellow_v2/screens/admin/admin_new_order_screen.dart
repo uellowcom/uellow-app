@@ -1,7 +1,9 @@
 // =============================================================================
-// AdminNewOrderScreen (v2.2.41) — create a sale order from the admin console:
-// pick/enter a customer, search & add products, then save as a quotation or
-// create & confirm. Backed by POST /api/mobile/v2/admin/order/create.
+// AdminNewOrderScreen (v2.2.171) — إنشاء طلب من الكونسول كالباك إند:
+// • اختيار عميل حالي (بحث) أو عميل جديد بكل تفاصيله + عنوان منظّم
+//   (المحافظة/المدينة/القطعة/الشارع/الجادة/المنزل).
+// • بحث المنتجات وإضافتها، ثم حفظ كمسودة أو إنشاء واعتماد.
+// Backed by POST /api/mobile/v2/admin/order/create.
 // =============================================================================
 import 'dart:async';
 
@@ -18,23 +20,97 @@ class AdminNewOrderScreen extends StatefulWidget {
 }
 
 class _AdminNewOrderScreenState extends State<AdminNewOrderScreen> {
+  // customer
+  bool _existing = false; // false = new customer, true = pick existing
+  int? _partnerId;
+  String _pickedLabel = '';
   final _name = TextEditingController();
   final _phone = TextEditingController();
+  final _email = TextEditingController();
+  // structured address
+  final _block = TextEditingController();
+  final _street = TextEditingController();
+  final _jadda = TextEditingController();
+  final _house = TextEditingController();
+  List<Map<String, dynamic>> _govs = [];
+  int? _govId;
+  int? _cityId;
+
+  // customer search
+  final _custSearch = TextEditingController();
+  List<Map<String, dynamic>> _custResults = [];
+  bool _custSearching = false;
+  Timer? _custDebounce;
+
+  // products
   final _search = TextEditingController();
   Timer? _debounce;
   List<Map<String, dynamic>> _results = [];
   bool _searching = false, _saving = false;
-
-  // line = {product_id, name, price, qty, image}
   final List<Map<String, dynamic>> _lines = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadAreas();
+  }
 
   @override
   void dispose() {
     _name.dispose();
     _phone.dispose();
+    _email.dispose();
+    _block.dispose();
+    _street.dispose();
+    _jadda.dispose();
+    _house.dispose();
+    _custSearch.dispose();
     _search.dispose();
     _debounce?.cancel();
+    _custDebounce?.cancel();
     super.dispose();
+  }
+
+  Future<void> _loadAreas() async {
+    try {
+      final d = await AdminApi.instance.geoAreas();
+      _govs = ((d['governorates'] as List?) ?? const [])
+          .map((e) => (e as Map).cast<String, dynamic>()).toList();
+      if (mounted) setState(() {});
+    } catch (_) {}
+  }
+
+  List<Map<String, dynamic>> get _cities {
+    final g = _govs.firstWhere((e) => e['id'] == _govId,
+        orElse: () => const {});
+    return ((g['cities'] as List?) ?? const [])
+        .map((e) => (e as Map).cast<String, dynamic>()).toList();
+  }
+
+  bool get _ar => UellowApi.instance.lang == 'ar';
+
+  Future<void> _custDoSearch(String q) async {
+    if (q.trim().length < 2) {
+      setState(() => _custResults = []);
+      return;
+    }
+    setState(() => _custSearching = true);
+    try {
+      _custResults = await AdminApi.instance.customersSearch(q.trim());
+    } catch (_) {
+      _custResults = [];
+    }
+    if (mounted) setState(() => _custSearching = false);
+  }
+
+  void _pickCustomer(Map<String, dynamic> c) {
+    setState(() {
+      _partnerId = (c['id'] as num).toInt();
+      _pickedLabel = '${c['name'] ?? ''}'
+          '${(c['phone'] ?? '').toString().isNotEmpty ? ' · ${c['phone']}' : ''}';
+      _custResults = [];
+      _custSearch.clear();
+    });
   }
 
   Future<void> _doSearch(String q) async {
@@ -77,31 +153,48 @@ class _AdminNewOrderScreenState extends State<AdminNewOrderScreen> {
       s + ((l['price'] as num? ?? 0) * (l['qty'] as num? ?? 0)));
 
   Future<void> _save({required bool confirm}) async {
-    final ar = UellowApi.instance.lang == 'ar';
+    final ar = _ar;
     if (_lines.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(ar ? 'أضف منتجاً واحداً على الأقل'
-              : 'Add at least one product')));
+      _snack(ar ? 'أضف منتجاً واحداً على الأقل' : 'Add at least one product');
       return;
     }
-    if (_name.text.trim().isEmpty && _phone.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(ar ? 'أدخل اسم أو هاتف العميل'
-              : 'Enter a customer name or phone')));
+    if (_existing && _partnerId == null) {
+      _snack(ar ? 'اختر عميلاً حالياً' : 'Pick an existing customer');
+      return;
+    }
+    if (!_existing &&
+        _name.text.trim().isEmpty && _phone.text.trim().isEmpty) {
+      _snack(ar ? 'أدخل اسم أو هاتف العميل'
+                : 'Enter a customer name or phone');
       return;
     }
     setState(() => _saving = true);
     try {
-      await AdminApi.instance.orderCreate({
-        'customer_name': _name.text.trim(),
-        'customer_phone': _phone.text.trim(),
+      final body = <String, dynamic>{
         'confirm': confirm,
         'lines': [for (final l in _lines)
           {'product_id': l['product_id'], 'qty': l['qty']}],
-      });
+      };
+      if (_existing && _partnerId != null) {
+        body['partner_id'] = _partnerId;
+      } else {
+        body['customer_name'] = _name.text.trim();
+        body['customer_phone'] = _phone.text.trim();
+        if (_email.text.trim().isNotEmpty) {
+          body['customer_email'] = _email.text.trim();
+        }
+        if (_govId != null) body['gov_id'] = _govId;
+        if (_cityId != null) body['city_id'] = _cityId;
+        if (_block.text.trim().isNotEmpty) body['block'] = _block.text.trim();
+        if (_street.text.trim().isNotEmpty) {
+          body['street'] = _street.text.trim();
+        }
+        if (_jadda.text.trim().isNotEmpty) body['jadda'] = _jadda.text.trim();
+        if (_house.text.trim().isNotEmpty) body['house'] = _house.text.trim();
+      }
+      await AdminApi.instance.orderCreate(body);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text(ar ? 'تم إنشاء الطلب' : 'Order created')));
+        _snack(ar ? 'تم إنشاء الطلب' : 'Order created');
         Navigator.pop(context, true);
       }
     } catch (e) {
@@ -115,9 +208,12 @@ class _AdminNewOrderScreenState extends State<AdminNewOrderScreen> {
     }
   }
 
+  void _snack(String m) => ScaffoldMessenger.of(context)
+      .showSnackBar(SnackBar(content: Text(m)));
+
   @override
   Widget build(BuildContext context) {
-    final ar = UellowApi.instance.lang == 'ar';
+    final ar = _ar;
     return Scaffold(
       backgroundColor: const Color(0xFFF2F3F5),
       appBar: AppBar(
@@ -130,11 +226,16 @@ class _AdminNewOrderScreenState extends State<AdminNewOrderScreen> {
       ),
       body: ListView(padding: const EdgeInsets.all(14), children: [
         _card(ar ? '👤 العميل' : '👤 Customer', [
-          TextField(controller: _name, decoration: _dec(
-              ar ? 'اسم العميل' : 'Customer name')),
-          const SizedBox(height: 10),
-          TextField(controller: _phone, keyboardType: TextInputType.phone,
-              decoration: _dec(ar ? 'الهاتف' : 'Phone')),
+          // toggle existing / new
+          Row(children: [
+            Expanded(child: _segBtn(ar ? 'عميل جديد' : 'New', !_existing,
+                () => setState(() => _existing = false))),
+            const SizedBox(width: 8),
+            Expanded(child: _segBtn(ar ? 'عميل حالي' : 'Existing', _existing,
+                () => setState(() => _existing = true))),
+          ]),
+          const SizedBox(height: 12),
+          if (_existing) ..._existingCustomer(ar) else ..._newCustomer(ar),
         ]),
         _card(ar ? '🛒 المنتجات' : '🛒 Products', [
           TextField(
@@ -215,6 +316,136 @@ class _AdminNewOrderScreenState extends State<AdminNewOrderScreen> {
     );
   }
 
+  List<Widget> _existingCustomer(bool ar) => [
+        if (_partnerId != null)
+          Container(
+            padding: const EdgeInsets.all(10),
+            margin: const EdgeInsets.only(bottom: 10),
+            decoration: BoxDecoration(color: const Color(0xFFF1FAF3),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFFBBE7C6))),
+            child: Row(children: [
+              const Icon(Icons.check_circle, color: Color(0xFF16A34A),
+                  size: 18),
+              const SizedBox(width: 8),
+              Expanded(child: Text(_pickedLabel, style: const TextStyle(
+                  fontSize: 12.5, fontWeight: FontWeight.w800))),
+              IconButton(
+                  icon: const Icon(Icons.close, size: 18),
+                  onPressed: () => setState(() {
+                        _partnerId = null;
+                        _pickedLabel = '';
+                      })),
+            ]),
+          ),
+        TextField(
+          controller: _custSearch,
+          decoration: _dec(ar ? '🔍 ابحث بالاسم/الهاتف/البريد'
+                              : '🔍 Search name / phone / email',
+              suffix: _custSearching
+                  ? const SizedBox(width: 18, height: 18, child:
+                      Padding(padding: EdgeInsets.all(2),
+                          child: CircularProgressIndicator(strokeWidth: 2)))
+                  : null),
+          onChanged: (v) {
+            _custDebounce?.cancel();
+            _custDebounce = Timer(const Duration(milliseconds: 400),
+                () => _custDoSearch(v));
+          },
+        ),
+        for (final c in _custResults)
+          ListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.person_outline, size: 22,
+                color: UellowColors.darkBrown),
+            title: Text((c['name'] ?? '').toString(),
+                maxLines: 1, overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 12.5,
+                    fontWeight: FontWeight.w700)),
+            subtitle: Text([
+              if ((c['phone'] ?? '').toString().isNotEmpty) c['phone'],
+              if ((c['city'] ?? '').toString().isNotEmpty) c['city'],
+            ].join(' · '), style: const TextStyle(fontSize: 11)),
+            trailing: const Icon(Icons.add_circle_outline,
+                color: UellowColors.darkBrown),
+            onTap: () => _pickCustomer(c),
+          ),
+      ];
+
+  List<Widget> _newCustomer(bool ar) => [
+        TextField(controller: _name, decoration: _dec(
+            ar ? 'اسم العميل' : 'Customer name')),
+        const SizedBox(height: 10),
+        TextField(controller: _phone, keyboardType: TextInputType.phone,
+            decoration: _dec(ar ? 'الهاتف' : 'Phone')),
+        const SizedBox(height: 10),
+        TextField(controller: _email, keyboardType: TextInputType.emailAddress,
+            decoration: _dec(ar ? 'البريد الإلكتروني (اختياري)'
+                                : 'Email (optional)')),
+        const SizedBox(height: 14),
+        Text(ar ? '📍 العنوان' : '📍 Address', style: const TextStyle(
+            fontSize: 12, fontWeight: FontWeight.w900,
+            color: UellowColors.muted)),
+        const SizedBox(height: 8),
+        DropdownButtonFormField<int>(
+          value: _govId,
+          isExpanded: true,
+          decoration: _dec(ar ? 'المحافظة' : 'Governorate'),
+          items: [for (final g in _govs) DropdownMenuItem<int>(
+              value: (g['id'] as num).toInt(),
+              child: Text(ar ? (g['name_ar'] ?? g['name'] ?? '').toString()
+                             : (g['name'] ?? '').toString(),
+                  overflow: TextOverflow.ellipsis))],
+          onChanged: (v) => setState(() { _govId = v; _cityId = null; }),
+        ),
+        const SizedBox(height: 10),
+        DropdownButtonFormField<int>(
+          value: _cityId,
+          isExpanded: true,
+          decoration: _dec(ar ? 'المدينة / المنطقة' : 'City / Area'),
+          items: [for (final c in _cities) DropdownMenuItem<int>(
+              value: (c['id'] as num).toInt(),
+              child: Text(ar ? (c['name_ar'] ?? c['name'] ?? '').toString()
+                             : (c['name'] ?? '').toString(),
+                  overflow: TextOverflow.ellipsis))],
+          onChanged: (v) => setState(() => _cityId = v),
+        ),
+        const SizedBox(height: 10),
+        Row(children: [
+          Expanded(child: TextField(controller: _block,
+              decoration: _dec(ar ? 'قطعة' : 'Block'))),
+          const SizedBox(width: 8),
+          Expanded(child: TextField(controller: _street,
+              decoration: _dec(ar ? 'شارع' : 'Street'))),
+        ]),
+        const SizedBox(height: 10),
+        Row(children: [
+          Expanded(child: TextField(controller: _jadda,
+              decoration: _dec(ar ? 'جادة' : 'Avenue'))),
+          const SizedBox(width: 8),
+          Expanded(child: TextField(controller: _house,
+              decoration: _dec(ar ? 'منزل / مبنى' : 'House / Bldg'))),
+        ]),
+      ];
+
+  Widget _segBtn(String label, bool on, VoidCallback onTap) => GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: on ? UellowColors.darkBrown : Colors.white,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: on
+                ? UellowColors.darkBrown : const Color(0xFFE2E2E2)),
+          ),
+          child: Text(label, style: TextStyle(fontSize: 12.5,
+              fontWeight: FontWeight.w800,
+              color: on ? Colors.white : UellowColors.muted)),
+        ),
+      );
+
   Widget _lineRow(int i, bool ar) {
     final l = _lines[i];
     final qty = (l['qty'] as num).toInt();
@@ -247,7 +478,7 @@ class _AdminNewOrderScreenState extends State<AdminNewOrderScreen> {
   }
 
   InputDecoration _dec(String hint, {Widget? suffix}) => InputDecoration(
-    hintText: hint, isDense: true, suffixIcon: suffix,
+    hintText: hint, labelText: hint, isDense: true, suffixIcon: suffix,
     filled: true, fillColor: Colors.white,
     contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
     border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),

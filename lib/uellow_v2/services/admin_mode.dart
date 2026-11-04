@@ -77,12 +77,14 @@ class AdminApi {
   }
 
   Future<Map<String, dynamic>> orders(
-      {int page = 1, String q = '', String state = ''}) async {
+      {int page = 1, String q = '', String state = '',
+      String prep = ''}) async {
     final r = await UellowApi.instance.getRaw('/api/mobile/v2/admin/orders',
         query: {
           'page': '$page',
           if (q.isNotEmpty) 'q': q,
           if (state.isNotEmpty) 'state': state,
+          if (prep.isNotEmpty) 'prep': prep,
         },
         auth: true);
     return (r['data'] as Map).cast<String, dynamic>();
@@ -302,6 +304,22 @@ class AdminApi {
 
   Future<Map<String, dynamic>> orderCreate(Map<String, dynamic> body) =>
       _post('/api/mobile/v2/admin/order/create', body);
+
+  /// المحافظات ومدنها (لنموذج طلب جديد).
+  Future<Map<String, dynamic>> geoAreas() async {
+    final r = await UellowApi.instance
+        .getRaw('/api/mobile/v2/admin/geo/areas', auth: true);
+    return ((r['data'] as Map?) ?? const {}).cast<String, dynamic>();
+  }
+
+  /// بحث العملاء الحاليين (اسم/هاتف/بريد).
+  Future<List<Map<String, dynamic>>> customersSearch(String q) async {
+    final r = await UellowApi.instance.getRaw(
+        '/api/mobile/v2/admin/customers/search',
+        query: {'q': q}, auth: true);
+    final list = ((r['data'] as Map?)?['customers'] as List?) ?? const [];
+    return list.map((e) => (e as Map).cast<String, dynamic>()).toList();
+  }
 
   // ── v2.2.54 — full order action set from the admin console ───────────
   Future<Map<String, dynamic>> orderLock(int id) =>
