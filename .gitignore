@@ -19,3 +19,6 @@ ios/Flutter/Flutter.podspec
 *.lock
 !pubspec.lock
 dist/
+release/
+*.aab
+*.apk
