@@ -87,6 +87,12 @@ class _OrderScreenState extends State<OrderScreen> {
                 if (order.deliveryTracking != null)
                   _JourneyStrip(tracking: order.deliveryTracking!, ar: ar),
                 _MapBox(tracking: order.deliveryTracking, ar: ar),
+                if (order.dropship == null && order.scheduled != null &&
+                    (order.state == 'sale' || order.state == 'done'))
+                  _ScheduledCard(data: order.scheduled!, ar: ar),
+                if (order.dropship == null && order.shipment != null &&
+                    (order.shipment!['carrier'] ?? '').toString().isNotEmpty)
+                  _ShipmentCard(data: order.shipment!, ar: ar),
                 if (order.timeline.isNotEmpty) _Timeline(timeline: order.timeline, ar: ar),
               ],
               // v2.1.42 — cancellation-request banner (paid orders).
@@ -280,6 +286,137 @@ class _EtaCard extends StatelessWidget {
           ),
           child: Text(ar ? 'اتصال' : 'Call'),
         ),
+      ]),
+    );
+  }
+}
+
+// ─── v2.2.173 — Expected delivery date + "may arrive earlier" note ───
+class _ScheduledCard extends StatelessWidget {
+  const _ScheduledCard({required this.data, required this.ar});
+  final Map<String, dynamic> data;
+  final bool ar;
+  @override
+  Widget build(BuildContext context) {
+    String bi(String k) =>
+        ((data[k] as Map?)?[ar ? 'ar' : 'en'] ?? '').toString();
+    final date = bi('date'), time = bi('time'), note = bi('note');
+    return Container(
+      margin: const EdgeInsets.fromLTRB(14, 0, 14, 10),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: const Color(0xFFECECEC))),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Container(width: 46, height: 46,
+            decoration: BoxDecoration(borderRadius: BorderRadius.circular(13),
+              gradient: const LinearGradient(
+                  colors: [Color(0xFFFFF3CF), Color(0xFFFFE39C)])),
+            child: const Center(
+                child: Text('📅', style: TextStyle(fontSize: 22)))),
+          const SizedBox(width: 12),
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(ar ? 'موعد التوصيل المتوقّع' : 'Expected delivery',
+                  style: const TextStyle(fontSize: 12,
+                      color: UellowColors.muted, fontWeight: FontWeight.w700)),
+              const SizedBox(height: 2),
+              Text('$date${time.isNotEmpty ? ' · $time' : ''}',
+                  style: const TextStyle(fontSize: 16,
+                      fontWeight: FontWeight.w900,
+                      color: UellowColors.darkBrown)),
+            ])),
+        ]),
+        if (note.isNotEmpty) ...[
+          const SizedBox(height: 11),
+          Container(padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(color: const Color(0xFFFFF6E6),
+              borderRadius: BorderRadius.circular(11),
+              border: Border.all(color: const Color(0xFFF0DCA8))),
+            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const Text('⚡', style: TextStyle(fontSize: 13)),
+              const SizedBox(width: 7),
+              Expanded(child: Text(note, style: const TextStyle(fontSize: 11.5,
+                  height: 1.5, color: Color(0xFFB45309),
+                  fontWeight: FontWeight.w600))),
+            ])),
+        ],
+      ]),
+    );
+  }
+}
+
+// ─── v2.2.173 — "Shipped with carrier" professional card ───
+class _ShipmentCard extends StatelessWidget {
+  const _ShipmentCard({required this.data, required this.ar});
+  final Map<String, dynamic> data;
+  final bool ar;
+  @override
+  Widget build(BuildContext context) {
+    final carrier = (data['carrier'] ?? '').toString();
+    final tracking = (data['tracking'] ?? '').toString();
+    final delivered = data['delivered'] == true;
+    final status = ((data['status'] as Map?)?[ar ? 'ar' : 'en'] ?? '')
+        .toString();
+    return Container(
+      margin: const EdgeInsets.fromLTRB(14, 0, 14, 10),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: const Color(0xFFECECEC))),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Container(width: 42, height: 42,
+            decoration: BoxDecoration(borderRadius: BorderRadius.circular(12),
+                color: UellowColors.successBg),
+            child: const Center(
+                child: Text('🚚', style: TextStyle(fontSize: 20)))),
+          const SizedBox(width: 11),
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(delivered
+                      ? (ar ? 'تم تسليم طلبك' : 'Order delivered')
+                      : (ar ? 'تم شحن طلبك' : 'Your order is shipped'),
+                  style: const TextStyle(fontSize: 15,
+                      fontWeight: FontWeight.w900,
+                      color: UellowColors.darkBrown)),
+              if (status.isNotEmpty) ...[
+                const SizedBox(height: 1),
+                Text(status, style: const TextStyle(fontSize: 12,
+                    color: UellowColors.muted, fontWeight: FontWeight.w600)),
+              ],
+            ])),
+        ]),
+        if (carrier.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(color: const Color(0xFFF2F4F7),
+                borderRadius: BorderRadius.circular(12)),
+            child: Row(children: [
+              Container(width: 40, height: 40, alignment: Alignment.center,
+                decoration: BoxDecoration(color: Colors.white,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: const Color(0xFFE7EAEF))),
+                child: const Icon(Icons.local_shipping_rounded, size: 20,
+                    color: UellowColors.darkBrown)),
+              const SizedBox(width: 11),
+              Expanded(child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(carrier, maxLines: 1, overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 13.5,
+                          fontWeight: FontWeight.w900)),
+                  Text(ar
+                          ? 'شركة التوصيل${tracking.isNotEmpty ? ' · شحنة $tracking' : ''}'
+                          : 'Carrier${tracking.isNotEmpty ? ' · #$tracking' : ''}',
+                      maxLines: 1, overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 11,
+                          color: UellowColors.muted,
+                          fontWeight: FontWeight.w600)),
+                ])),
+            ])),
+        ],
       ]),
     );
   }

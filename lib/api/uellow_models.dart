@@ -1027,6 +1027,10 @@ class UellowOrderDetail extends UellowOrderSummary {
   /// origin{en,ar,flag}, tracking_no, carrier, status, timeline:[{key,icon,
   /// label{en,ar}, done, date}]}. Null for normal orders.
   final Map<String, dynamic>? dropship;
+  /// v2.2.173 — expected delivery {iso,date{en,ar},time{en,ar},note{en,ar}}.
+  final Map<String, dynamic>? scheduled;
+  /// v2.2.173 — carrier shipment {shipped,delivered,carrier,tracking,status}.
+  final Map<String, dynamic>? shipment;
 
   UellowOrderDetail({
     required super.id, required super.name, required super.state,
@@ -1039,6 +1043,7 @@ class UellowOrderDetail extends UellowOrderSummary {
     this.deliveryTracking, this.timeline = const [],
     this.canCancel = false, this.cancelRequested = false,
     this.isPaid = false, this.dropship,
+    this.scheduled, this.shipment,
   });
 
   factory UellowOrderDetail.fromJson(Map<String, dynamic> j) => UellowOrderDetail(
@@ -1076,6 +1081,12 @@ class UellowOrderDetail extends UellowOrderSummary {
         isPaid: j['is_paid'] == true,
         dropship: (j['dropship'] is Map)
             ? Map<String, dynamic>.from(j['dropship'] as Map)
+            : null,
+        scheduled: (j['scheduled'] is Map)
+            ? Map<String, dynamic>.from(j['scheduled'] as Map)
+            : null,
+        shipment: (j['shipment'] is Map)
+            ? Map<String, dynamic>.from(j['shipment'] as Map)
             : null,
       );
 }
