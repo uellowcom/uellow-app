@@ -216,6 +216,8 @@ Widget _renderBlock(BuildContext c, Map<String, dynamic> b, DynTheme t) {
     // v2.1.45 — dedicated premium Bestsellers block (podium + ranked list).
     case 'bestsellers': inner = BestsellersBlock(p: p, data: data, t: t, ar: ar); break;
     case 'scratch':    inner = ScratchBlock(p: p, data: data, t: t, ar: ar); break;
+    case 'elevenele_hero': inner = ElevenEleHero(p: p, t: t, ar: ar); break;
+    case 'deal_of_day':    inner = DealOfDayBlock(p: p, data: data, t: t, ar: ar); break;
     case 'banner-1':   inner = _Banner1(p: p, t: t, ar: ar); break;
     case 'banner-2':   inner = _BannerMulti(p: p, t: t, columns: 2); break;
     case 'banner-3':   inner = _BannerMulti(p: p, t: t, columns: 3); break;

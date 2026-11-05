@@ -6588,3 +6588,331 @@ class _ScratchPainter extends CustomPainter {
       old.points.length != points.length;
 }
 
+// ───────────────────────────────────────────────────────────────────────
+// v2.2.175 — Bespoke campaign blocks matching the approved mockups.
+// ElevenEleHero: 11.11 gradient hero + live countdown.
+// DealOfDayBlock: dark "deal of the day" card + countdown + stock bar.
+// ───────────────────────────────────────────────────────────────────────
+String _arDigits(Object? n) => n.toString().split('').map((c) {
+      const d = '٠١٢٣٤٥٦٧٨٩';
+      final i = '0123456789'.indexOf(c);
+      return i >= 0 ? d[i] : c;
+    }).join();
+
+DateTime? _parseEnds(Object? v) {
+  final s = v?.toString();
+  if (s == null || s.isEmpty) return null;
+  try {
+    return DateTime.parse(s.contains('T') ? s : s.replaceFirst(' ', 'T'));
+  } catch (_) {
+    return null;
+  }
+}
+
+class ElevenEleHero extends StatefulWidget {
+  const ElevenEleHero(
+      {super.key, required this.p, required this.t, required this.ar});
+  final Map<String, dynamic> p;
+  final DynTheme t;
+  final bool ar;
+  @override
+  State<ElevenEleHero> createState() => _ElevenEleHeroState();
+}
+
+class _ElevenEleHeroState extends State<ElevenEleHero> {
+  Timer? _timer;
+  Duration _left = const Duration(days: 3, hours: 11, minutes: 11, seconds: 11);
+  DateTime? _end;
+
+  @override
+  void initState() {
+    super.initState();
+    _end = _parseEnds(widget.p['ends_at']);
+    _tick();
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(_tick);
+    });
+  }
+
+  void _tick() {
+    if (_end != null) {
+      final d = _end!.difference(DateTime.now());
+      _left = d.isNegative ? Duration.zero : d;
+    } else if (_left.inSeconds > 0) {
+      _left -= const Duration(seconds: 1);
+    }
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  Widget _box(int v, String l) => Container(
+        width: 56,
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(.06),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: const Color(0x4DFFB000)),
+        ),
+        child: Column(children: [
+          Text(_arDigits(v.toString().padLeft(2, '0')),
+              style: const TextStyle(
+                  color: Color(0xFFFFC400),
+                  fontWeight: FontWeight.w900,
+                  fontSize: 22)),
+          Text(l,
+              style:
+                  const TextStyle(color: Color(0xFFC9BF9F), fontSize: 8)),
+        ]),
+      );
+
+  @override
+  Widget build(BuildContext context) {
+    final ar = widget.ar;
+    final sub = ar
+        ? (widget.p['subtitleAr']?.toString() ?? 'عروض يلو الكبرى')
+        : (widget.p['subtitleEn']?.toString() ?? 'Mega Sale');
+    final off = ar
+        ? (widget.p['offAr']?.toString() ?? 'خصومات تصل ٩٠٪')
+        : (widget.p['offEn']?.toString() ?? 'Up to 90% OFF');
+    final days = _left.inDays,
+        hrs = _left.inHours % 24,
+        mins = _left.inMinutes % 60,
+        secs = _left.inSeconds % 60;
+    return Container(
+      width: double.infinity,
+      decoration: const BoxDecoration(
+        color: Color(0xFF1A1308),
+        gradient: RadialGradient(
+            center: Alignment(0, -1.1),
+            radius: 1.2,
+            colors: [Color(0x66FFB000), Color(0x001A1308)],
+            stops: [0, 0.62]),
+      ),
+      padding: const EdgeInsets.fromLTRB(16, 22, 16, 22),
+      child: Column(children: [
+        Text(ar ? 'مهرجان التسوّق الأكبر' : 'THE BIGGEST SALE',
+            style: const TextStyle(
+                color: Color(0xFFFFC400),
+                fontWeight: FontWeight.w900,
+                fontSize: 10,
+                letterSpacing: 4)),
+        const SizedBox(height: 4),
+        ShaderMask(
+          shaderCallback: (r) => const LinearGradient(
+                  colors: [Color(0xFFFFD60A), Color(0xFFFF7A00)])
+              .createShader(r),
+          child: const Text('11.11',
+              style: TextStyle(
+                  fontSize: 70,
+                  fontWeight: FontWeight.w900,
+                  color: Colors.white,
+                  letterSpacing: -2,
+                  height: .9)),
+        ),
+        Text(sub,
+            style: const TextStyle(
+                color: Colors.white, fontWeight: FontWeight.w900, fontSize: 16)),
+        const SizedBox(height: 9),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 6),
+          decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                  colors: [Color(0xFFFFC400), Color(0xFFFF8A00)]),
+              borderRadius: BorderRadius.circular(999)),
+          child: Text('🔥 ' + off,
+              style: const TextStyle(
+                  color: Color(0xFF1A1205),
+                  fontWeight: FontWeight.w900,
+                  fontSize: 13)),
+        ),
+        const SizedBox(height: 13),
+        Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+          _box(days, ar ? 'يوم' : 'd'),
+          const SizedBox(width: 7),
+          _box(hrs, ar ? 'ساعة' : 'h'),
+          const SizedBox(width: 7),
+          _box(mins, ar ? 'دقيقة' : 'm'),
+          const SizedBox(width: 7),
+          _box(secs, ar ? 'ثانية' : 's'),
+        ]),
+      ]),
+    );
+  }
+}
+
+class DealOfDayBlock extends StatefulWidget {
+  const DealOfDayBlock(
+      {super.key,
+      required this.p,
+      required this.data,
+      required this.t,
+      required this.ar});
+  final Map<String, dynamic> p;
+  final Map<String, dynamic> data;
+  final DynTheme t;
+  final bool ar;
+  @override
+  State<DealOfDayBlock> createState() => _DealOfDayState();
+}
+
+class _DealOfDayState extends State<DealOfDayBlock> {
+  Timer? _timer;
+  Duration _left = const Duration(hours: 2, minutes: 14, seconds: 38);
+
+  @override
+  void initState() {
+    super.initState();
+    final e = _parseEnds(widget.p['ends_at']);
+    if (e != null) {
+      final d = e.difference(DateTime.now());
+      if (!d.isNegative) _left = d;
+    }
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) {
+        setState(() {
+          _left = _left.inSeconds > 0
+              ? _left - const Duration(seconds: 1)
+              : Duration.zero;
+        });
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  Map<String, dynamic>? get _prod {
+    final it = (widget.data['items'] as List? ??
+        widget.data['products'] as List? ??
+        const []);
+    return it.isNotEmpty ? (it.first as Map).cast<String, dynamic>() : null;
+  }
+
+  String _name(Map p) {
+    final n = p['name'];
+    if (n is Map) {
+      return (widget.ar ? n['ar'] : n['en'])?.toString() ??
+          n['en']?.toString() ??
+          '';
+    }
+    return n?.toString() ?? '';
+  }
+
+  String _price(Map p, String key) {
+    final m = p[key];
+    final amt = (m is Map) ? m['amount'] : m;
+    final v = (amt is num) ? amt.toDouble() : 0.0;
+    return _arDigits(v.toStringAsFixed(3)) + ' د.ك';
+  }
+
+  Widget _cd(int v) => Container(
+        margin: const EdgeInsetsDirectional.only(end: 5),
+        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+        decoration: BoxDecoration(
+            color: Colors.white.withOpacity(.1),
+            borderRadius: BorderRadius.circular(7)),
+        child: Text(_arDigits(v.toString().padLeft(2, '0')),
+            style: const TextStyle(
+                color: Colors.white, fontWeight: FontWeight.w900, fontSize: 13)),
+      );
+
+  @override
+  Widget build(BuildContext context) {
+    final prod = _prod;
+    if (prod == null) return const SizedBox.shrink();
+    final ar = widget.ar;
+    final img = (prod['image'] as String?) ?? '';
+    final disc = (prod['discount_pct'] is num)
+        ? (prod['discount_pct'] as num).toInt()
+        : 0;
+    final cmp = prod['compare_price'];
+    final hasCmp = cmp is Map && (cmp['amount'] is num);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(14, 2, 14, 0),
+      child: Container(
+        decoration: BoxDecoration(
+            color: const Color(0xFF1A1308),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: const Color(0x40FFB000))),
+        padding: const EdgeInsets.all(14),
+        child: Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(14),
+            child: Container(
+              width: 100,
+              height: 100,
+              color: Colors.white,
+              child: img.isNotEmpty
+                  ? CachedNetworkImage(imageUrl: img, fit: BoxFit.contain)
+                  : const Icon(Icons.bolt, color: Color(0xFFFF7A00)),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                      ar
+                          ? 'صفقة اليوم${disc > 0 ? " · -${_arDigits(disc)}٪" : ""}'
+                          : 'DEAL OF THE DAY',
+                      style: const TextStyle(
+                          color: Color(0xFFFFC400),
+                          fontWeight: FontWeight.w900,
+                          fontSize: 9,
+                          letterSpacing: 1)),
+                  const SizedBox(height: 3),
+                  Text(_name(prod),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 13.5,
+                          height: 1.3)),
+                  const SizedBox(height: 6),
+                  Row(crossAxisAlignment: CrossAxisAlignment.baseline,
+                      textBaseline: TextBaseline.alphabetic,
+                      children: [
+                        Text(_price(prod, 'price'),
+                            style: const TextStyle(
+                                color: Color(0xFFFFC400),
+                                fontWeight: FontWeight.w900,
+                                fontSize: 19)),
+                        if (hasCmp) ...[
+                          const SizedBox(width: 7),
+                          Text(_price(prod, 'compare_price'),
+                              style: const TextStyle(
+                                  color: Color(0xFFB9B2A3),
+                                  decoration: TextDecoration.lineThrough,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600)),
+                        ],
+                      ]),
+                  const SizedBox(height: 8),
+                  Row(children: [
+                    _cd(_left.inHours),
+                    _cd(_left.inMinutes % 60),
+                    _cd(_left.inSeconds % 60),
+                  ]),
+                  const SizedBox(height: 7),
+                  Text(ar ? '🔥 الكمية محدودة' : '🔥 Limited stock',
+                      style: const TextStyle(
+                          color: Color(0xFFFFD9B0),
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w700)),
+                ]),
+          ),
+        ]),
+      ),
+    );
+  }
+}
+
