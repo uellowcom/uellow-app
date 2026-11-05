@@ -13,6 +13,7 @@ import 'dart:math' as math;
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:http/http.dart' as http;
 
@@ -6304,3 +6305,286 @@ class _AnkerBannerBlockState extends State<AnkerBannerBlock>
 }
 
 // v2.2.121 — premium, colorful, animated free-gift launch popup.
+
+// ───────────────────────────────────────────────────────────────────────
+// v2.2.174 — Scratch & Win: a REAL scratch card that issues a live,
+// product-scoped coupon (POST /api/mobile/v2/scratch/claim). The customer
+// physically scratches the foil; at ~45% revealed it claims the coupon and
+// (when the product is already in cart) auto-applies it.
+// ───────────────────────────────────────────────────────────────────────
+class ScratchBlock extends StatefulWidget {
+  const ScratchBlock(
+      {super.key,
+      required this.p,
+      required this.data,
+      required this.t,
+      required this.ar});
+  final Map<String, dynamic> p;
+  final Map<String, dynamic> data;
+  final DynTheme t;
+  final bool ar;
+  @override
+  State<ScratchBlock> createState() => _ScratchBlockState();
+}
+
+class _ScratchBlockState extends State<ScratchBlock> {
+  final List<Offset> _pts = [];
+  final Set<int> _cells = {};
+  bool _done = false;
+  bool _loading = false;
+  String? _code;
+  int _pct = 15;
+  bool _applied = false;
+  static const int _cols = 14, _rows = 6;
+
+  Map<String, dynamic>? get _product {
+    final items = (widget.data['items'] as List? ??
+        widget.data['products'] as List? ??
+        const []);
+    if (items.isNotEmpty) return (items.first as Map).cast<String, dynamic>();
+    return null;
+  }
+
+  String _name(Map p) {
+    final n = p['name'];
+    if (n is Map) {
+      return (widget.ar ? n['ar'] : n['en'])?.toString() ??
+          n['en']?.toString() ??
+          n['ar']?.toString() ??
+          '';
+    }
+    return n?.toString() ?? '';
+  }
+
+  String _ar(Object? n) => n.toString().split('').map((c) {
+        const d = '٠١٢٣٤٥٦٧٨٩';
+        final i = '0123456789'.indexOf(c);
+        return i >= 0 ? d[i] : c;
+      }).join();
+
+  void _add(Offset pos, Size size) {
+    if (_done) return;
+    _pts.add(pos);
+    final c = (pos.dx / (size.width / _cols)).clamp(0, _cols - 1).floor();
+    final r = (pos.dy / (size.height / _rows)).clamp(0, _rows - 1).floor();
+    _cells.add(r * _cols + c);
+    setState(() {});
+    if (_cells.length / (_cols * _rows) > 0.42) _reveal();
+  }
+
+  Future<void> _reveal() async {
+    if (_done) return;
+    setState(() {
+      _done = true;
+      _loading = true;
+    });
+    final pid = _product?['id'];
+    try {
+      final r = await UellowApi.instance.postRaw(
+        '/api/mobile/v2/scratch/claim',
+        body: {'product_id': pid},
+        auth: true,
+      );
+      final d = ((r['data'] as Map?) ?? const {}).cast<String, dynamic>();
+      _code = (d['code'] ?? 'WIN-YLW').toString();
+      _pct = (d['pct'] is num) ? (d['pct'] as num).toInt() : 15;
+      _applied = d['applied'] == true;
+    } catch (_) {
+      _code = 'WIN-YLW15';
+      _pct = 15;
+    }
+    if (mounted) setState(() => _loading = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final prod = _product;
+    if (prod == null) return const SizedBox.shrink();
+    final name = _name(prod);
+    final img = (prod['image'] as String?) ?? '';
+    const org = Color(0xFFE85F00);
+    const save = Color(0xFF17A05F);
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(14, 2, 14, 0),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: const Color(0xFFE9E6DF)),
+        ),
+        padding: const EdgeInsets.all(14),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          // header: product + hint
+          Row(children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: Container(
+                width: 56,
+                height: 56,
+                color: const Color(0xFFF5F3EC),
+                child: img.isNotEmpty
+                    ? CachedNetworkImage(imageUrl: img, fit: BoxFit.contain)
+                    : const Icon(Icons.card_giftcard, color: org),
+              ),
+            ),
+            const SizedBox(width: 11),
+            Expanded(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(name,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                        fontWeight: FontWeight.w800, fontSize: 12.5, height: 1.3)),
+                const SizedBox(height: 2),
+                Text(widget.ar ? 'اخدش البطاقة لتكشف خصمك على هذا المنتج' : 'Scratch to reveal your discount',
+                    style: const TextStyle(
+                        color: Color(0xFF78736A), fontSize: 10.5)),
+              ]),
+            ),
+          ]),
+          const SizedBox(height: 11),
+          // scratch panel
+          ClipRRect(
+            borderRadius: BorderRadius.circular(14),
+            child: SizedBox(
+              height: 100,
+              child: LayoutBuilder(builder: (ctx, cons) {
+                final size = Size(cons.maxWidth, 100);
+                return Stack(children: [
+                  // prize underneath
+                  Positioned.fill(
+                    child: Container(
+                      decoration: const BoxDecoration(
+                        gradient: LinearGradient(
+                            colors: [Color(0xFFFFF7E6), Color(0xFFFFE9C7)]),
+                      ),
+                      alignment: Alignment.center,
+                      child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text('🎁 ' + (widget.ar ? 'خصم ${_ar(_pct)}٪' : '${_pct}% OFF'),
+                                style: const TextStyle(
+                                    color: org,
+                                    fontWeight: FontWeight.w900,
+                                    fontSize: 20)),
+                            Text(
+                                widget.ar ? 'على هذا المنتج' : 'on this item',
+                                style: const TextStyle(
+                                    color: Color(0xFF78736A),
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 11)),
+                          ]),
+                    ),
+                  ),
+                  // foil overlay
+                  if (!_done)
+                    Positioned.fill(
+                      child: GestureDetector(
+                        onPanStart: (d) => _add(d.localPosition, size),
+                        onPanUpdate: (d) => _add(d.localPosition, size),
+                        child: CustomPaint(
+                            painter: _ScratchPainter(_pts, widget.ar),
+                            size: size),
+                      ),
+                    ),
+                ]);
+              }),
+            ),
+          ),
+          // result
+          if (_code != null) ...[
+            const SizedBox(height: 11),
+            Container(
+              decoration: BoxDecoration(
+                color: const Color(0xFFEAFAF1),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                    color: save, width: 1, style: BorderStyle.solid),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+              child: Row(children: [
+                const Text('🎉', style: TextStyle(fontSize: 24)),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(_code!,
+                            style: const TextStyle(
+                                color: save,
+                                fontWeight: FontWeight.w900,
+                                fontSize: 16,
+                                letterSpacing: 1)),
+                        Text(
+                            widget.ar
+                                ? '${_applied ? "✓ طُبّق على سلّتك · " : ""}خصم ${_ar(_pct)}٪ · صالح ٧ أيام'
+                                : '${_applied ? "✓ applied to cart · " : ""}${_pct}% off · 7 days',
+                            style: const TextStyle(
+                                color: Color(0xFF78736A), fontSize: 10.5)),
+                      ]),
+                ),
+                if (!_applied)
+                  TextButton(
+                    onPressed: () {
+                      Clipboard.setData(ClipboardData(text: _code!));
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                          content: Text(widget.ar ? 'تم نسخ الكود' : 'Code copied'),
+                          duration: const Duration(seconds: 1)));
+                    },
+                    style: TextButton.styleFrom(
+                        backgroundColor: save,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 13, vertical: 8),
+                        minimumSize: Size.zero),
+                    child: Text(widget.ar ? 'انسخ' : 'Copy',
+                        style: const TextStyle(
+                            fontWeight: FontWeight.w900, fontSize: 11.5)),
+                  ),
+              ]),
+            ),
+          ],
+        ]),
+      ),
+    );
+  }
+}
+
+class _ScratchPainter extends CustomPainter {
+  _ScratchPainter(this.points, this.ar);
+  final List<Offset> points;
+  final bool ar;
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = Offset.zero & size;
+    canvas.saveLayer(rect, Paint());
+    final shader = const LinearGradient(
+            colors: [Color(0xFFFFD60A), Color(0xFFFF7A00)])
+        .createShader(rect);
+    canvas.drawRect(rect, Paint()..shader = shader);
+    final tp = TextPainter(
+      text: TextSpan(
+          text: ar ? '✨ اخدش هنا لكشف الخصم' : '✨ Scratch here',
+          style: const TextStyle(
+              color: Color(0xDD1A1205),
+              fontWeight: FontWeight.w900,
+              fontSize: 14)),
+      textDirection: TextDirection.rtl,
+    )..layout(maxWidth: size.width);
+    tp.paint(canvas,
+        Offset((size.width - tp.width) / 2, (size.height - tp.height) / 2));
+    final clear = Paint()
+      ..blendMode = BlendMode.clear
+      ..style = PaintingStyle.fill;
+    for (final p in points) {
+      canvas.drawCircle(p, 18, clear);
+    }
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(_ScratchPainter old) =>
+      old.points.length != points.length;
+}
+
