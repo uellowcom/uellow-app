@@ -6472,8 +6472,9 @@ class TrustStripBlock extends StatelessWidget {
 // في البيلدر: يُفعّل عبر props.smart على cats-grid أو عبر kind=smart-cats.
 // يجلب بياناته بنفسه من /api/mobile/v2/categories/smart.
 class SmartCategoriesBlock extends StatefulWidget {
-  const SmartCategoriesBlock({super.key, required this.ar});
+  const SmartCategoriesBlock({super.key, required this.ar, this.p = const {}});
   final bool ar;
+  final Map<String, dynamic> p; // إعدادات البيلدر: الشكل/الحجم/عدد الأعمدة
   @override
   State<SmartCategoriesBlock> createState() => _SmartCategoriesBlockState();
 }
@@ -6528,8 +6529,11 @@ class _SmartCategoriesBlockState extends State<SmartCategoriesBlock> {
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
           padding: EdgeInsets.zero,
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 5, mainAxisSpacing: 14, crossAxisSpacing: 2,
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount:
+                (int.tryParse((widget.p['columns'] ?? '5').toString()) ?? 5)
+                    .clamp(3, 6),
+            mainAxisSpacing: 14, crossAxisSpacing: 2,
             childAspectRatio: 0.64,
           ),
           itemCount: _items.length,
@@ -6540,6 +6544,17 @@ class _SmartCategoriesBlockState extends State<SmartCategoriesBlock> {
   }
 
   Widget _circle(Map<String, dynamic> c, bool ar) {
+    // الشكل والحجم من إعدادات البيلدر (كانت الدائرة ثابتة قبل v2.2.183)
+    final shape = (widget.p['shape'] as String?) ?? 'circle';
+    final sz = ((widget.p['icon_size'] as num?)?.toDouble() ?? 56)
+        .clamp(40, 90)
+        .toDouble();
+    final isCircle = shape != 'square' && shape != 'rounded' && shape != 'capsule';
+    final rad = shape == 'square'
+        ? 8.0
+        : shape == 'rounded'
+            ? 16.0
+            : sz / 2; // كبسولة أو دائرة
     final nm = c['name'];
     final name = nm is Map
         ? (nm[ar ? 'ar' : 'en'] ?? nm['en'] ?? '').toString()
@@ -6555,14 +6570,15 @@ class _SmartCategoriesBlockState extends State<SmartCategoriesBlock> {
       behavior: HitTestBehavior.opaque,
       child: Column(children: [
         SizedBox(
-          height: 62,
+          height: sz + 6,
           child: Stack(clipBehavior: Clip.none, alignment: Alignment.center,
               children: [
             Container(
-              width: 56, height: 56,
+              width: sz, height: sz,
               decoration: BoxDecoration(
                 color: Colors.white,
-                shape: BoxShape.circle,
+                shape: isCircle ? BoxShape.circle : BoxShape.rectangle,
+                borderRadius: isCircle ? null : BorderRadius.circular(rad),
                 border: Border.all(
                     color: isHot ? hot2 : (isNew ? newC : UellowColors.border),
                     width: (isHot || isNew) ? 2 : 1),
