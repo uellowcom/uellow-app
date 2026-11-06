@@ -4473,13 +4473,20 @@ class _TabNavBlockState extends State<TabNavBlock> {
 
 // ─── STORY BUBBLES — Instagram-style circular row with optional autoplay ────
 class StoryBubblesBlock extends StatefulWidget {
-  const StoryBubblesBlock({super.key, required this.p, required this.t, required this.ar});
+  const StoryBubblesBlock(
+      {super.key,
+      required this.p,
+      required this.data,
+      required this.t,
+      required this.ar});
   final Map<String, dynamic> p;
+  final Map<String, dynamic> data;
   final DynTheme t;
   final bool ar;
   @override
   State<StoryBubblesBlock> createState() => _StoryBubblesBlockState();
 }
+
 class _StoryBubblesBlockState extends State<StoryBubblesBlock> {
   final _ctrl = ScrollController();
   Timer? _autoTimer;
@@ -4500,20 +4507,51 @@ class _StoryBubblesBlockState extends State<StoryBubblesBlock> {
       });
     }
   }
+
   @override
   void dispose() { _autoTimer?.cancel(); _ctrl.dispose(); super.dispose(); }
 
+  void _openStory(Map<String, dynamic> b, String label, String icon) {
+    final products = (b['products'] as List? ?? const [])
+        .whereType<Map>()
+        .map((e) => e.cast<String, dynamic>())
+        .toList();
+    if (products.isEmpty) {
+      _openLink(context, (b['link'] as Map?)?.cast<String, dynamic>());
+      return;
+    }
+    final dur = ((widget.data['story_duration'] ?? widget.p['story_duration'])
+                as num?)
+            ?.toInt() ??
+        5;
+    Navigator.of(context).push(MaterialPageRoute(
+      fullscreenDialog: true,
+      builder: (_) => StoryViewer(
+        products: products,
+        title: label,
+        icon: icon,
+        ar: widget.ar,
+        durationSec: dur.clamp(2, 15),
+      ),
+    ));
+  }
+
   @override
   Widget build(BuildContext context) {
-    final bubbles = (widget.p['bubbles'] as List? ?? const []);
+    // Resolved bubbles (with per-bubble products) come from the server under
+    // data['bubbles']; fall back to the raw props bubbles (link-only).
+    final bubbles = (widget.data['bubbles'] as List? ??
+        widget.p['bubbles'] as List? ??
+        const []);
     if (bubbles.isEmpty) return const SizedBox.shrink();
     final t = widget.t;
     final sz = ((widget.p['size'] as num?)?.toDouble() ?? 60).clamp(40.0, 100.0);
     final showRings = widget.p['show_rings'] != false;
     final ringColor = _hexColor(widget.p['ring_color'], t.primary);
+    final showTitle = widget.p['show_title'] != false; // v2.2.176 — respect toggle
     final title = (widget.ar ? widget.p['titleAr'] : widget.p['titleEn'])?.toString() ?? '';
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      if (title.isNotEmpty) Padding(
+      if (showTitle && title.isNotEmpty) Padding(
         padding: const EdgeInsets.fromLTRB(14, 4, 14, 6),
         child: Text(title, style: TextStyle(color: t.dark, fontSize: 14, fontWeight: FontWeight.w900)),
       ),
@@ -4531,8 +4569,9 @@ class _StoryBubblesBlockState extends State<StoryBubblesBlock> {
             final label = (widget.ar ? b['labelAr'] : b['labelEn'])?.toString() ?? '';
             final img = pickLocalizedImage(b, widget.ar);
             final icon = (b['icon'] as String?) ?? '⭐';
+            final hasStory = (b['products'] as List? ?? const []).isNotEmpty;
             return GestureDetector(
-              onTap: () => _openLink(context, (b['link'] as Map?)?.cast<String, dynamic>()),
+              onTap: () => _openStory(b, label, icon),
               child: Column(children: [
                 Container(
                   width: sz, height: sz,
@@ -4542,10 +4581,13 @@ class _StoryBubblesBlockState extends State<StoryBubblesBlock> {
                     image: img.isNotEmpty
                         ? DecorationImage(image: CachedNetworkImageProvider(img), fit: BoxFit.cover)
                         : null,
-                    boxShadow: showRings ? [
+                    boxShadow: (showRings && hasStory) ? [
                       BoxShadow(color: ringColor, blurRadius: 0, spreadRadius: 2.5),
                       const BoxShadow(color: Colors.white, blurRadius: 0, spreadRadius: 4.5),
-                    ] : null,
+                    ] : (showRings ? [
+                      BoxShadow(color: ringColor.withValues(alpha: .35), blurRadius: 0, spreadRadius: 2.5),
+                      const BoxShadow(color: Colors.white, blurRadius: 0, spreadRadius: 4.5),
+                    ] : null),
                   ),
                   alignment: Alignment.center,
                   child: img.isEmpty ? Text(icon, style: TextStyle(fontSize: sz * 0.4)) : null,
@@ -4562,6 +4604,261 @@ class _StoryBubblesBlockState extends State<StoryBubblesBlock> {
         ),
       ),
     ]);
+  }
+}
+
+// ─── STORY VIEWER — full-screen product stories (Instagram/WhatsApp style) ──
+class StoryViewer extends StatefulWidget {
+  const StoryViewer(
+      {super.key,
+      required this.products,
+      required this.title,
+      required this.icon,
+      required this.ar,
+      this.durationSec = 5});
+  final List<Map<String, dynamic>> products;
+  final String title;
+  final String icon;
+  final bool ar;
+  final int durationSec;
+  @override
+  State<StoryViewer> createState() => _StoryViewerState();
+}
+
+class _StoryViewerState extends State<StoryViewer>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _c;
+  int _idx = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _c = AnimationController(
+        vsync: this, duration: Duration(seconds: widget.durationSec))
+      ..addStatusListener((s) {
+        if (s == AnimationStatus.completed) _next();
+      });
+    _start();
+  }
+
+  void _start() {
+    _c
+      ..reset()
+      ..forward();
+  }
+
+  void _next() {
+    if (_idx < widget.products.length - 1) {
+      setState(() => _idx++);
+      _start();
+    } else {
+      if (mounted) Navigator.of(context).maybePop();
+    }
+  }
+
+  void _prev() {
+    if (_idx > 0) {
+      setState(() => _idx--);
+      _start();
+    } else {
+      _start();
+    }
+  }
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  String _ar(Object? n) => widget.ar
+      ? n.toString().split('').map((ch) {
+          const d = '٠١٢٣٤٥٦٧٨٩';
+          final i = '0123456789'.indexOf(ch);
+          return i >= 0 ? d[i] : ch;
+        }).join()
+      : n.toString();
+
+  String _name(Map p) {
+    final n = p['name'];
+    if (n is Map) {
+      return (widget.ar ? n['ar'] : n['en'])?.toString() ??
+          n['en']?.toString() ??
+          '';
+    }
+    return n?.toString() ?? '';
+  }
+
+  String _money(Map p, String key) {
+    final m = p[key];
+    final a = (m is Map) ? m['amount'] : m;
+    final v = (a is num) ? a.toDouble() : 0.0;
+    return _ar(v.toStringAsFixed(3)) + ' د.ك';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final p = widget.products[_idx];
+    final img = (p['image'] as String?) ?? '';
+    final disc = (p['discount_pct'] is num) ? (p['discount_pct'] as num).toInt() : 0;
+    final cmp = p['compare_price'];
+    final hasCmp = cmp is Map && (cmp['amount'] is num);
+    final id = (p['id'] is num) ? (p['id'] as num).toInt() : 0;
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: SafeArea(
+        child: Stack(children: [
+          // tap zones
+          Positioned.fill(
+            child: Row(children: [
+              Expanded(flex: 1, child: GestureDetector(onTap: _prev, behavior: HitTestBehavior.opaque)),
+              Expanded(flex: 2, child: GestureDetector(onTap: _next, behavior: HitTestBehavior.opaque)),
+            ]),
+          ),
+          // image centered
+          Positioned.fill(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 70, 20, 180),
+              child: Center(
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(20),
+                  child: img.isNotEmpty
+                      ? CachedNetworkImage(imageUrl: img, fit: BoxFit.contain)
+                      : Container(color: Colors.white10),
+                ),
+              ),
+            ),
+          ),
+          // progress bars
+          Positioned(
+            top: 10, left: 12, right: 12,
+            child: Row(
+              children: List.generate(widget.products.length, (i) {
+                return Expanded(
+                  child: Container(
+                    height: 3,
+                    margin: const EdgeInsets.symmetric(horizontal: 2),
+                    decoration: BoxDecoration(
+                        color: Colors.white24, borderRadius: BorderRadius.circular(3)),
+                    child: AnimatedBuilder(
+                      animation: _c,
+                      builder: (_, __) {
+                        final v = i < _idx ? 1.0 : (i == _idx ? _c.value : 0.0);
+                        return FractionallySizedBox(
+                          alignment: AlignmentDirectional.centerStart,
+                          widthFactor: v,
+                          child: Container(
+                              decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(3))),
+                        );
+                      },
+                    ),
+                  ),
+                );
+              }),
+            ),
+          ),
+          // header
+          Positioned(
+            top: 22, left: 14, right: 14,
+            child: Row(children: [
+              Container(
+                width: 34, height: 34, padding: const EdgeInsets.all(2),
+                decoration: const BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: LinearGradient(colors: [Color(0xFFFFD60A), Color(0xFFFF7A00)])),
+                child: Container(
+                  decoration: const BoxDecoration(shape: BoxShape.circle, color: Color(0xFF111111)),
+                  alignment: Alignment.center,
+                  child: Text(widget.icon, style: const TextStyle(fontSize: 16)),
+                ),
+              ),
+              const SizedBox(width: 9),
+              Text(widget.title,
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 13)),
+              const Spacer(),
+              GestureDetector(
+                onTap: () => Navigator.of(context).maybePop(),
+                child: const Icon(Icons.close_rounded, color: Colors.white, size: 26),
+              ),
+            ]),
+          ),
+          // footer: name + price + CTA
+          Positioned(
+            left: 0, right: 0, bottom: 0,
+            child: Container(
+              padding: const EdgeInsets.fromLTRB(18, 24, 18, 24),
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                    begin: Alignment.bottomCenter,
+                    end: Alignment.topCenter,
+                    colors: [Color(0xE6000000), Color(0x00000000)]),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (disc > 0)
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 6),
+                      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
+                      decoration: BoxDecoration(
+                          color: const Color(0xFFFF7A00),
+                          borderRadius: BorderRadius.circular(7)),
+                      child: Text('-${_ar(disc)}٪',
+                          style: const TextStyle(
+                              color: Colors.white, fontWeight: FontWeight.w900, fontSize: 11)),
+                    ),
+                  Text(_name(p),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                          color: Colors.white, fontWeight: FontWeight.w900, fontSize: 18)),
+                  const SizedBox(height: 4),
+                  Row(crossAxisAlignment: CrossAxisAlignment.baseline,
+                      textBaseline: TextBaseline.alphabetic, children: [
+                    Text(_money(p, 'price'),
+                        style: const TextStyle(
+                            color: Color(0xFFFFC400), fontWeight: FontWeight.w900, fontSize: 20)),
+                    if (hasCmp) ...[
+                      const SizedBox(width: 8),
+                      Text(_money(p, 'compare_price'),
+                          style: const TextStyle(
+                              color: Colors.white54,
+                              decoration: TextDecoration.lineThrough,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600)),
+                    ],
+                  ]),
+                  const SizedBox(height: 12),
+                  GestureDetector(
+                    onTap: () {
+                      Navigator.of(context).maybePop();
+                      if (id > 0) UellowRouter.goProduct(context, id);
+                    },
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(vertical: 13),
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                              colors: [Color(0xFFFFD60A), Color(0xFFFF7A00)]),
+                          borderRadius: BorderRadius.circular(12)),
+                      child: Text(widget.ar ? 'تسوّق الآن 🛒' : 'Shop now 🛒',
+                          style: const TextStyle(
+                              color: Color(0xFF1A1205),
+                              fontWeight: FontWeight.w900,
+                              fontSize: 14)),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ]),
+      ),
+    );
   }
 }
 
