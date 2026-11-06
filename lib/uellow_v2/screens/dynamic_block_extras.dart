@@ -4623,10 +4623,10 @@ class _StoryBubblesBlockState extends State<StoryBubblesBlock> {
         child: Text(title, style: TextStyle(color: t.dark, fontSize: 14, fontWeight: FontWeight.w900)),
       ),
       SizedBox(
-        height: sz + 26,
+        height: sz + 34,
         child: ListView.separated(
           controller: _ctrl,
-          padding: const EdgeInsets.symmetric(horizontal: 12),
+          padding: const EdgeInsets.fromLTRB(12, 7, 12, 3),
           scrollDirection: Axis.horizontal,
           physics: const ClampingScrollPhysics(),
           itemCount: bubbles.length,
@@ -4775,6 +4775,17 @@ class _StoryViewerState extends State<StoryViewer>
       backgroundColor: Colors.black,
       body: SafeArea(
         child: Stack(children: [
+          // v2.2.178 — swipe DOWN to close the story (tap nav unchanged).
+          Positioned.fill(
+            child: GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onVerticalDragEnd: (d) {
+                if ((d.primaryVelocity ?? 0) > 120) {
+                  Navigator.of(context).maybePop();
+                }
+              },
+            ),
+          ),
           // tap zones
           Positioned.fill(
             child: Row(children: [

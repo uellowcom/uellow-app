@@ -842,20 +842,51 @@ class _CategoriesBlock extends StatelessWidget {
           ]));
         break;
       }
-      default: { // strip — original horizontal scroll
-        body = SizedBox(
-          height: iconSize + (showLabel ? 32 : 4),
-          child: ListView.separated(
-            physics: scrollSnap
-                ? const PageScrollPhysics()
-                : const ClampingScrollPhysics(),
-            scrollDirection: Axis.horizontal,
-            padding: EdgeInsets.symmetric(horizontal: gap + 4),
-            itemCount: items.length,
-            separatorBuilder: (_, __) => SizedBox(width: gap),
-            itemBuilder: (_, i) => SizedBox(width: iconSize + 14,
-                child: itemTile(items[i], i)),
-          ));
+      default: { // strip — horizontal scroll, 1..3 rows via `rows`
+        final rows = ((p['rows'] as num?)?.toInt() ?? 1).clamp(1, 3);
+        if (rows > 1) {
+          final cols = <List<Map<String, dynamic>>>[];
+          for (int i = 0; i < items.length; i += rows) {
+            cols.add([
+              for (int r = 0; r < rows && i + r < items.length; r++) items[i + r]
+            ]);
+          }
+          body = SizedBox(
+            height: (iconSize + (showLabel ? 26 : 4)) * rows +
+                gap * (rows - 1) + 6,
+            child: ListView.separated(
+              physics: scrollSnap
+                  ? const PageScrollPhysics()
+                  : const ClampingScrollPhysics(),
+              scrollDirection: Axis.horizontal,
+              padding: EdgeInsets.symmetric(horizontal: gap + 4),
+              itemCount: cols.length,
+              separatorBuilder: (_, __) => SizedBox(width: gap),
+              itemBuilder: (_, col) => Column(
+                  mainAxisAlignment: MainAxisAlignment.start,
+                  children: [
+                    for (int r = 0; r < cols[col].length; r++) ...[
+                      if (r > 0) SizedBox(height: gap),
+                      SizedBox(width: iconSize + 14,
+                          child: itemTile(cols[col][r], col * rows + r)),
+                    ],
+                  ]),
+            ));
+        } else {
+          body = SizedBox(
+            height: iconSize + (showLabel ? 32 : 4),
+            child: ListView.separated(
+              physics: scrollSnap
+                  ? const PageScrollPhysics()
+                  : const ClampingScrollPhysics(),
+              scrollDirection: Axis.horizontal,
+              padding: EdgeInsets.symmetric(horizontal: gap + 4),
+              itemCount: items.length,
+              separatorBuilder: (_, __) => SizedBox(width: gap),
+              itemBuilder: (_, i) => SizedBox(width: iconSize + 14,
+                  child: itemTile(items[i], i)),
+            ));
+        }
       }
     }
 
