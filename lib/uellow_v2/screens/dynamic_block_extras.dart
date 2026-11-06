@@ -4647,6 +4647,10 @@ class _StoryBubblesBlockState extends State<StoryBubblesBlock> {
                         (pr['image'] as String).replaceAll('image_512', 'image_128')
                   ]
                 : const <String>[];
+            // v2.2.182 — سرعة تقليب خاصة بكل فقاعة (٠/فارغ = الافتراضي العام)
+            // حتى لا تتشابه الدوائر وتنقلب كلها في اللحظة نفسها
+            final bRaw = (b['rotate_sec'] as num?)?.toInt() ?? 0;
+            final bSec = (bRaw >= 2 ? bRaw : bubbleSec).clamp(2, 12);
             return GestureDetector(
               onTap: () => _openStory(b, label, icon),
               child: Column(children: [
@@ -4672,7 +4676,7 @@ class _StoryBubblesBlockState extends State<StoryBubblesBlock> {
                   alignment: Alignment.center,
                   child: prodImgs.isNotEmpty
                       ? _RotatingBubbleImage(
-                          urls: prodImgs, rotate: bubbleRotate, sec: bubbleSec)
+                          urls: prodImgs, rotate: bubbleRotate, sec: bSec, index: i)
                       : (img.isEmpty
                           ? Text(icon, style: TextStyle(fontSize: sz * 0.4))
                           : null),
@@ -4695,29 +4699,37 @@ class _StoryBubblesBlockState extends State<StoryBubblesBlock> {
 // ─── Rotating bubble image: cycles a bubble's product thumbnails ──────────
 class _RotatingBubbleImage extends StatefulWidget {
   const _RotatingBubbleImage(
-      {required this.urls, required this.rotate, required this.sec});
+      {required this.urls, required this.rotate, required this.sec, this.index = 0});
   final List<String> urls;
   final bool rotate;
   final int sec;
+  final int index; // ترتيب الفقاعة — يُستخدم لإزاحة بداية التقليب
   @override
   State<_RotatingBubbleImage> createState() => _RotatingBubbleImageState();
 }
 
 class _RotatingBubbleImageState extends State<_RotatingBubbleImage> {
-  Timer? _t;
+  Timer? _t;       // مؤقّت التقليب الدوري
+  Timer? _startT;  // مؤقّت الإزاحة لبدء التقليب في لحظة مختلفة
   int _i = 0;
   @override
   void initState() {
     super.initState();
     if (widget.rotate && widget.urls.length > 1) {
-      _t = Timer.periodic(Duration(seconds: widget.sec), (_) {
-        if (mounted) setState(() => _i = (_i + 1) % widget.urls.length);
+      // v2.2.182 — إزاحة البداية حسب ترتيب الفقاعة حتى لا تنقلب كل الدوائر معًا
+      final offsetMs = (widget.index % 5) * 650;
+      _startT = Timer(Duration(milliseconds: offsetMs), () {
+        if (!mounted) return;
+        _t = Timer.periodic(Duration(seconds: widget.sec), (_) {
+          if (mounted) setState(() => _i = (_i + 1) % widget.urls.length);
+        });
       });
     }
   }
 
   @override
   void dispose() {
+    _startT?.cancel();
     _t?.cancel();
     super.dispose();
   }
