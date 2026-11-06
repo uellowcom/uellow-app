@@ -4856,13 +4856,7 @@ class _StoryViewerState extends State<StoryViewer>
     super.dispose();
   }
 
-  String _ar(Object? n) => widget.ar
-      ? n.toString().split('').map((ch) {
-          const d = '٠١٢٣٤٥٦٧٨٩';
-          final i = '0123456789'.indexOf(ch);
-          return i >= 0 ? d[i] : ch;
-        }).join()
-      : n.toString();
+  String _ar(Object? n) => n.toString(); // أرقام إنجليزية دائمًا
 
   String _name(Map p) {
     final n = p['name'];
@@ -6849,11 +6843,7 @@ class _ScratchBlockState extends State<ScratchBlock> {
     return n?.toString() ?? '';
   }
 
-  String _ar(Object? n) => n.toString().split('').map((c) {
-        const d = '٠١٢٣٤٥٦٧٨٩';
-        final i = '0123456789'.indexOf(c);
-        return i >= 0 ? d[i] : c;
-      }).join();
+  String _ar(Object? n) => n.toString(); // أرقام إنجليزية دائمًا
 
   void _add(Offset pos, Size size) {
     if (_done) return;
@@ -7152,7 +7142,7 @@ class _ElevenEleHeroState extends State<ElevenEleHero> {
           border: Border.all(color: const Color(0x4DFFB000)),
         ),
         child: Column(children: [
-          Text(_arDigits(v.toString().padLeft(2, '0')),
+          Text(v.toString().padLeft(2, '0'),
               style: const TextStyle(
                   color: Color(0xFFFFC400),
                   fontWeight: FontWeight.w900,
@@ -7213,7 +7203,7 @@ class _ElevenEleHeroState extends State<ElevenEleHero> {
             border: Border.all(color: acc2.withValues(alpha: 0.30)),
           ),
           child: Column(children: [
-            Text(_arDigits(v.toString().padLeft(2, '0')),
+            Text(v.toString().padLeft(2, '0'),
                 style: TextStyle(
                     color: acc1, fontWeight: FontWeight.w900, fontSize: 22)),
             Text(l,
@@ -7349,7 +7339,7 @@ class _DealOfDayState extends State<DealOfDayBlock> {
     final m = p[key];
     final amt = (m is Map) ? m['amount'] : m;
     final v = (amt is num) ? amt.toDouble() : 0.0;
-    return _arDigits(v.toStringAsFixed(3)) + ' د.ك';
+    return v.toStringAsFixed(3) + ' د.ك';
   }
 
   Widget _cd(int v, String l, Color acc) => Container(
@@ -7360,7 +7350,7 @@ class _DealOfDayState extends State<DealOfDayBlock> {
             borderRadius: BorderRadius.circular(9),
             border: Border.all(color: acc.withValues(alpha: .35))),
         child: Column(children: [
-          Text(_arDigits(v.toString().padLeft(2, '0')),
+          Text(v.toString().padLeft(2, '0'),
               style: TextStyle(
                   color: acc, fontWeight: FontWeight.w900, fontSize: 16)),
           Text(l,
@@ -7464,7 +7454,7 @@ class _DealOfDayState extends State<DealOfDayBlock> {
                       color: const Color(0xFF2BD17E).withValues(alpha: .4))),
               child: Text(
                   ar
-                      ? 'وفّر ${_arDigits(save.toStringAsFixed(3))} د.ك'
+                      ? 'وفّر ${save.toStringAsFixed(3)} د.ك'
                       : 'Save ${save.toStringAsFixed(3)} KD',
                   style: const TextStyle(
                       color: Color(0xFF53E0A0),
@@ -7553,7 +7543,7 @@ class _DealOfDayState extends State<DealOfDayBlock> {
                               borderRadius: BorderRadius.circular(999),
                               border: Border.all(
                                   color: Colors.white, width: 1.5)),
-                          child: Text('-${_arDigits(disc.toString())}٪',
+                          child: Text('-${disc.toString()}٪',
                               style: const TextStyle(
                                   color: Colors.white,
                                   fontWeight: FontWeight.w900,
