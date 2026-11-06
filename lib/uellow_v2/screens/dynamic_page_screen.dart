@@ -639,6 +639,9 @@ class _CategoriesBlock extends StatelessWidget {
     final showArrows = p['show_arrows'] == true;
     final scrollSnap = p['scroll_snap'] == true;
     final animateIn = p['animate_in'] == true;
+    final tileStyle = (p['tile_style'] as String?) ?? 'clean';
+    final showDiscount = p['show_discount'] != false;
+    final sortByDiscount = p['open_by_discount'] != false;
     final showTitle = (p['show_title'] != false) && title.isNotEmpty;
 
     // v2.1.56 — free tile color from the builder (`tile_bg` hex). When
@@ -653,13 +656,22 @@ class _CategoriesBlock extends StatelessWidget {
       final url = (cat['icon_url'] as String?) ?? '';
       final name = cat['name']?.toString() ?? '';
       final count = (cat['product_count'] as num?)?.toInt() ?? 0;
+      final maxDisc = (cat['max_discount'] as num?)?.toInt() ?? 0;
       final bg = customTileBg ??
-          (coloredBg
-              ? _palette[idx % _palette.length]
-              : const Color(0xFFEFEFEF));
-      final borderC = showRing
-          ? t.primary.withValues(alpha: 0.30)
-          : Colors.transparent;
+          (tileStyle == 'card'
+              ? Colors.white
+              : tileStyle == 'image'
+                  ? const Color(0xFFF1F2F5)
+                  : tileStyle == 'clean'
+                      ? const Color(0xFFF3F4F7)
+                      : (coloredBg
+                          ? _palette[idx % _palette.length]
+                          : const Color(0xFFEFEFEF)));
+      final borderC = (tileStyle == 'clean' || tileStyle == 'card')
+          ? const Color(0xFFE4E4E2)
+          : (showRing && tileStyle == 'default'
+              ? t.primary.withValues(alpha: 0.30)
+              : Colors.transparent);
 
       BoxDecoration deco;
       double iconRadius;
@@ -725,10 +737,37 @@ class _CategoriesBlock extends StatelessWidget {
         ]),
       );
 
+      if (tileStyle == 'card') {
+        icon = Container(
+          decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(iconRadius),
+              boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.07),
+                  blurRadius: 14, offset: const Offset(0, 4))]),
+          child: icon,
+        );
+      }
+      final int catId = (cat['id'] as num).toInt();
       final tile = GestureDetector(
-        onTap: () => UellowRouter.goCollection(context, (cat['id'] as num).toInt()),
+        onTap: () => (showDiscount && sortByDiscount)
+            ? UellowRouter.goFilteredCollection(
+                context, {'category_id': catId, 'sort': 'discount'}, name)
+            : UellowRouter.goCollection(context, catId),
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           icon,
+          if (showDiscount && maxDisc > 0)
+            Transform.translate(
+              offset: const Offset(0, -9),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 1),
+                decoration: BoxDecoration(
+                    color: const Color(0xFFFF7A00),
+                    borderRadius: BorderRadius.circular(999),
+                    border: Border.all(color: Colors.white, width: 1.5)),
+                child: Text('-$maxDisc%',
+                    style: const TextStyle(color: Colors.white, fontSize: 9,
+                        fontWeight: FontWeight.w900)),
+              ),
+            ),
           if (showLabel && labelPos != 'overlay') ...[
             const SizedBox(height: 4),
             Text(name, textAlign: TextAlign.center,

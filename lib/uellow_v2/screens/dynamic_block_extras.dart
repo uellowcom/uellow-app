@@ -3926,6 +3926,70 @@ class BestsellersBlock extends StatelessWidget {
     [Color(0xFFE0B187), Color(0xFFA0683A)],   // bronze
   ];
 
+  // v2.2.177 — clean «cards» style: a simple horizontal rail of the rich
+  // ProductCard with a rank badge. Clear products, calm colors, real data.
+  Widget _cleanCards(BuildContext context,
+      List<UellowProductCard> items, String title) {
+    final list = items.take(12).toList();
+    return Padding(
+      padding: blockMargin(p, 12, 0, 12, 0),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(14, 2, 14, 8),
+          child: Row(children: [
+            const Text('🔥', style: TextStyle(fontSize: 16)),
+            const SizedBox(width: 7),
+            Expanded(child: Text(title,
+                maxLines: 1, overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 15.5, fontWeight: FontWeight.w900,
+                    color: t.dark))),
+            Text(ar ? 'حسب المبيعات الفعلية' : 'By real sales',
+                style: TextStyle(fontSize: 10,
+                    color: t.dark.withValues(alpha: 0.5),
+                    fontWeight: FontWeight.w700)),
+          ]),
+        ),
+        SizedBox(
+          height: 236,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            itemCount: list.length,
+            separatorBuilder: (_, __) => const SizedBox(width: 10),
+            itemBuilder: (_, i) => SizedBox(
+              width: 152,
+              child: Stack(children: [
+                ProductCard(rich: true, product: list[i], hideAvail: true),
+                PositionedDirectional(
+                  top: 8,
+                  start: 8,
+                  child: Container(
+                    width: 24, height: 24,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: i == 0
+                          ? const Color(0xFFFFC400)
+                          : Colors.white,
+                      shape: BoxShape.circle,
+                      boxShadow: const [BoxShadow(
+                          color: Color(0x33000000), blurRadius: 4)],
+                    ),
+                    child: Text('${i + 1}',
+                        style: TextStyle(fontSize: 12,
+                            fontWeight: FontWeight.w900,
+                            color: i == 0
+                                ? const Color(0xFF1A1205)
+                                : t.dark)),
+                  ),
+                ),
+              ]),
+            ),
+          ),
+        ),
+      ]),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final raw = ((data['items'] as List?) ?? const [])
@@ -3951,6 +4015,9 @@ class BestsellersBlock extends StatelessWidget {
     // a crown, the rest racing beside it with rank medals. Products are
     // front and center. The old podium stays as bs_style='podium'.
     final style = (p['bs_style'] as String?) ?? 'arena';
+    if (style == 'cards') {
+      return _cleanCards(context, items, title);
+    }
     if (style == 'arena') {
       return _arena(context, items, th, title, showSold, listCount);
     }
@@ -6679,7 +6746,13 @@ class _ScratchBlockState extends State<ScratchBlock> {
     try {
       final r = await UellowApi.instance.postRaw(
         '/api/mobile/v2/scratch/claim',
-        body: {'product_id': pid},
+        body: {
+          'product_id': pid,
+          if (widget.p['guard'] == false) 'guard': false,
+          if (widget.p['min_margin'] != null) 'min_margin': widget.p['min_margin'],
+          if (widget.p['pct'] != null && '${widget.p['pct']}'.trim().isNotEmpty)
+            'pct': widget.p['pct'],
+        },
         auth: true,
       );
       final d = ((r['data'] as Map?) ?? const {}).cast<String, dynamic>();
@@ -6714,7 +6787,12 @@ class _ScratchBlockState extends State<ScratchBlock> {
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           // header: product + hint
           Row(children: [
-            ClipRRect(
+            GestureDetector(
+              onTap: () {
+                final pid = prod['id'];
+                if (pid is num) UellowRouter.goProduct(context, pid.toInt());
+              },
+              child: ClipRRect(
               borderRadius: BorderRadius.circular(12),
               child: Container(
                 width: 56,
@@ -6724,7 +6802,7 @@ class _ScratchBlockState extends State<ScratchBlock> {
                     ? CachedNetworkImage(imageUrl: img, fit: BoxFit.contain)
                     : const Icon(Icons.card_giftcard, color: org),
               ),
-            ),
+            )),
             const SizedBox(width: 11),
             Expanded(
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
