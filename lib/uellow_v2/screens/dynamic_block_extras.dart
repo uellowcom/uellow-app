@@ -4615,6 +4615,9 @@ class _StoryBubblesBlockState extends State<StoryBubblesBlock> {
     final sz = ((widget.p['size'] as num?)?.toDouble() ?? 60).clamp(40.0, 100.0);
     final showRings = widget.p['show_rings'] != false;
     final ringColor = _hexColor(widget.p['ring_color'], t.primary);
+    final bubbleImages = widget.p['bubble_images'] == true;
+    final bubbleRotate = widget.p['bubble_rotate'] == true;
+    final bubbleSec = ((widget.p['bubble_rotate_sec'] as num?)?.toInt() ?? 3).clamp(2, 12);
     final showTitle = widget.p['show_title'] != false; // v2.2.176 — respect toggle
     final title = (widget.ar ? widget.p['titleAr'] : widget.p['titleEn'])?.toString() ?? '';
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -4637,15 +4640,25 @@ class _StoryBubblesBlockState extends State<StoryBubblesBlock> {
             final img = pickLocalizedImage(b, widget.ar);
             final icon = (b['icon'] as String?) ?? '⭐';
             final hasStory = (b['products'] as List? ?? const []).isNotEmpty;
+            final prodImgs = bubbleImages
+                ? <String>[
+                    for (final pr in (b['products'] as List? ?? const []))
+                      if (((((pr as Map)['image']) as String?) ?? '').isNotEmpty)
+                        (pr['image'] as String).replaceAll('image_512', 'image_128')
+                  ]
+                : const <String>[];
             return GestureDetector(
               onTap: () => _openStory(b, label, icon),
               child: Column(children: [
                 Container(
                   width: sz, height: sz,
+                  clipBehavior: Clip.antiAlias,
                   decoration: BoxDecoration(
-                    color: const Color(0xFFFFE5E5),
+                    color: prodImgs.isNotEmpty
+                        ? Colors.white
+                        : const Color(0xFFFFE5E5),
                     shape: BoxShape.circle,
-                    image: img.isNotEmpty
+                    image: (prodImgs.isEmpty && img.isNotEmpty)
                         ? DecorationImage(image: CachedNetworkImageProvider(img), fit: BoxFit.cover)
                         : null,
                     boxShadow: (showRings && hasStory) ? [
@@ -4657,7 +4670,12 @@ class _StoryBubblesBlockState extends State<StoryBubblesBlock> {
                     ] : null),
                   ),
                   alignment: Alignment.center,
-                  child: img.isEmpty ? Text(icon, style: TextStyle(fontSize: sz * 0.4)) : null,
+                  child: prodImgs.isNotEmpty
+                      ? _RotatingBubbleImage(
+                          urls: prodImgs, rotate: bubbleRotate, sec: bubbleSec)
+                      : (img.isEmpty
+                          ? Text(icon, style: TextStyle(fontSize: sz * 0.4))
+                          : null),
                 ),
                 const SizedBox(height: 5),
                 SizedBox(
@@ -4672,6 +4690,106 @@ class _StoryBubblesBlockState extends State<StoryBubblesBlock> {
       ),
     ]);
   }
+}
+
+// ─── Rotating bubble image: cycles a bubble's product thumbnails ──────────
+class _RotatingBubbleImage extends StatefulWidget {
+  const _RotatingBubbleImage(
+      {required this.urls, required this.rotate, required this.sec});
+  final List<String> urls;
+  final bool rotate;
+  final int sec;
+  @override
+  State<_RotatingBubbleImage> createState() => _RotatingBubbleImageState();
+}
+
+class _RotatingBubbleImageState extends State<_RotatingBubbleImage> {
+  Timer? _t;
+  int _i = 0;
+  @override
+  void initState() {
+    super.initState();
+    if (widget.rotate && widget.urls.length > 1) {
+      _t = Timer.periodic(Duration(seconds: widget.sec), (_) {
+        if (mounted) setState(() => _i = (_i + 1) % widget.urls.length);
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _t?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (widget.urls.isEmpty) return const SizedBox.shrink();
+    final url = widget.urls[_i % widget.urls.length];
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 450),
+      child: CachedNetworkImage(
+        key: ValueKey(url),
+        imageUrl: url,
+        fit: BoxFit.cover,
+        width: double.infinity,
+        height: double.infinity,
+        fadeInDuration: const Duration(milliseconds: 150),
+        placeholder: (_, __) => Container(color: const Color(0xFFF2F2F2)),
+        errorWidget: (_, __, ___) => Container(color: const Color(0xFFF2F2F2)),
+      ),
+    );
+  }
+}
+
+class _HeroPatternPainter extends CustomPainter {
+  _HeroPatternPainter(this.pattern, this.color);
+  final String pattern;
+  final Color color;
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint();
+    final rnd = math.Random(42);
+    if (pattern == 'dots') {
+      paint.color = color.withValues(alpha: 0.16);
+      for (double x = 12; x < size.width; x += 26) {
+        for (double y = 12; y < size.height; y += 26) {
+          canvas.drawCircle(Offset(x, y), 2, paint);
+        }
+      }
+    } else if (pattern == 'rays') {
+      paint
+        ..color = color.withValues(alpha: 0.06)
+        ..strokeWidth = 3;
+      final c = Offset(size.width / 2, -8);
+      for (int i = 0; i < 12; i++) {
+        final a = i * math.pi / 6;
+        canvas.drawLine(
+            c, c + Offset(math.cos(a) * size.width, math.sin(a) * size.height),
+            paint);
+      }
+    } else if (pattern == 'confetti') {
+      for (int i = 0; i < 26; i++) {
+        paint.color = color.withValues(alpha: 0.10 + rnd.nextDouble() * 0.2);
+        final x = rnd.nextDouble() * size.width;
+        final y = rnd.nextDouble() * size.height;
+        canvas.drawRect(
+            Rect.fromCenter(center: Offset(x, y), width: 5, height: 3), paint);
+      }
+    } else {
+      // stars / sparkles
+      for (int i = 0; i < 20; i++) {
+        paint.color = color.withValues(alpha: 0.12 + rnd.nextDouble() * 0.22);
+        final x = rnd.nextDouble() * size.width;
+        final y = rnd.nextDouble() * size.height;
+        canvas.drawCircle(Offset(x, y), 1.5 + rnd.nextDouble() * 2.5, paint);
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(_HeroPatternPainter old) =>
+      old.pattern != pattern || old.color != color;
 }
 
 // ─── STORY VIEWER — full-screen product stories (Instagram/WhatsApp style) ──
@@ -6846,21 +6964,11 @@ class _ScratchBlockState extends State<ScratchBlock> {
                             colors: [Color(0xFFFFF7E6), Color(0xFFFFE9C7)]),
                       ),
                       alignment: Alignment.center,
-                      child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text('🎁 ' + (widget.ar ? 'خصم ${_ar(_pct)}٪' : '${_pct}% OFF'),
-                                style: const TextStyle(
-                                    color: org,
-                                    fontWeight: FontWeight.w900,
-                                    fontSize: 20)),
-                            Text(
-                                widget.ar ? 'على هذا المنتج' : 'on this item',
-                                style: const TextStyle(
-                                    color: Color(0xFF78736A),
-                                    fontWeight: FontWeight.w700,
-                                    fontSize: 11)),
-                          ]),
+                      child: Text(
+                          widget.ar ? '🎁 خصم مفاجأة!' : '🎁 Surprise discount!',
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                              color: org, fontWeight: FontWeight.w900, fontSize: 17)),
                     ),
                   ),
                   // foil overlay
@@ -7058,73 +7166,119 @@ class _ElevenEleHeroState extends State<ElevenEleHero> {
   @override
   Widget build(BuildContext context) {
     final ar = widget.ar;
+    final p = widget.p;
+    Color hx(String k, Color d) => BlockEnvelope._hex(p[k]) ?? d;
+    final bg1 = hx('bg1', const Color(0xFF1A1308));
+    final bg2 = hx('bg2', const Color(0xFF2A2012));
+    final acc1 = hx('accent1', const Color(0xFFFFD60A));
+    final acc2 = hx('accent2', const Color(0xFFFF7A00));
+    final textC = hx('text_color', Colors.white);
+    final eyeC = hx('eyebrow_color', acc1);
+    final badgeTextC = hx('badge_text_color', const Color(0xFF1A1205));
+    final bgStyle = (p['bg_style'] as String?) ?? 'radial';
+    final pattern = (p['pattern'] as String?) ?? 'sparkles';
+    final bigText = (p['big_text'] as String?) ?? '11.11';
+    final eyebrow = ar
+        ? (p['eyebrowAr']?.toString() ?? 'مهرجان التسوّق الأكبر')
+        : (p['eyebrowEn']?.toString() ?? 'THE BIGGEST SALE');
     final sub = ar
-        ? (widget.p['subtitleAr']?.toString() ?? 'عروض يلو الكبرى')
-        : (widget.p['subtitleEn']?.toString() ?? 'Mega Sale');
+        ? (p['subtitleAr']?.toString() ?? 'عروض يلو الكبرى')
+        : (p['subtitleEn']?.toString() ?? 'Mega Sale');
     final off = ar
-        ? (widget.p['offAr']?.toString() ?? 'خصومات تصل ٩٠٪')
-        : (widget.p['offEn']?.toString() ?? 'Up to 90% OFF');
+        ? (p['offAr']?.toString() ?? 'خصومات تصل ٩٠٪')
+        : (p['offEn']?.toString() ?? 'Up to 90% OFF');
     final days = _left.inDays,
         hrs = _left.inHours % 24,
         mins = _left.inMinutes % 60,
         secs = _left.inSeconds % 60;
+
+    Gradient? bgGrad;
+    if (bgStyle == 'radial') {
+      bgGrad = RadialGradient(
+          center: const Alignment(0, -1.1), radius: 1.2,
+          colors: [acc2.withValues(alpha: 0.40), bg1.withValues(alpha: 0)],
+          stops: const [0, 0.62]);
+    } else if (bgStyle == 'linear') {
+      bgGrad = LinearGradient(
+          begin: Alignment.topLeft, end: Alignment.bottomRight,
+          colors: [bg1, bg2]);
+    }
+
+    Widget box(int v, String l) => Container(
+          width: 56,
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.06),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: acc2.withValues(alpha: 0.30)),
+          ),
+          child: Column(children: [
+            Text(_arDigits(v.toString().padLeft(2, '0')),
+                style: TextStyle(
+                    color: acc1, fontWeight: FontWeight.w900, fontSize: 22)),
+            Text(l,
+                style: TextStyle(
+                    color: textC.withValues(alpha: 0.6), fontSize: 8)),
+          ]));
+
     return Container(
       width: double.infinity,
-      decoration: const BoxDecoration(
-        color: Color(0xFF1A1308),
-        gradient: RadialGradient(
-            center: Alignment(0, -1.1),
-            radius: 1.2,
-            colors: [Color(0x66FFB000), Color(0x001A1308)],
-            stops: [0, 0.62]),
-      ),
-      padding: const EdgeInsets.fromLTRB(16, 22, 16, 22),
-      child: Column(children: [
-        Text(ar ? 'مهرجان التسوّق الأكبر' : 'THE BIGGEST SALE',
-            style: const TextStyle(
-                color: Color(0xFFFFC400),
-                fontWeight: FontWeight.w900,
-                fontSize: 10,
-                letterSpacing: 4)),
-        const SizedBox(height: 4),
-        ShaderMask(
-          shaderCallback: (r) => const LinearGradient(
-                  colors: [Color(0xFFFFD60A), Color(0xFFFF7A00)])
-              .createShader(r),
-          child: const Text('11.11',
-              style: TextStyle(
-                  fontSize: 70,
-                  fontWeight: FontWeight.w900,
-                  color: Colors.white,
-                  letterSpacing: -2,
-                  height: .9)),
+      decoration: BoxDecoration(color: bg1, gradient: bgGrad),
+      clipBehavior: Clip.hardEdge,
+      child: Stack(children: [
+        if (pattern != 'none')
+          Positioned.fill(
+              child: CustomPaint(painter: _HeroPatternPainter(pattern, acc1))),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 22, 16, 22),
+          child: Column(children: [
+            Text(eyebrow,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                    color: eyeC,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 10,
+                    letterSpacing: 4)),
+            const SizedBox(height: 4),
+            ShaderMask(
+              shaderCallback: (r) =>
+                  LinearGradient(colors: [acc1, acc2]).createShader(r),
+              child: Text(bigText,
+                  style: const TextStyle(
+                      fontSize: 70,
+                      fontWeight: FontWeight.w900,
+                      color: Colors.white,
+                      letterSpacing: -2,
+                      height: 0.9)),
+            ),
+            Text(sub,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                    color: textC, fontWeight: FontWeight.w900, fontSize: 16)),
+            const SizedBox(height: 9),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 6),
+              decoration: BoxDecoration(
+                  gradient: LinearGradient(colors: [acc1, acc2]),
+                  borderRadius: BorderRadius.circular(999)),
+              child: Text('🔥 ' + off,
+                  style: TextStyle(
+                      color: badgeTextC,
+                      fontWeight: FontWeight.w900,
+                      fontSize: 13)),
+            ),
+            const SizedBox(height: 13),
+            Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+              box(days, ar ? 'يوم' : 'd'),
+              const SizedBox(width: 7),
+              box(hrs, ar ? 'ساعة' : 'h'),
+              const SizedBox(width: 7),
+              box(mins, ar ? 'دقيقة' : 'm'),
+              const SizedBox(width: 7),
+              box(secs, ar ? 'ثانية' : 's'),
+            ]),
+          ]),
         ),
-        Text(sub,
-            style: const TextStyle(
-                color: Colors.white, fontWeight: FontWeight.w900, fontSize: 16)),
-        const SizedBox(height: 9),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 6),
-          decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                  colors: [Color(0xFFFFC400), Color(0xFFFF8A00)]),
-              borderRadius: BorderRadius.circular(999)),
-          child: Text('🔥 ' + off,
-              style: const TextStyle(
-                  color: Color(0xFF1A1205),
-                  fontWeight: FontWeight.w900,
-                  fontSize: 13)),
-        ),
-        const SizedBox(height: 13),
-        Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-          _box(days, ar ? 'يوم' : 'd'),
-          const SizedBox(width: 7),
-          _box(hrs, ar ? 'ساعة' : 'h'),
-          const SizedBox(width: 7),
-          _box(mins, ar ? 'دقيقة' : 'm'),
-          const SizedBox(width: 7),
-          _box(secs, ar ? 'ثانية' : 's'),
-        ]),
       ]),
     );
   }
@@ -7198,15 +7352,23 @@ class _DealOfDayState extends State<DealOfDayBlock> {
     return _arDigits(v.toStringAsFixed(3)) + ' د.ك';
   }
 
-  Widget _cd(int v) => Container(
-        margin: const EdgeInsetsDirectional.only(end: 5),
-        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+  Widget _cd(int v, String l, Color acc) => Container(
+        width: 40,
+        padding: const EdgeInsets.symmetric(vertical: 5),
         decoration: BoxDecoration(
-            color: Colors.white.withOpacity(.1),
-            borderRadius: BorderRadius.circular(7)),
-        child: Text(_arDigits(v.toString().padLeft(2, '0')),
-            style: const TextStyle(
-                color: Colors.white, fontWeight: FontWeight.w900, fontSize: 13)),
+            color: Colors.black.withOpacity(.28),
+            borderRadius: BorderRadius.circular(9),
+            border: Border.all(color: acc.withValues(alpha: .35))),
+        child: Column(children: [
+          Text(_arDigits(v.toString().padLeft(2, '0')),
+              style: TextStyle(
+                  color: acc, fontWeight: FontWeight.w900, fontSize: 16)),
+          Text(l,
+              style: TextStyle(
+                  color: Colors.white.withOpacity(.55),
+                  fontSize: 7.5,
+                  fontWeight: FontWeight.w700)),
+        ]),
       );
 
   @override
@@ -7214,89 +7376,247 @@ class _DealOfDayState extends State<DealOfDayBlock> {
     final prod = _prod;
     if (prod == null) return const SizedBox.shrink();
     final ar = widget.ar;
+    final p = widget.p;
+    Color hx(String k, Color d) => BlockEnvelope._hex(p[k]) ?? d;
+    final bg1 = hx('bg1', const Color(0xFF1C1206));
+    final bg2 = hx('bg2', const Color(0xFF30200C));
+    final acc = hx('accent', const Color(0xFFFFB800));
+    final acc2 = hx('accent2', const Color(0xFFFF7A00));
+    final textC = hx('text_color', Colors.white);
+    final showStock = p['show_stock'] != false;
+    final cta = ar
+        ? (p['ctaAr']?.toString() ?? 'اشترِ الآن')
+        : (p['ctaEn']?.toString() ?? 'Buy now');
+    final id = (prod['id'] is num) ? (prod['id'] as num).toInt() : 0;
     final img = (prod['image'] as String?) ?? '';
     final disc = (prod['discount_pct'] is num)
         ? (prod['discount_pct'] as num).toInt()
         : 0;
     final cmp = prod['compare_price'];
     final hasCmp = cmp is Map && (cmp['amount'] is num);
+    final priceAmt = () {
+      final m = prod['price'];
+      final a = (m is Map) ? m['amount'] : m;
+      return (a is num) ? a.toDouble() : 0.0;
+    }();
+    final cmpAmt =
+        hasCmp ? (cmp['amount'] as num).toDouble() : 0.0;
+    final save = (hasCmp && cmpAmt > priceAmt) ? (cmpAmt - priceAmt) : 0.0;
+    final stockPct = (prod['stock_pct'] is num)
+        ? (prod['stock_pct'] as num).toDouble().clamp(0.05, 1.0)
+        : 0.30;
+
+    Widget detail = Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // eyebrow pill
+          Container(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 9, vertical: 3.5),
+            decoration: BoxDecoration(
+                gradient: LinearGradient(colors: [acc2, acc]),
+                borderRadius: BorderRadius.circular(999)),
+            child: Text(ar ? '⚡ صفقة اليوم' : '⚡ DEAL OF THE DAY',
+                style: const TextStyle(
+                    color: Color(0xFF1A1205),
+                    fontWeight: FontWeight.w900,
+                    fontSize: 9,
+                    letterSpacing: .5)),
+          ),
+          const SizedBox(height: 8),
+          Text(_name(prod),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                  color: textC,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 14,
+                  height: 1.3)),
+          const SizedBox(height: 8),
+          Row(
+              crossAxisAlignment: CrossAxisAlignment.baseline,
+              textBaseline: TextBaseline.alphabetic,
+              children: [
+                Text(_price(prod, 'price'),
+                    style: TextStyle(
+                        color: acc,
+                        fontWeight: FontWeight.w900,
+                        fontSize: 20)),
+                if (hasCmp) ...[
+                  const SizedBox(width: 7),
+                  Text(_price(prod, 'compare_price'),
+                      style: const TextStyle(
+                          color: Color(0xFFB9B2A3),
+                          decoration: TextDecoration.lineThrough,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600)),
+                ],
+              ]),
+          if (save > 0) ...[
+            const SizedBox(height: 6),
+            Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 8, vertical: 2.5),
+              decoration: BoxDecoration(
+                  color: const Color(0xFF1FA363).withValues(alpha: .18),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(
+                      color: const Color(0xFF2BD17E).withValues(alpha: .4))),
+              child: Text(
+                  ar
+                      ? 'وفّر ${_arDigits(save.toStringAsFixed(3))} د.ك'
+                      : 'Save ${save.toStringAsFixed(3)} KD',
+                  style: const TextStyle(
+                      color: Color(0xFF53E0A0),
+                      fontWeight: FontWeight.w800,
+                      fontSize: 10.5)),
+            ),
+          ],
+          const SizedBox(height: 10),
+          Row(children: [
+            _cd(_left.inHours, ar ? 'ساعة' : 'hr', acc),
+            const SizedBox(width: 5),
+            _cd(_left.inMinutes % 60, ar ? 'دقيقة' : 'min', acc),
+            const SizedBox(width: 5),
+            _cd(_left.inSeconds % 60, ar ? 'ثانية' : 'sec', acc),
+          ]),
+        ]);
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(14, 2, 14, 0),
-      child: Container(
-        decoration: BoxDecoration(
-            color: const Color(0xFF1A1308),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: const Color(0x40FFB000))),
-        padding: const EdgeInsets.all(14),
-        child: Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(14),
-            child: Container(
-              width: 100,
-              height: 100,
-              color: Colors.white,
-              child: img.isNotEmpty
-                  ? CachedNetworkImage(imageUrl: img, fit: BoxFit.contain)
-                  : const Icon(Icons.bolt, color: Color(0xFFFF7A00)),
+      child: GestureDetector(
+        onTap: () {
+          if (id > 0) UellowRouter.goProduct(context, id);
+        },
+        child: Container(
+          decoration: BoxDecoration(
+              gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [bg1, bg2]),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: acc.withValues(alpha: .28)),
+              boxShadow: [
+                BoxShadow(
+                    color: acc2.withValues(alpha: .18),
+                    blurRadius: 22,
+                    offset: const Offset(0, 8)),
+              ]),
+          clipBehavior: Clip.antiAlias,
+          child: Stack(children: [
+            // soft accent glow top-end corner
+            PositionedDirectional(
+              top: -40,
+              end: -40,
+              child: Container(
+                width: 120,
+                height: 120,
+                decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: RadialGradient(colors: [
+                      acc2.withValues(alpha: .25),
+                      acc2.withValues(alpha: 0),
+                    ])),
+              ),
             ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                      ar
-                          ? 'صفقة اليوم${disc > 0 ? " · -${_arDigits(disc)}٪" : ""}'
-                          : 'DEAL OF THE DAY',
-                      style: const TextStyle(
-                          color: Color(0xFFFFC400),
-                          fontWeight: FontWeight.w900,
-                          fontSize: 9,
-                          letterSpacing: 1)),
-                  const SizedBox(height: 3),
-                  Text(_name(prod),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w800,
-                          fontSize: 13.5,
-                          height: 1.3)),
-                  const SizedBox(height: 6),
-                  Row(crossAxisAlignment: CrossAxisAlignment.baseline,
-                      textBaseline: TextBaseline.alphabetic,
-                      children: [
-                        Text(_price(prod, 'price'),
-                            style: const TextStyle(
-                                color: Color(0xFFFFC400),
-                                fontWeight: FontWeight.w900,
-                                fontSize: 19)),
-                        if (hasCmp) ...[
-                          const SizedBox(width: 7),
-                          Text(_price(prod, 'compare_price'),
+            Padding(
+              padding: const EdgeInsets.all(14),
+              child: Column(children: [
+                Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Stack(clipBehavior: Clip.none, children: [
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(14),
+                      child: Container(
+                        width: 104,
+                        height: 104,
+                        color: Colors.white,
+                        child: img.isNotEmpty
+                            ? CachedNetworkImage(
+                                imageUrl: img, fit: BoxFit.contain)
+                            : const Icon(Icons.bolt,
+                                color: Color(0xFFFF7A00)),
+                      ),
+                    ),
+                    if (disc > 0)
+                      PositionedDirectional(
+                        top: -7,
+                        start: -7,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 7, vertical: 3),
+                          decoration: BoxDecoration(
+                              gradient:
+                                  const LinearGradient(colors: [
+                                Color(0xFFFF3B30),
+                                Color(0xFFFF7A00)
+                              ]),
+                              borderRadius: BorderRadius.circular(999),
+                              border: Border.all(
+                                  color: Colors.white, width: 1.5)),
+                          child: Text('-${_arDigits(disc.toString())}٪',
                               style: const TextStyle(
-                                  color: Color(0xFFB9B2A3),
-                                  decoration: TextDecoration.lineThrough,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600)),
-                        ],
-                      ]),
-                  const SizedBox(height: 8),
-                  Row(children: [
-                    _cd(_left.inHours),
-                    _cd(_left.inMinutes % 60),
-                    _cd(_left.inSeconds % 60),
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w900,
+                                  fontSize: 11)),
+                        ),
+                      ),
                   ]),
-                  const SizedBox(height: 7),
-                  Text(ar ? '🔥 الكمية محدودة' : '🔥 Limited stock',
-                      style: const TextStyle(
-                          color: Color(0xFFFFD9B0),
-                          fontSize: 10.5,
-                          fontWeight: FontWeight.w700)),
+                  const SizedBox(width: 13),
+                  Expanded(child: detail),
                 ]),
-          ),
-        ]),
+                if (showStock) ...[
+                  const SizedBox(height: 13),
+                  Row(children: [
+                    Expanded(
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(999),
+                        child: Stack(children: [
+                          Container(
+                              height: 6,
+                              color: Colors.white.withValues(alpha: .12)),
+                          FractionallySizedBox(
+                            widthFactor: stockPct,
+                            child: Container(
+                                height: 6,
+                                decoration: BoxDecoration(
+                                    gradient: LinearGradient(
+                                        colors: [acc2, acc]))),
+                          ),
+                        ]),
+                      ),
+                    ),
+                    const SizedBox(width: 9),
+                    Text(ar ? '🔥 الكمية محدودة' : '🔥 Limited',
+                        style: TextStyle(
+                            color: const Color(0xFFFFD9B0),
+                            fontSize: 10,
+                            fontWeight: FontWeight.w800)),
+                  ]),
+                ],
+                const SizedBox(height: 13),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  decoration: BoxDecoration(
+                      gradient: LinearGradient(colors: [acc, acc2]),
+                      borderRadius: BorderRadius.circular(13),
+                      boxShadow: [
+                        BoxShadow(
+                            color: acc2.withValues(alpha: .4),
+                            blurRadius: 14,
+                            offset: const Offset(0, 5)),
+                      ]),
+                  alignment: Alignment.center,
+                  child: Text('$cta  ←',
+                      style: const TextStyle(
+                          color: Color(0xFF1A1205),
+                          fontWeight: FontWeight.w900,
+                          fontSize: 14.5)),
+                ),
+              ]),
+            ),
+          ]),
+        ),
       ),
     );
   }
