@@ -630,6 +630,8 @@ class _CategoriesBlock extends StatelessWidget {
     final columns = int.tryParse((p['columns'] ?? '4').toString()) ?? 4;
     final iconSize = ((p['icon_size'] as num?)?.toDouble() ?? 56).clamp(36, 100).toDouble();
     final gap = ((p['gap'] as num?)?.toDouble() ?? 10).clamp(4, 24).toDouble();
+    // تباعد رأسي مستقل للصفوف (افتراضيًا = الأفقي)
+    final rowGap = ((p['row_gap'] as num?)?.toDouble() ?? gap).clamp(0, 24).toDouble();
     final showLabel = p['show_label'] != false;
     final labelPos = (p['label_position'] as String?) ?? 'below';
     final coloredBg = p['colored_bg'] == true;
@@ -798,7 +800,7 @@ class _CategoriesBlock extends StatelessWidget {
             physics: const NeverScrollableScrollPhysics(),
             gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                 crossAxisCount: columns,
-                crossAxisSpacing: gap, mainAxisSpacing: gap,
+                crossAxisSpacing: gap, mainAxisSpacing: rowGap,
                 childAspectRatio: showLabel ? 0.78 : 1.0),
             itemCount: items.length,
             itemBuilder: (_, i) => itemTile(items[i], i),
@@ -835,7 +837,7 @@ class _CategoriesBlock extends StatelessWidget {
       }
       case 'staggered': {
         body = Padding(padding: EdgeInsets.symmetric(horizontal: gap),
-          child: Wrap(spacing: gap, runSpacing: gap, children: [
+          child: Wrap(spacing: gap, runSpacing: rowGap, children: [
             for (int i = 0; i < items.length; i++)
               SizedBox(width: (i % 5 == 0) ? iconSize + 28 : iconSize + 10,
                   child: itemTile(items[i], i)),

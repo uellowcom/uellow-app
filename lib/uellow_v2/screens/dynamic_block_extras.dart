@@ -6533,7 +6533,8 @@ class _SmartCategoriesBlockState extends State<SmartCategoriesBlock> {
             crossAxisCount:
                 (int.tryParse((widget.p['columns'] ?? '5').toString()) ?? 5)
                     .clamp(3, 6),
-            mainAxisSpacing: 14, crossAxisSpacing: 2,
+            mainAxisSpacing: ((widget.p['row_gap'] as num?)?.toDouble() ?? 14),
+            crossAxisSpacing: 2,
             childAspectRatio: 0.64,
           ),
           itemCount: _items.length,
